@@ -16,13 +16,12 @@ use untwist_core::ast_util::matcher::{anonymous_function, call_parts, iife};
 use untwist_core::ast_util::naming_slot::without_unnamed;
 use untwist_core::ast_util::prop::{identifier_name, member_parts};
 use untwist_core::pass::{Cx, Interest, Pass};
-use untwist_core::semantic::builtins::{scan, Builtins, Reliance};
+use untwist_core::semantic::builtins::{scan_outside, Builtins, Reliance};
 use untwist_core::semantic::{has_module_syntax, AnnexBWrites};
 
 use crate::bindings::{
     has_stray_reference, reaches_a_script_global_once_removed, reference_symbol, resolved_symbol,
 };
-use crate::builtin_values::exposes_a_builtin;
 use crate::control_flow_object::single_declarator;
 use crate::directives::remove_protection_statements;
 use crate::domain_lock::is_domain_lock_callback;
@@ -37,7 +36,9 @@ const MAX_NARROWED_CONTROLLERS: usize = 16;
 const RESERVED_PARAMS: [&str; 2] = [ARGUMENTS, "eval"];
 
 static CALLBACK_RELIES_ON: Reliance = Reliance {
-    roots: &["Function", "String", "RegExp", "Symbol"],
+    roots: &[
+        "Function", "String", "RegExp", "Symbol", "Number", "Boolean", "Array", "Object",
+    ],
     members: &[],
 };
 
@@ -1613,10 +1614,11 @@ fn attempt(
     }
 }
 
-fn callback_built_ins_written(program: &Program<'_>, scoping: &Scoping) -> bool {
+fn callback_built_ins_intact<'a>(program: &Program<'a>, spans: &[Span], cx: &Cx<'a, '_>) -> bool {
     let module = has_module_syntax(program);
-    scan(program, scoping, module, false, &CALLBACK_RELIES_ON).verdict == Builtins::Written
-        || exposes_a_builtin(program, scoping, CALLBACK_RELIES_ON.roots)
+    let mut skipped: FxHashSet<Span> = spans.iter().copied().collect();
+    skipped.extend(crate::debug_protection::planned_removal(program, spans, cx));
+    scan_outside(program, cx.scoping(), module, &CALLBACK_RELIES_ON, &skipped) == Builtins::Intact
 }
 
 #[derive(Default)]
@@ -1666,9 +1668,6 @@ fn refusal<'a>(
     (spans, tracked): (&[Span], &FxHashSet<SymbolId>),
     cx: &Cx<'a, '_>,
 ) -> Option<&'static str> {
-    if !cx.opts.unsafe_transforms && callback_built_ins_written(program, cx.scoping()) {
-        return Some(notes::SELF_DEFENDING_BUILTIN_PATCHED);
-    }
     if reaches_a_script_global_once_removed(tracked, spans, program, cx) {
         return Some(notes::SELF_DEFENDING_GLOBAL_REACH);
     }
@@ -1677,6 +1676,9 @@ fn refusal<'a>(
     }
     if crate::directives::removes_hoist_blocker(cx.scoping(), spans) {
         return Some(notes::PROTECTION_HOIST_BLOCKER_KEPT);
+    }
+    if !cx.opts.unsafe_transforms && !callback_built_ins_intact(program, spans, cx) {
+        return Some(notes::SELF_DEFENDING_BUILTIN_PATCHED);
     }
     None
 }

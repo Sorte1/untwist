@@ -260,7 +260,7 @@ impl Scan<'_> {
         object: &Expression<'_>,
         key: Option<&Expression<'_>>,
     ) -> bool {
-        let slot = key.is_none_or(|key| match key_of(key) {
+        let slot = key.is_none_or(|key| match self.sharpen(key_of(key)) {
             Key::Other => false,
             Key::Name(name) => self.is_window_slot(name),
             Key::Unknown(key) => self

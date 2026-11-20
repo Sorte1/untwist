@@ -12,7 +12,9 @@ const CONSOLE_DISABLE_KEPT: &str = "the default lane leaves the layers undecoded
 
 const LAYERED_SAFE_UNIT_KEPT: &str = "the default lane leaves the outer unit of two layers of dead code, control flow flattening and rc4 undecoded, as main does, so neither layer decodes; the unsafe lane decodes both";
 
-const REFUSED_LAYERS: [(&str, &str, &str); 21] = [
+const SELF_DEFENDING_UNPROVEN: &str = "the default lane keeps a layer's self-defending block because the built-in scan cannot prove what its callback calls unpatched (another layer's protection or still-encoded machinery, or a method returning this, is in the program when the block is judged), so the layers it can see stay too";
+
+const REFUSED_LAYERS: [(&str, &str, &str); 48] = [
     (
         "dead-cff-rc4-n2--classes-1.js",
         "default",
@@ -118,6 +120,93 @@ const REFUSED_LAYERS: [(&str, &str, &str); 21] = [
         "default",
         CONSOLE_DISABLE_KEPT,
     ),
+    (
+        "preset-low-n2--classes-1.js",
+        "default",
+        SELF_DEFENDING_UNPROVEN,
+    ),
+    (
+        "preset-low-n2--functions-1.js",
+        "default",
+        SELF_DEFENDING_UNPROVEN,
+    ),
+    (
+        "preset-low-n2--greeting-1.js",
+        "default",
+        SELF_DEFENDING_UNPROVEN,
+    ),
+    (
+        "preset-low-n2--objects-1.js",
+        "default",
+        SELF_DEFENDING_UNPROVEN,
+    ),
+    (
+        "preset-low-n2--strings-1.js",
+        "default",
+        SELF_DEFENDING_UNPROVEN,
+    ),
+    (
+        "preset-low-n3--classes-1.js",
+        "default",
+        SELF_DEFENDING_UNPROVEN,
+    ),
+    (
+        "preset-low-n3--functions-1.js",
+        "default",
+        SELF_DEFENDING_UNPROVEN,
+    ),
+    (
+        "preset-low-n3--greeting-1.js",
+        "default",
+        SELF_DEFENDING_UNPROVEN,
+    ),
+    (
+        "preset-low-n3--objects-1.js",
+        "default",
+        SELF_DEFENDING_UNPROVEN,
+    ),
+    (
+        "preset-low-n3--strings-1.js",
+        "default",
+        SELF_DEFENDING_UNPROVEN,
+    ),
+    (
+        "preset-low-n4--classes-1.js",
+        "default",
+        SELF_DEFENDING_UNPROVEN,
+    ),
+    (
+        "preset-low-n4--functions-1.js",
+        "default",
+        SELF_DEFENDING_UNPROVEN,
+    ),
+    (
+        "preset-low-n4--greeting-1.js",
+        "default",
+        SELF_DEFENDING_UNPROVEN,
+    ),
+    (
+        "preset-low-n4--objects-1.js",
+        "default",
+        SELF_DEFENDING_UNPROVEN,
+    ),
+    (
+        "preset-low-n4--strings-1.js",
+        "default",
+        SELF_DEFENDING_UNPROVEN,
+    ),
+    ("self-n2--classes-1.js", "default", SELF_DEFENDING_UNPROVEN),
+    ("self-n2--greeting-1.js", "default", SELF_DEFENDING_UNPROVEN),
+    ("self-n2--objects-1.js", "default", SELF_DEFENDING_UNPROVEN),
+    ("self-n2--strings-1.js", "default", SELF_DEFENDING_UNPROVEN),
+    ("self-n3--classes-1.js", "default", SELF_DEFENDING_UNPROVEN),
+    ("self-n3--greeting-1.js", "default", SELF_DEFENDING_UNPROVEN),
+    ("self-n3--objects-1.js", "default", SELF_DEFENDING_UNPROVEN),
+    ("self-n3--strings-1.js", "default", SELF_DEFENDING_UNPROVEN),
+    ("self-n4--classes-1.js", "default", SELF_DEFENDING_UNPROVEN),
+    ("self-n4--greeting-1.js", "default", SELF_DEFENDING_UNPROVEN),
+    ("self-n4--objects-1.js", "default", SELF_DEFENDING_UNPROVEN),
+    ("self-n4--strings-1.js", "default", SELF_DEFENDING_UNPROVEN),
 ];
 
 #[derive(Clone)]

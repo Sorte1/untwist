@@ -283,7 +283,7 @@ fn a_key_from_a_parameter_an_enumeration_or_an_opaque_call_aliases_the_built_ins
         "for (var p in b) { d[p] = b[p]; }",
         "function f(o, k) { var v = o[k]; return v; }",
         "function f(b, c) { for (var p in b) { x = c[p]; } }",
-        "var a = [1, 2]; for (var i = 0; i < a.length; i++) { x = a[i]; }",
+        "function f(a, k) { for (var i = 0; i < a.length; i++) { x = a[i]; } i = k; }",
         "var k = 'dyn'; x = o[k];",
         "let k = 'dyn'; x = o[k];",
         "const k = '__pro' + 'to__'; x = [][k];",
@@ -308,7 +308,7 @@ fn a_key_from_a_parameter_an_enumeration_or_an_opaque_call_aliases_the_built_ins
 fn a_long_chain_of_computed_reads_is_scanned_in_linear_time() {
     let depth = 400;
     let chain = "[i]".repeat(depth);
-    let source = format!("var a = [], i = 0; var v = a{chain}; x = a{chain}.y;");
+    let source = format!("var a = [], i = g(); var v = a{chain}; x = a{chain}.y;");
     let started = std::time::Instant::now();
     assert_eq!(verdict(&source), Builtins::Aliased);
     let spent = started.elapsed();

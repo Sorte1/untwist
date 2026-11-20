@@ -1,10 +1,11 @@
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
+use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, LogicalOperator, UnaryOperator};
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::{Cell, OnceCell, RefCell};
 
 use super::{Builtins, Reliance, Scanned};
@@ -15,6 +16,7 @@ mod escapes;
 mod functions;
 mod keys;
 mod modules;
+mod numeric;
 mod parts;
 mod reach;
 mod targets;
@@ -191,12 +193,14 @@ struct Scan<'s> {
     functions: OnceCell<functions::FunctionBindings>,
     escaping: OnceCell<escapes::Escaping>,
     windows: OnceCell<windows::WindowLocals>,
+    numeric: OnceCell<numeric::KeyBindings>,
     reached: RefCell<FxHashMap<usize, bool>>,
     scoping: &'s Scoping,
     reliance: &'s Reliance,
     writes_only: bool,
     unknown_keys_plain: bool,
     first_only: bool,
+    skipped: Option<&'s FxHashSet<Span>>,
     module: bool,
     frames: Vec<Frame>,
     verdict: Builtins,
@@ -274,6 +278,20 @@ pub fn scan_with_unknown_keys_plain(
     scan.verdict
 }
 
+pub fn scan_outside(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    module: bool,
+    reliance: &Reliance,
+    skipped: &FxHashSet<Span>,
+) -> Builtins {
+    let mut scan = Scan::new(program, scoping, module, reliance);
+    scan.skipped = Some(skipped);
+    scan.visit_program(program);
+    scan.settle_window_flows();
+    scan.verdict
+}
+
 pub fn intact(program: &Program<'_>, scoping: &Scoping, module: bool, reliance: &Reliance) -> bool {
     let mut scan = Scan::new(program, scoping, module, reliance);
     scan.first_only = true;
@@ -295,12 +313,14 @@ impl<'s> Scan<'s> {
             functions: OnceCell::new(),
             escaping: OnceCell::new(),
             windows: OnceCell::new(),
+            numeric: OnceCell::new(),
             reached: RefCell::new(FxHashMap::default()),
             scoping,
             reliance,
             writes_only: false,
             unknown_keys_plain: false,
             first_only: false,
+            skipped: None,
             module,
             frames: vec![Frame::of_program(program, module)],
             verdict: first_verdict(scoping, reliance, module),
@@ -318,6 +338,20 @@ impl Scan<'_> {
             .get_or_init(|| keys::const_keys(self.program, self.scoping))
             .get(&symbol)
             .cloned()
+    }
+
+    pub(super) fn numeric_key(&self, key: &Expression<'_>) -> bool {
+        let numeric = self
+            .numeric
+            .get_or_init(|| numeric::key_bindings(self.program, self.scoping, self.module));
+        numeric::is_harmless_key(key, self.scoping, numeric)
+    }
+
+    pub(super) fn sharpen<'k>(&self, key: Key<'k>) -> Key<'k> {
+        match key {
+            Key::Unknown(expression) if self.numeric_key(expression) => Key::Other,
+            other => other,
+        }
     }
 
     pub(super) fn only_a_function(&self, symbol: SymbolId) -> bool {
@@ -347,7 +381,7 @@ impl Scan<'_> {
     fn pattern_key_reaches(&self, computed: bool, key: &PropertyKey<'_>) -> bool {
         let name = match (computed, key) {
             (true, PropertyKey::StaticIdentifier(_) | PropertyKey::PrivateIdentifier(_)) => None,
-            (true, _) => match key.as_expression().map(key_of) {
+            (true, _) => match key.as_expression().map(|key| self.sharpen(key_of(key))) {
                 Some(Key::Name(name)) => Some(name),
                 Some(Key::Other) | None => return false,
                 Some(Key::Unknown(expression)) => {
@@ -874,7 +908,11 @@ impl<'a> VisitJs<'a> for Scan<'_> {
     }
 
     fn visit_statement(&mut self, it: &Statement<'a>) {
-        if self.settled() {
+        if self.settled()
+            || self
+                .skipped
+                .is_some_and(|skipped| skipped.contains(&it.span()))
+        {
             return;
         }
         walk_js::walk_statement(self, it);
@@ -909,7 +947,7 @@ impl<'a> VisitJs<'a> for Scan<'_> {
     }
 
     fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
-        let key = key_of(&it.expression);
+        let key = self.sharpen(key_of(&it.expression));
         if self.names_a_loader(key) {
             self.not_allowed();
         }

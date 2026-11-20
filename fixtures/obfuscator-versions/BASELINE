@@ -27,8 +27,8 @@
 0.10.2--plain-rot-t75-self--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.10.2--rc4-norot-t1-cff--iife--none	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.10.2--rc4-norot-t1-cff--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
-0.10.2--rc4-norot-t1-self--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
-0.10.2--rc4-norot-t1-self--wp4-module--none	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
+0.10.2--rc4-norot-t1-self--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1), sd-machinery-keys (1)
+0.10.2--rc4-norot-t1-self--wp4-module--none	1	0/1	1/1	-	0	decoder-reads-outer-binding (1), sd-machinery-keys (1)
 0.10.2--rc4-norot-t1-unicode--top--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.10.2--rc4-norot-t75--top--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.10.2--rc4-rot-t1-cff--iife--terser	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
@@ -70,7 +70,7 @@
 0.16.0--rc4-norot-t75-mangled--top--none	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.16.0--rc4-norot-t75-unicode--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.16.0--rc4-rot-t1-keys--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
-0.16.0--rc4-rot-t1-self--iife--none	1	0/1	1/1	-	0	builtin-alias-patched (1)
+0.16.0--rc4-rot-t1-self--iife--none	1	0/1	1/1	-	0	builtin-alias-patched (1), sd-machinery-keys (1)
 0.16.0--rc4-rot-t75-dead--iife--terser	1	0/1	1/1	-	0	builtin-alias-patched (1)
 0.16.0--rc4-rot-t75-self--wp4-bundle--terser	1	0/1	1/1	-	0	self-defending-passed-through (1)
 0.18.8--b64-norot-t1--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -90,7 +90,7 @@
 0.18.8--plain-norot-t75--top--terser	1	1/1	1/1	-	0	-
 0.18.8--plain-norot-t75--wp4-module--terser	1	1/1	1/1	-	0	-
 0.18.8--plain-norot-t75-keys--top--none	1	0/1	0/1	-	0	legacy-array-reached (1)
-0.18.8--plain-norot-t75-self--wp4-module--uglify	1	1/1	1/1	-	0	-
+0.18.8--plain-norot-t75-self--wp4-module--uglify	1	0/1	1/1	-	0	sd-machinery-keys (1)
 0.18.8--plain-norot-t75-unicode--iife--none	1	1/1	1/1	-	0	-
 0.18.8--plain-rot-t1-cff--iife--terser	1	1/1	1/1	-	0	-
 0.18.8--plain-rot-t1-cff--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -107,7 +107,7 @@
 0.18.8--rc4-rot-t1-cff--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.18.8--rc4-rot-t1-dead--top--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.18.8--rc4-rot-t1-dead--wp4-module--terser	1	0/1	1/1	-	0	builtin-alias-patched (1)
-0.18.8--rc4-rot-t1-self--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
+0.18.8--rc4-rot-t1-self--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1), sd-machinery-keys (1)
 0.18.8--rc4-rot-t75-mangled--wp4-module--uglify	1	0/1	1/1	-	0	builtin-alias-patched (1)
 0.20.4--b64-norot-t1-cff--top--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.20.4--b64-norot-t1-dead--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -115,7 +115,7 @@
 0.20.4--b64-norot-t1-split--wp4-bundle--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.20.4--b64-norot-t75-keys--wp4-module--uglify	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.20.4--b64-norot-t75-mangled--iife--terser	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
-0.20.4--b64-norot-t75-self--wp4-module--none	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
+0.20.4--b64-norot-t75-self--wp4-module--none	1	0/1	1/1	-	0	decoder-reads-outer-binding (1), sd-machinery-keys (1)
 0.20.4--b64-rot-t1-split--iife--none	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.20.4--b64-rot-t75--wp4-bundle--terser	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.20.4--b64-rot-t75-split--top--none	1	0/1	1/1	-	0	legacy-array-reached (1)
@@ -138,9 +138,9 @@
 0.20.4--rc4-norot-t1-cff--wp4-module--terser	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.20.4--rc4-norot-t1-split--top--none	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.20.4--rc4-norot-t1-unicode--iife--none	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
-0.20.4--rc4-norot-t75-self--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1)
+0.20.4--rc4-norot-t75-self--wp4-bundle--none	1	0/1	1/1	-	0	legacy-array-reached (1), sd-machinery-keys (1)
 0.20.4--rc4-norot-t75-unicode--top--terser	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
-0.20.4--rc4-rot-t1-self--wp4-module--none	1	0/1	1/1	-	0	builtin-alias-patched (1)
+0.20.4--rc4-rot-t1-self--wp4-module--none	1	0/1	1/1	-	0	builtin-alias-patched (1), sd-machinery-keys (1)
 0.20.4--rc4-rot-t1-split--top--uglify	1	0/1	1/1	-	0	legacy-array-reached (1)
 0.20.4--rc4-rot-t75-keys--iife--terser	1	0/1	1/1	-	0	decoder-reads-outer-binding (1)
 0.20.4--rc4-rot-t75-keys--wp4-bundle--terser	1	0/1	0/1	-	0	legacy-array-reached (1)
@@ -201,7 +201,7 @@
 0.28.5--plain-rot-noshuf-t1-dead--iife--none	1	1/1	1/1	-	0	-
 0.28.5--plain-rot-noshuf-t1-split--wp4-bundle--terser	1	0/1	1/1	-	0	namespace-by-key (1)
 0.28.5--plain-rot-noshuf-t75-keys--iife--uglify	1	1/1	1/1	-	0	-
-0.28.5--plain-rot-noshuf-t75-self--top--uglify	1	1/1	1/1	-	0	-
+0.28.5--plain-rot-noshuf-t75-self--top--uglify	1	0/1	1/1	-	0	sd-machinery-keys (1)
 0.28.5--plain-rot-shuf-t1--wp4-bundle--none	1	0/1	1/1	-	0	safe-global-names (1)
 0.28.5--plain-rot-shuf-t1-split--wp4-bundle--uglify	1	0/1	1/1	-	0	namespace-by-key (1)
 0.28.5--plain-rot-shuf-t75-split--wp4-module--uglify	1	1/1	1/1	-	0	-
@@ -721,7 +721,7 @@
 5.9.1--rc4-rot-noshuf-noshift-inum-w1-nocalls-t1-unicode--wp4-module--uglify	1	0/1	0/1	-	0	array-reached-outside (2)
 5.9.1--rc4-rot-noshuf-noshift-inum-w2f5-nocalls-t75-self--wp4-module--none	1	0/1	1/1	-	0	builtin-alias-patched (1)
 5.9.1--rc4-rot-noshuf-noshift-istr-w2u-calls-t1-self--wp4-bundle--uglify	1	0/1	0/1	-	0	decoder-used-as-value (2)
-5.9.1--rc4-rot-shuf-noshift-inum-w3f-nocalls-t75-self--top--terser	1	1/1	1/1	-	0	-
+5.9.1--rc4-rot-shuf-noshift-inum-w3f-nocalls-t75-self--top--terser	1	0/1	1/1	-	0	sd-machinery-keys (1)
 5.9.1--rc4-rot-shuf-shift-inum-w0-calls-t75-cff--iife--uglify	1	0/1	0/1	-	0	array-reached-outside (2)
 5.9.1--rc4-rot-shuf-shift-istr-w2u-nocalls-t1-keys--top--none	1	0/1	1/1	-	0	builtin-replaced-decoded-key (1)
 # cause	cells	fixtures	lane-runs	parity-gap-cells	reason
@@ -732,6 +732,7 @@ decoder-reads-outer-binding	58	58	59	0	a decoder reads a binding outside itself 
 namespace-by-key	48	48	48	0	safe lane: namespace read by unproven key; a read keyed by a decoder call, which the check cannot resolve before decoding, off a holder not proven to be something other than the global object is pinned like a spelled Reflect or Object (R51-RX8)
 safe-global-names	26	26	26	0	safe lane, premise 2: code may observe the global object's names (a non-strict this, require), so the decoded unit's string array, decoders and rotator are kept as written
 safe-global-key-reach	10	10	10	0	safe lane, premise 2: the program may hold the global object and reaches keys the check cannot resolve, so the unit's call sites are left alone
+sd-machinery-keys	10	10	10	0	safe lane: decoder machinery this version keeps as written (a string-keyed cache, a minified rc4 or base64 decoder, a webpack module map) reads a computed key that may be __proto__ or constructor, so the self-defending callback's built-ins are not proven unpatched and the block is kept
 self-defending-passed-through	9	9	11	0	a self-defending check reads the source text of a function the output would print across lines (a minified or older template untwist cannot keep on one line), so the input is passed through unchanged
 array-reached-outside	6	6	12	0	the string array is reachable from code outside its declaration, decoders and a recognised rotator, so the unit's calls are left alone
 object-keys-not-merged	6	6	7	0	transformObjectKeys' var o = {}; o[k] = v; x = o sequence is not merged back into one literal when a key is computed (o[tag] = ...) or a value may throw or run code (a member read, arithmetic on a binding)

@@ -207,6 +207,8 @@ fn conservative_runs_none_of_it() {
     );
 }
 
+const OPAQUE_READ: &str = "console.log([0][String(0)]);\n";
+
 const PATCHED: &str = "function _arrayLikeToArray(r, a) { (null == a || a > r.length) && (a = r.length); for (var e = 0, n = Array(a); e < a; e++) n[e] = r[e]; return n; }
 function _arrayWithoutHoles(r) { if (Array.isArray(r)) return _arrayLikeToArray(r); }
 function _iterableToArray(r) { if (\"undefined\" != typeof Symbol && null != r[Symbol.iterator] || null != r[\"@@iterator\"]) return Array.from(r); }
@@ -265,8 +267,15 @@ fn helpers_inside_a_function_are_swept_under_unsafe() {
 }
 
 #[test]
-fn script_level_helpers_and_their_calls_stay_in_the_default_mode() {
+fn script_level_helper_calls_are_untranspiled_in_the_default_mode_when_every_key_is_numeric() {
     let source = format!("{PATCHED}console.log(_toConsumableArray([1, 2]), !0);\n");
+    let code = run(&source, false);
+    assert!(code.contains("console.log([1, 2], true);"), "{code}");
+}
+
+#[test]
+fn script_level_helpers_and_their_calls_stay_in_the_default_mode_beside_an_opaque_key() {
+    let source = format!("{PATCHED}console.log(_toConsumableArray([1, 2]), !0);\n{OPAQUE_READ}");
     let code = run(&source, false);
     assert!(
         code.contains("console.log(_toConsumableArray([1, 2]), true);"),
@@ -276,9 +285,9 @@ fn script_level_helpers_and_their_calls_stay_in_the_default_mode() {
 }
 
 #[test]
-fn every_site_keeps_its_helper_in_the_default_mode_when_the_helper_reads_an_opaque_key() {
+fn every_site_keeps_its_helper_in_the_default_mode_when_the_program_reads_an_opaque_key() {
     let source = format!(
-        "(function () {{\n{PATCHED}console.log(_toConsumableArray(list()));\nconsole.log(_toConsumableArray(list()), !0);\nconsole.log(_toConsumableArray([3, 4]));\nfunction list() {{ return [1]; }}\n}})();\n"
+        "(function () {{\n{PATCHED}console.log(_toConsumableArray(list()));\nconsole.log(_toConsumableArray(list()), !0);\nconsole.log(_toConsumableArray([3, 4]));\nfunction list() {{ return [1]; }}\n{OPAQUE_READ}}})();\n"
     );
     let code = run(&source, false);
     assert!(

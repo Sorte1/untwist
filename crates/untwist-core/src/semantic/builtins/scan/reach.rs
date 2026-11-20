@@ -212,7 +212,7 @@ impl Scan<'_> {
     }
 
     fn reached_member(&self, object: &Expression<'_>, key: Key<'_>) -> bool {
-        match key {
+        match self.sharpen(key) {
             Key::Name(name) if REACHING_KEYS.contains(&name) => true,
             Key::Name(name) if self.names_a_root(name) => true,
             Key::Name(name) if CODE_RUNNERS.contains(&name) || CONTEXT_RUNNERS.contains(&name) => {

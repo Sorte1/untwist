@@ -29,8 +29,8 @@ use untwist_unpack::holds_a_bundle_with;
 use super::boundary::Boundary;
 use super::layer::{Counters, InlineSite, Layering, Peeled, RoomSeed};
 use super::notes::{
-    carry_reach, consolidate_reach, dedupe_spanned, guard_notes, reach_refusals, unsafe_lane_hint,
-    SOURCE_READER_UNGUARDED,
+    carry_kept_protections, carry_reach, consolidate_reach, dedupe_spanned, guard_notes,
+    kept_protections, reach_refusals, unsafe_lane_hint, SOURCE_READER_UNGUARDED,
 };
 use super::shell::{scope_shell_body, strip_shell};
 use super::snapshots::Snapshots;
@@ -245,9 +245,11 @@ impl Pipeline {
             None => first,
             Some(_) => {
                 let reached = reach_refusals(&first.notes);
+                let kept = kept_protections(&first.notes);
                 drop(first);
                 let mut second = self.rerun(source, reservation, (room.clone(), reserved));
                 second.notes = carry_reach(std::mem::take(&mut second.notes), reached);
+                second.notes = carry_kept_protections(std::mem::take(&mut second.notes), kept);
                 second
             }
         };
@@ -255,10 +257,12 @@ impl Pipeline {
             return verified;
         }
         let reached = reach_refusals(&verified.notes);
+        let kept = kept_protections(&verified.notes);
         drop(verified);
         let _whole = untwist_deobfuscate::self_defending::PartialRemovalsForbidden::enter();
         let mut whole = self.rerun(source, reservation, (room, reserved));
         whole.notes = carry_reach(std::mem::take(&mut whole.notes), reached);
+        whole.notes = carry_kept_protections(std::mem::take(&mut whole.notes), kept);
         whole
     }
 
