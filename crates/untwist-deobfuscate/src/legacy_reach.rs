@@ -282,9 +282,11 @@ pub struct StripsForbidden(bool);
 
 impl StripsForbidden {
     pub fn enter() -> Self {
-        Self(DEFERRAL.with(|deferral| {
-            std::mem::replace(&mut deferral.borrow_mut().strips_forbidden, true)
-        }))
+        Self(
+            DEFERRAL.with(|deferral| {
+                std::mem::replace(&mut deferral.borrow_mut().strips_forbidden, true)
+            }),
+        )
     }
 }
 

@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use oxc_allocator::Vec as AVec;
+use oxc_allocator::{GetAllocator, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
@@ -10,6 +10,7 @@ use oxc_syntax::reference::ReferenceId;
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
+use untwist_core::ast_util::edit::StmtEdits;
 use untwist_core::ast_util::inline::is_plain_function;
 use untwist_core::ast_util::literal::{is_false_literal, is_true_literal};
 use untwist_core::ast_util::matcher::{anonymous_function, call_parts, iife};
@@ -1692,7 +1693,8 @@ fn remove<'a>(program: &mut Program<'a>, spans: &[Span], cx: &mut Cx<'a, '_>, pa
             return;
         }
     };
-    cx.changed_by(applied);
+    let emptied = remove_emptied_shells(program, spans, cx);
+    cx.changed_by(applied + emptied);
     if partial && applied > 0 {
         note_provisional_removal();
     }
@@ -1702,4 +1704,60 @@ fn remove<'a>(program: &mut Program<'a>, spans: &[Span], cx: &mut Cx<'a, '_>, pa
             None,
         );
     }
+}
+
+struct EmptiedShells<'s> {
+    removed: &'s [Span],
+    found: Vec<Span>,
+}
+
+impl<'a> VisitJs<'a> for EmptiedShells<'_> {
+    fn visit_statement(&mut self, it: &Statement<'a>) {
+        let span = it.span();
+        let held = self
+            .removed
+            .iter()
+            .any(|inner| span.start <= inner.start && inner.end <= span.end && span != *inner);
+        if !held {
+            return;
+        }
+        if is_empty_shell(it) {
+            self.found.push(span);
+            return;
+        }
+        walk_js::walk_statement(self, it);
+    }
+}
+
+fn is_empty_shell(stmt: &Statement<'_>) -> bool {
+    let Statement::ExpressionStatement(stmt) = stmt else {
+        return false;
+    };
+    let Some((function, arguments)) = iife(&stmt.expression) else {
+        return false;
+    };
+    arguments.is_empty()
+        && has_no_params(function)
+        && is_plain_function(function)
+        && function
+            .body
+            .as_ref()
+            .is_some_and(|body| body.directives.is_empty() && body.statements.is_empty())
+}
+
+fn remove_emptied_shells<'a>(
+    program: &mut Program<'a>,
+    removed: &[Span],
+    cx: &mut Cx<'a, '_>,
+) -> usize {
+    let mut shells = EmptiedShells {
+        removed,
+        found: Vec::new(),
+    };
+    shells.visit_program(program);
+    let mut removals = StmtEdits::new();
+    for span in shells.found {
+        removals.remove(span);
+    }
+    removals.apply(program, cx.allocator(), cx.scoping_mut())
 }

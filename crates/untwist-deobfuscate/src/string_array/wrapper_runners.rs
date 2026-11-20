@@ -62,8 +62,9 @@ struct Head<'s> {
 
 impl Head<'_> {
     fn is_controller(&self, expr: &Expression<'_>) -> bool {
-        reference_symbol(expr.without_parentheses(), self.scoping)
-            .is_some_and(|symbol| self.controllers.contains(&symbol) || self.local.contains(&symbol))
+        reference_symbol(expr.without_parentheses(), self.scoping).is_some_and(|symbol| {
+            self.controllers.contains(&symbol) || self.local.contains(&symbol)
+        })
     }
 
     fn controller_call(&self, expr: &Expression<'_>) -> bool {
@@ -192,8 +193,10 @@ fn returned_prefix<'k, 'a>(statements: &'k [Statement<'a>]) -> Vec<&'k Expressio
     let [Statement::ReturnStatement(returned)] = statements else {
         return Vec::new();
     };
-    let Some(Expression::SequenceExpression(sequence)) =
-        returned.argument.as_ref().map(Expression::without_parentheses)
+    let Some(Expression::SequenceExpression(sequence)) = returned
+        .argument
+        .as_ref()
+        .map(Expression::without_parentheses)
     else {
         return Vec::new();
     };
@@ -349,7 +352,11 @@ struct Strip<'s> {
 impl<'a> VisitMut<'a> for Strip<'_> {
     fn visit_function(&mut self, it: &mut Function<'a>, flags: ScopeFlags) {
         walk_mut::walk_function(self, it, flags);
-        let Some(found) = self.candidates.iter().find(|found| found.function == it.span) else {
+        let Some(found) = self
+            .candidates
+            .iter()
+            .find(|found| found.function == it.span)
+        else {
             return;
         };
         let Some(body) = it.body.as_mut() else {
