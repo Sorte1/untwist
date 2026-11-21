@@ -526,11 +526,45 @@ fn owned_function(
     let Statement::FunctionDeclaration(function) = stmt else {
         return false;
     };
-    function
-        .id
-        .as_ref()
-        .and_then(|id| id.symbol_id.get())
-        .is_some_and(|symbol| used_only_in(scoping, symbol, moved.iter().map(|i| &body[*i])))
+    !copied_out_of_block(function, scoping)
+        && function
+            .id
+            .as_ref()
+            .and_then(|id| id.symbol_id.get())
+            .is_some_and(|symbol| used_only_in(scoping, symbol, moved.iter().map(|i| &body[*i])))
+}
+
+pub(super) fn copied_out_of_block(function: &Function<'_>, scoping: &Scoping) -> bool {
+    let Some(id) = function.id.as_ref() else {
+        return true;
+    };
+    let Some(block) = function
+        .scope_id
+        .get()
+        .and_then(|scope| scoping.scope_parent_id(scope))
+    else {
+        return true;
+    };
+    let flags = scoping.scope_flags(block);
+    if flags.is_var() || flags.is_strict_mode() {
+        return false;
+    }
+    let own = id.symbol_id.get();
+    let name = id.name;
+    let bound_outside = scoping.scope_ancestors(block).skip(1).any(|scope| {
+        scoping
+            .get_binding(scope, name)
+            .is_some_and(|symbol| Some(symbol) != own)
+    });
+    let global = scoping
+        .scope_ancestors(block)
+        .find(|scope| scoping.scope_flags(*scope).is_var())
+        .is_none_or(|scope| scope == scoping.root_scope_id());
+    bound_outside
+        || global
+        || scoping
+            .root_unresolved_references()
+            .contains_key(name.as_str())
 }
 
 fn rewrite_called<'a>(it: &mut AVec<'a, Statement<'a>>, plan: &Plan, cx: &Cx<'a, '_>) -> bool {
@@ -554,13 +588,18 @@ fn rewrite_called<'a>(it: &mut AVec<'a, Statement<'a>>, plan: &Plan, cx: &Cx<'a,
     true
 }
 
-fn block_declaration(stmt: &Statement<'_>) -> bool {
+fn block_declaration(stmt: &Statement<'_>, scoping: &Scoping) -> bool {
     match stmt {
-        Statement::FunctionDeclaration(_) => true,
-        Statement::VariableDeclaration(declaration) => declaration
-            .declarations
-            .iter()
-            .all(|declarator| matches!(declarator.id, BindingPattern::BindingIdentifier(_))),
+        Statement::FunctionDeclaration(function) => !copied_out_of_block(function, scoping),
+        Statement::VariableDeclaration(declaration) => {
+            !matches!(
+                declaration.kind,
+                VariableDeclarationKind::Using | VariableDeclarationKind::AwaitUsing
+            ) && declaration
+                .declarations
+                .iter()
+                .all(|declarator| matches!(declarator.id, BindingPattern::BindingIdentifier(_)))
+        }
         _ => false,
     }
 }
@@ -624,7 +663,7 @@ fn block_rotator(stmt: &Statement<'_>, scoping: &Scoping) -> bool {
     if before.is_empty()
         || !is_infinite_rotator_loop(rotator)
         || !closed_loop(rotator, scoping)
-        || !before.iter().all(block_declaration)
+        || !before.iter().all(|stmt| block_declaration(stmt, scoping))
         || !before.iter().all(closed_initialisers)
         || reads_own_frame(stmt)
         || stmt.span().start >= SYNTHETIC_BASE

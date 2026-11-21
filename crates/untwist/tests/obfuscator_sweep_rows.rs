@@ -742,7 +742,22 @@ const BLOCK_ROTATOR_ESCAPES: &[&str] = &[
     "block-rotator-leading-await",
     "block-rotator-leading-yield",
     "block-rotator-leading-super",
+    "block-rotator-annexb-var",
+    "block-rotator-annexb-function",
+    "block-rotator-annexb-top-level",
+    "block-rotator-annexb-second",
+    "block-rotator-annexb-closure",
+    "block-rotator-annexb-for-var",
+    "block-rotator-annexb-expression",
+    "block-rotator-annexb-checksum",
     "block-rotator-closed",
+];
+
+const CALLED_ROTATOR_ANNEX_B: &[&str] = &["called-rotator-annexb"];
+
+const BLOCK_ROTATOR_USING: &[&str] = &[
+    "block-rotator-leading-using",
+    "block-rotator-leading-await-using",
 ];
 
 #[test]
@@ -758,6 +773,22 @@ fn a_block_rotator_whose_loop_or_declarations_reach_outside_the_block_is_not_wra
         .iter()
         .filter(|label| **label != "block-rotator-closed")
     {
+        let source = read(&format!("{label}.js"));
+        for output in [default_code(&source), unsafe_lane(&source)] {
+            assert!(!output.contains("})();"), "{label}:\n{output}");
+        }
+    }
+}
+
+#[test]
+fn a_called_rotator_beside_a_block_function_copied_to_an_outer_binding_prints_like_node_in_both_lanes(
+) {
+    prints_like_node_in(CALLED_ROTATOR_ANNEX_B, &[default_code, unsafe_lane]);
+}
+
+#[test]
+fn a_block_rotator_led_by_a_using_declaration_is_not_wrapped_in_both_lanes() {
+    for label in BLOCK_ROTATOR_USING {
         let source = read(&format!("{label}.js"));
         for output in [default_code(&source), unsafe_lane(&source)] {
             assert!(!output.contains("})();"), "{label}:\n{output}");

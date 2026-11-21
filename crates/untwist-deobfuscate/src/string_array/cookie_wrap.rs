@@ -13,7 +13,7 @@ use untwist_core::pass::Cx;
 use super::array_declaration;
 use super::checksum::parsed_statement;
 use super::cookie_minified::countdown_declaration;
-use super::inlined::used_only_in;
+use super::inlined::{copied_out_of_block, used_only_in};
 use super::legacy::is_countdown;
 use crate::stamp::declaration_symbol;
 
@@ -367,6 +367,9 @@ fn rotator_of(
         let Statement::FunctionDeclaration(function) = &body[at] else {
             return None;
         };
+        if copied_out_of_block(function, scoping) {
+            return None;
+        }
         countdown_declaration(&body[at], alias_name)?;
         let id = function.id.as_ref()?;
         Some(Rotator {
