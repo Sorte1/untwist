@@ -79,4 +79,8 @@ pub fn points_to_dump(
 }
 
 #[cfg(test)]
+mod review_tests;
+#[cfg(test)]
+mod scale_tests;
+#[cfg(test)]
 mod tests;

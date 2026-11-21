@@ -42,7 +42,7 @@ impl Gen<'_> {
     fn value(&mut self, expr: &Expression<'_>) -> Option<Node> {
         match expr {
             Expression::BooleanLiteral(_) => Some(self.prim(Builtin::PrimBoolean)),
-            Expression::NullLiteral(_) => None,
+            Expression::NullLiteral(_) => Some(self.prim(Builtin::PrimNull)),
             Expression::NumericLiteral(_) | Expression::BigIntLiteral(_) => {
                 Some(self.prim(Builtin::PrimNumber))
             }
@@ -142,7 +142,7 @@ impl Gen<'_> {
             return Some(self.binding(symbol));
         }
         match id.name.as_str() {
-            "undefined" => None,
+            "undefined" => Some(self.prim(Builtin::PrimUndefined)),
             "arguments" => match self.arguments_node() {
                 Some(node) => Some(node),
                 None => Some(self.global_read("arguments")),
@@ -175,7 +175,7 @@ impl Gen<'_> {
         let object = self
             .g
             .new_site(array.span, SiteKind::Array, &[Builtin::ArrayProto]);
-        let fields = self.g.field_node(object, Field::UNKNOWN);
+        let fields = self.g.field_node(object, Field::INDEX);
         for element in &array.elements {
             match element {
                 ArrayExpressionElement::SpreadElement(spread) => {
@@ -483,7 +483,7 @@ impl Gen<'_> {
         let object = self
             .g
             .new_site(span, SiteKind::Rest, &[Builtin::ArrayProto]);
-        let fields = self.g.field_node(object, Field::UNKNOWN);
+        let fields = self.g.field_node(object, Field::INDEX);
         self.flow(items, fields);
         self.g.singleton(object)
     }
@@ -630,7 +630,7 @@ impl Gen<'_> {
             }
             UnaryOperator::Void => {
                 self.expr(&unary.argument);
-                None
+                Some(self.prim(Builtin::PrimUndefined))
             }
             UnaryOperator::LogicalNot => {
                 self.expr(&unary.argument);

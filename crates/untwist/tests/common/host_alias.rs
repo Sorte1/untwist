@@ -10,6 +10,8 @@ const BARE_HEAD: &str = include_str!("../data/host_alias/bare_head.js");
 const ROWS: &str = include_str!("../data/host_alias/rows.txt");
 const KEYED_ROWS: &str = include_str!("../data/host_alias/keyed_rows.txt");
 const BARE_ROWS: &str = include_str!("../data/host_alias/bare_rows.txt");
+const REVIEW_ROWS: &str = include_str!("../data/host_alias/review_rows.txt");
+const STRING_HELD: &str = "var t=this;var Z=t[k];";
 const GLOBAL_ROUTES: &str = include_str!("../data/host_alias/global_routes.txt");
 const FOREIGN_REACH_ROWS: &str = include_str!("../data/host_alias/foreign_reach_rows.txt");
 const GLOBAL_HELD: &str = "var t=this;var Z=t[k];";
@@ -32,6 +34,10 @@ pub fn rows() -> Vec<(String, String)> {
     let mut rows = framed(HEAD, ROWS);
     rows.extend(framed(PLAIN_HEAD, KEYED_ROWS));
     rows.extend(framed(BARE_HEAD, BARE_ROWS));
+    rows.extend(framed(
+        &format!("{}{STRING_HELD}", PLAIN_HEAD.trim_end()),
+        REVIEW_ROWS,
+    ));
     rows
 }
 
@@ -40,6 +46,10 @@ pub fn foreign_reach_rows() -> Vec<(String, String)> {
         &format!("{}{GLOBAL_HELD}", PLAIN_HEAD.trim_end()),
         FOREIGN_REACH_ROWS,
     )
+}
+
+pub fn plain_script(patch: &str) -> String {
+    format!("{}{patch}", PLAIN_HEAD.trim_end())
 }
 
 pub fn global_routes() -> Vec<(String, String)> {

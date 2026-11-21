@@ -7,6 +7,9 @@ use crate::mutants::unbound_this_dropped;
 const UNKNOWN: Key = Key::Static(Field::UNKNOWN);
 const ACCESSORS: Key = Key::Static(Field::ACCESSORS);
 const ENTRIES: Key = Key::Static(Field::ENTRIES);
+const ELEMENTS: Key = Key::Static(Field::ELEMENTS);
+const OWN: Key = Key::Static(Field::OWN);
+const INDEX: Key = Key::Static(Field::INDEX);
 const BOUND_ARGS_LIMIT: usize = 16;
 
 impl Graph {
@@ -15,14 +18,56 @@ impl Graph {
             return;
         }
         let call = self.calls[index as usize].clone();
+        let standard_conversion = self.builtin_conversions.contains(&call.callee);
         match self.objects.get(callee).clone() {
+            Obj::World | Obj::Builtin(Builtin::Other) if standard_conversion => {}
             Obj::World => self.generic(&call),
+            Obj::Functions => self.call_functions(&call),
             Obj::Str(_) => {}
             Obj::Site(_, SiteKind::Function) => self.bind_function(callee, &call),
-            Obj::Site(_, SiteKind::Bound) => self.call_bound(callee, &call),
+            Obj::Site(_, SiteKind::Bound) => {
+                self.bound_calls.entry(callee).or_default().push(index);
+                self.call_bound(callee, &call);
+            }
             Obj::Site(..) => {}
             Obj::Builtin(Builtin::Method(method)) => self.method(index, method, &call),
             Obj::Builtin(builtin) => self.root_call(builtin, &call),
+        }
+    }
+
+    fn call_functions(&mut self, call: &Call) {
+        let slot = usize::from(call.construct);
+        let (this, args, ret) = match self.function_calls[slot] {
+            Some(summary) => summary,
+            None => {
+                let summary = (self.node(), self.node(), self.node());
+                self.function_calls[slot] = Some(summary);
+                let (this, args, ret) = summary;
+                let shared = Call {
+                    callee: self.empty,
+                    this: Some(this),
+                    args: Vec::new(),
+                    spread: Some(args),
+                    result: Some(ret),
+                    construct: call.construct,
+                    loose: true,
+                    firm: false,
+                    span: Span::new(u32::MAX, u32::MAX),
+                };
+                for function in self.function_sites().iter() {
+                    self.bind_function(*function, &shared);
+                }
+                summary
+            }
+        };
+        if let Some(receiver) = call.this {
+            self.copy(receiver, this);
+        }
+        for arg in call.args.iter().chain(&call.spread) {
+            self.copy(*arg, args);
+        }
+        if let Some(result) = call.result {
+            self.copy(ret, result);
         }
     }
 
@@ -99,7 +144,16 @@ impl Graph {
         };
         let mut args = info.args.clone();
         args.extend(call.args.iter().copied());
-        let spread = if args.len() > BOUND_ARGS_LIMIT
+        let spread = if info.merged {
+            let spill = self.spill(bound);
+            for extra in std::mem::take(&mut args) {
+                self.copy(extra, spill);
+            }
+            if let Some(spread) = call.spread {
+                self.copy(spread, spill);
+            }
+            Some(spill)
+        } else if args.len() > BOUND_ARGS_LIMIT
             || (call.spread.is_some() && self.spills.contains_key(&bound))
         {
             let spill = self.spill(bound);
@@ -130,6 +184,95 @@ impl Graph {
         });
     }
 
+    fn bind_into(
+        &mut self,
+        bound: ObjectId,
+        target: Node,
+        this: Option<Node>,
+        args: Vec<Node>,
+        loose: bool,
+    ) {
+        if let Some(info) = self.bound.get(&bound) {
+            let same_this = this.unwrap_or(self.empty) == info.this;
+            if info.target == target && same_this && info.args == args && info.loose == loose {
+                return;
+            }
+        }
+        let Some(info) = self.bound.get(&bound).cloned() else {
+            let empty = self.empty;
+            self.bound.insert(
+                bound,
+                BoundInfo {
+                    target,
+                    this: this.unwrap_or(empty),
+                    args,
+                    loose,
+                    merged: false,
+                },
+            );
+            return;
+        };
+        if info.merged {
+            self.copy(target, info.target);
+            if let Some(this) = this {
+                self.copy(this, info.this);
+            }
+            let spill = self.spill(bound);
+            for arg in &args {
+                self.copy(*arg, spill);
+            }
+            if !loose || info.loose {
+                return;
+            }
+            if let Some(stored) = self.bound.get_mut(&bound) {
+                stored.loose = true;
+            }
+        } else {
+            self.merge_bound(bound, info, (target, this), args, loose);
+        }
+        let indices = self.bound_calls.get(&bound).cloned().unwrap_or_default();
+        for index in indices {
+            let call = self.calls[index as usize].clone();
+            self.call_bound(bound, &call);
+        }
+    }
+
+    fn merge_bound(
+        &mut self,
+        bound: ObjectId,
+        info: BoundInfo,
+        (target, this): (Node, Option<Node>),
+        args: Vec<Node>,
+        loose: bool,
+    ) {
+        let (merged_target, merged_this) = (self.node(), self.node());
+        self.copy(info.target, merged_target);
+        self.copy(target, merged_target);
+        self.copy(info.this, merged_this);
+        if let Some(this) = this {
+            self.copy(this, merged_this);
+        }
+        let spill = self.spill(bound);
+        for arg in info.args.iter().chain(&args) {
+            self.copy(*arg, spill);
+        }
+        self.bound.insert(
+            bound,
+            BoundInfo {
+                target: merged_target,
+                this: merged_this,
+                args: Vec::new(),
+                loose: info.loose || loose,
+                merged: true,
+            },
+        );
+        if self.is_escaped(bound) {
+            for node in [merged_target, merged_this, spill] {
+                self.escape(node);
+            }
+        }
+    }
+
     fn spill(&mut self, bound: ObjectId) -> Node {
         if let Some(node) = self.spills.get(&bound) {
             return *node;
@@ -149,7 +292,7 @@ impl Graph {
         if let Some(result) = result {
             self.copy(node, result);
         }
-        self.field_node(object, Field::UNKNOWN)
+        self.field_node(object, Field::INDEX)
     }
 
     fn prims(&mut self, result: Option<Node>) {
@@ -158,6 +301,8 @@ impl Graph {
                 Builtin::PrimString,
                 Builtin::PrimNumber,
                 Builtin::PrimBoolean,
+                Builtin::PrimUndefined,
+                Builtin::PrimNull,
             ] {
                 self.add_builtin(result, builtin);
             }
@@ -165,17 +310,17 @@ impl Graph {
     }
 
     pub(super) fn implicit(&mut self, value: Node) {
-        let value = if self.is_live() {
-            let sink = self.implicit_sink();
-            self.copy(value, sink);
-            sink
-        } else {
-            value
-        };
-        if !self.first_implicit(value) {
-            return;
+        if self.first_implicit(value) {
+            self.watch_conversions(value);
         }
+    }
+
+    pub(super) fn convert(&mut self, object: ObjectId) {
+        let value = self.singleton(object);
         let callee = self.node();
+        if matches!(self.objects.get(object), Obj::Builtin(_)) {
+            self.builtin_conversions.insert(callee);
+        }
         self.load_named(value, "toString", callee);
         self.load_named(value, "valueOf", callee);
         self.call(Call {
@@ -196,7 +341,7 @@ impl Graph {
         if !fresh {
             return elements;
         }
-        self.load(value, UNKNOWN, elements);
+        self.load(value, ELEMENTS, elements);
         let iterator_fn = self.node();
         self.load_named(value, "@@iterator", iterator_fn);
         let iterator = self.node();
@@ -262,7 +407,7 @@ impl Graph {
     }
 
     fn root_call(&mut self, builtin: Builtin, call: &Call) {
-        let first = call.args.first().copied();
+        let first = call.args.first().copied().or(call.spread);
         match builtin {
             Builtin::ObjectCtor => {
                 let (_, node) = self.fresh(call.span, SiteKind::Fresh, &[Builtin::ObjectProto]);
@@ -302,7 +447,7 @@ impl Graph {
                     let items = self.iterate(first);
                     let entries = self.field_node(object, Field::ENTRIES);
                     self.copy(items, entries);
-                    self.load(items, UNKNOWN, entries);
+                    self.load(items, ELEMENTS, entries);
                 }
                 if let Some(result) = call.result {
                     self.copy(node, result);
@@ -350,6 +495,11 @@ impl Graph {
         let Some(target) = target else {
             return;
         };
+        let key = if call.spread.is_some() {
+            PatchKey::Whole
+        } else {
+            key
+        };
         let span = self.calls[index as usize].span;
         self.record_patch(index, method, Patch { span, target, key });
     }
@@ -365,7 +515,7 @@ impl Graph {
     }
 
     fn method(&mut self, index: u32, method: Method, call: &Call) {
-        let arg = |position: usize| call.args.get(position).copied();
+        let arg = |position: usize| call.args.get(position).copied().or(call.spread);
         let this = call.this;
         let result = call.result;
         match method {
@@ -396,7 +546,7 @@ impl Graph {
                     }
                     if let Some(spread) = call.spread {
                         let world = self.world;
-                        let fields = self.loaded(spread, Field::UNKNOWN);
+                        let fields = self.loaded(spread, Field::OWN);
                         self.store(target, UNKNOWN, fields);
                         self.store(target, UNKNOWN, spread);
                         self.store(target, UNKNOWN, world);
@@ -411,17 +561,27 @@ impl Graph {
                 }
                 self.returns(arg(0), result);
             }
+            Method::ProtoSetter => {
+                self.patch(index, method, this, PatchKey::Whole);
+                if let (Some(target), Some(proto)) = (this, arg(0)) {
+                    self.proto_set(target, proto);
+                }
+            }
             Method::ReflectSet => {
-                let receiver = match call.spread {
-                    Some(_) => Some(self.world),
-                    None => arg(3),
-                };
-                for target in [arg(0), receiver].into_iter().flatten() {
-                    let (key, patch_key) = self.arg_key(arg(1));
-                    self.patch(index, method, Some(target), patch_key);
-                    if let Some(value) = arg(2) {
-                        self.store(target, key, value);
+                let (key, patch_key) = self.arg_key(arg(1));
+                let targets = match (arg(0), arg(3)) {
+                    (Some(target), Some(receiver)) => {
+                        let (both, _) = self.derived(6, vec![target, receiver], call.span);
+                        self.copy(target, both);
+                        self.copy(receiver, both);
+                        self.add_receiver(target, receiver);
+                        Some(both)
                     }
+                    (target, _) => target,
+                };
+                self.patch(index, method, targets, patch_key);
+                if let (Some(target), Some(value)) = (targets, arg(2)) {
+                    self.store(target, key, value);
                 }
                 self.prims(result);
             }
@@ -450,6 +610,11 @@ impl Graph {
         }
     }
 
+    fn proto_accessors(&mut self, to: Node) {
+        self.add_builtin(to, Builtin::Method(Method::ProtoGetter));
+        self.add_builtin(to, Builtin::Method(Method::ProtoSetter));
+    }
+
     fn returns(&mut self, value: Option<Node>, result: Option<Node>) {
         if let (Some(value), Some(result)) = (value, result) {
             self.copy(value, result);
@@ -457,7 +622,7 @@ impl Graph {
     }
 
     fn query_method(&mut self, method: Method, call: &Call) {
-        let arg = |position: usize| call.args.get(position).copied();
+        let arg = |position: usize| call.args.get(position).copied().or(call.spread);
         let this = call.this;
         let result = call.result;
         let span = call.span;
@@ -490,6 +655,7 @@ impl Graph {
                     };
                     self.load(target, key, value);
                     self.load(target, ACCESSORS, value);
+                    self.proto_accessors(value);
                 }
                 for name in ["value", "get", "set"] {
                     self.store_named(descriptor, name, value);
@@ -512,16 +678,16 @@ impl Graph {
             Method::Values => {
                 let elements = self.fresh_array(span, result);
                 if let Some(target) = arg(0) {
-                    self.load(target, UNKNOWN, elements);
+                    self.load(target, OWN, elements);
                 }
             }
             Method::Entries => {
                 let elements = self.fresh_array(span, result);
                 let (pair, pair_node) = self.fresh(span, SiteKind::Rest, &[Builtin::ArrayProto]);
                 self.copy(pair_node, elements);
-                let pair_fields = self.field_node(pair, Field::UNKNOWN);
+                let pair_fields = self.field_node(pair, Field::INDEX);
                 if let Some(target) = arg(0) {
-                    self.load(target, UNKNOWN, pair_fields);
+                    self.load(target, OWN, pair_fields);
                     self.keys_of(target, pair_fields);
                 }
             }
@@ -530,12 +696,15 @@ impl Graph {
                 let fields = self.field_node(object, Field::UNKNOWN);
                 if let Some(source) = arg(0) {
                     let entries = self.iterate(source);
-                    self.load(entries, UNKNOWN, fields);
+                    self.load(entries, ELEMENTS, fields);
                 }
                 self.returns(Some(node), result);
             }
             Method::ReturnsFirst => self.returns(arg(0), result),
             Method::ReflectGet => {
+                if let (Some(target), Some(receiver)) = (arg(0), arg(2)) {
+                    self.add_receiver(target, receiver);
+                }
                 if let (Some(target), Some(result)) = (arg(0), result) {
                     let key = self.arg_key(arg(1)).0;
                     self.load(target, key, result);
@@ -548,7 +717,7 @@ impl Graph {
                     (arg(0), None, arg(1))
                 };
                 if let Some(callee) = callee {
-                    let spread = list.map(|list| self.loaded(list, Field::UNKNOWN));
+                    let spread = list.map(|list| self.loaded(list, Field::ELEMENTS));
                     self.live_call(Call {
                         callee,
                         this,
@@ -561,6 +730,14 @@ impl Graph {
                         span,
                     });
                 }
+                if let (Method::ReflectConstruct, Some(new_target)) = (method, arg(2)) {
+                    self.escape(new_target);
+                    if let Some(result) = result {
+                        let prototype = self.node();
+                        self.load_named(new_target, "prototype", prototype);
+                        self.proto_set(result, prototype);
+                    }
+                }
             }
             Method::LookupAccessor => {
                 if let Some(key) = arg(0) {
@@ -568,6 +745,12 @@ impl Graph {
                 }
                 if let (Some(target), Some(result)) = (this, result) {
                     self.load(target, ACCESSORS, result);
+                    self.proto_accessors(result);
+                }
+            }
+            Method::ProtoGetter => {
+                if let (Some(target), Some(result)) = (this, result) {
+                    self.load_named(target, "__proto__", result);
                 }
             }
             _ => self.function_method(method, call),
@@ -575,7 +758,7 @@ impl Graph {
     }
 
     fn function_method(&mut self, method: Method, call: &Call) {
-        let arg = |position: usize| call.args.get(position).copied();
+        let arg = |position: usize| call.args.get(position).copied().or(call.spread);
         let this = call.this;
         let result = call.result;
         let span = call.span;
@@ -598,7 +781,7 @@ impl Graph {
             Method::FnApply => {
                 if let Some(target) = this {
                     let spread = match (arg(1), call.spread) {
-                        (Some(list), _) => Some(self.loaded(list, Field::UNKNOWN)),
+                        (Some(list), _) => Some(self.loaded(list, Field::ELEMENTS)),
                         (None, spread) => spread,
                     };
                     self.live_call(Call {
@@ -623,13 +806,9 @@ impl Graph {
                     return;
                 }
                 let (bound, node) = self.fresh(span, SiteKind::Bound, &[Builtin::FunctionProto]);
-                let empty = self.empty;
-                self.bound.entry(bound).or_insert(BoundInfo {
-                    target,
-                    this: arg(0).unwrap_or(empty),
-                    args: call.args.iter().skip(1).copied().collect(),
-                    loose: arg(0).is_none() || !call.firm,
-                });
+                let args: Vec<Node> = call.args.iter().skip(1).copied().collect();
+                let loose = arg(0).is_none() || !call.firm;
+                self.bind_into(bound, target, arg(0), args, loose);
                 self.returns(Some(node), result);
             }
             Method::ArrayFrom | Method::ArrayOf => {
@@ -645,7 +824,7 @@ impl Graph {
                     return;
                 };
                 let items = self.iterate(source);
-                self.load(source, UNKNOWN, items);
+                self.load(source, ELEMENTS, items);
                 match arg(1) {
                     Some(mapper) => {
                         let mapped = self.simple_call(mapper, arg(2), vec![items, number], span);
@@ -661,7 +840,12 @@ impl Graph {
             }
             Method::Pure => self.pure(call),
             Method::ReturnsThis => self.returns(this, result),
+            Method::StringPattern => {
+                self.pattern_hook(call);
+                self.pure(call);
+            }
             Method::StringReplace => {
+                self.pattern_hook(call);
                 if let Some(pattern) = arg(0) {
                     self.implicit(pattern);
                 }
@@ -697,14 +881,28 @@ impl Graph {
         }
     }
 
+    fn pattern_hook(&mut self, call: &Call) {
+        let Some(pattern) = call.args.first().copied().or(call.spread) else {
+            return;
+        };
+        let hook = self.node();
+        for name in ["@@replace", "@@split", "@@match", "@@matchAll", "@@search"] {
+            self.load_named(pattern, name, hook);
+        }
+        let mut args: Vec<Node> = call.this.into_iter().collect();
+        args.extend(call.args.iter().skip(1).copied());
+        args.extend(call.spread);
+        self.simple_call(hook, Some(pattern), args, call.span);
+    }
+
     fn array_method(&mut self, method: Method, call: &Call) {
-        let arg = |position: usize| call.args.get(position).copied();
+        let arg = |position: usize| call.args.get(position).copied().or(call.spread);
         let Some(this) = call.this else {
             return;
         };
         let result = call.result;
         let span = call.span;
-        let elements = self.loaded(this, Field::UNKNOWN);
+        let elements = self.loaded(this, Field::ELEMENTS);
         let collection = matches!(
             method,
             Method::CollectionSet
@@ -742,7 +940,7 @@ impl Graph {
         match method {
             Method::ArrayPush => {
                 for value in call.args.iter().chain(&call.spread) {
-                    self.store(this, UNKNOWN, *value);
+                    self.store(this, INDEX, *value);
                 }
                 self.prims(result);
             }
@@ -751,21 +949,22 @@ impl Graph {
                 let fields = self.fresh_array(span, result);
                 self.copy(elements, fields);
                 for value in call.args.iter().skip(2).chain(&call.spread) {
-                    self.store(this, UNKNOWN, *value);
+                    self.store(this, INDEX, *value);
                 }
             }
             Method::ArrayCopy => {
                 let fields = self.fresh_array(span, result);
                 self.copy(elements, fields);
+                self.copy(this, fields);
                 for value in call.args.iter().chain(&call.spread) {
                     self.copy(*value, fields);
-                    self.load(*value, UNKNOWN, fields);
+                    self.load(*value, ELEMENTS, fields);
                 }
             }
             Method::ArraySlice => {
                 let fields = self.fresh_array(span, result);
                 self.copy(elements, fields);
-                self.load(elements, UNKNOWN, fields);
+                self.load(elements, ELEMENTS, fields);
             }
             Method::ArrayWith => {
                 let fields = self.fresh_array(span, result);
@@ -777,7 +976,7 @@ impl Graph {
             Method::ArraySelf => self.returns(Some(this), result),
             Method::ArrayFill => {
                 if let Some(value) = arg(0) {
-                    self.store(this, UNKNOWN, value);
+                    self.store(this, INDEX, value);
                 }
                 self.returns(Some(this), result);
             }
@@ -823,6 +1022,11 @@ impl Graph {
                     entries
                 };
                 self.copy(source, fields);
+                let (pair, pair_node) = self.fresh(span, SiteKind::Rest, &[Builtin::ArrayProto]);
+                let pair_fields = self.field_node(pair, Field::INDEX);
+                self.copy(source, pair_fields);
+                self.add_builtin(pair_fields, Builtin::PrimNumber);
+                self.copy(pair_node, fields);
                 self.returns(Some(node), result);
             }
             Method::CollectionSet | Method::CollectionAdd => {
@@ -851,9 +1055,9 @@ impl Graph {
             return;
         };
         let number = self.builtin_node(Builtin::PrimNumber);
-        let returned = match call.args.first() {
+        let returned = match call.args.first().or(call.spread.as_ref()) {
             Some(visitor) => {
-                let this_arg = call.args.get(1).copied();
+                let this_arg = call.args.get(1).copied().or(call.spread);
                 self.simple_call(*visitor, this_arg, vec![elements, number, this], call.span)
             }
             None => self.empty,
@@ -868,7 +1072,7 @@ impl Graph {
                     Each::Filter => self.copy(elements, fields),
                     Each::FlatMap => {
                         self.copy(returned, fields);
-                        self.load(returned, UNKNOWN, fields);
+                        self.load(returned, ELEMENTS, fields);
                     }
                     _ => self.copy(returned, fields),
                 }
