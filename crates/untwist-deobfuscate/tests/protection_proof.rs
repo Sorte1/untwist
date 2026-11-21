@@ -58,11 +58,20 @@ fn a_payload_run_through_a_controller_shaped_helper_is_kept() {
 }
 
 #[test]
-fn the_unsafe_lane_still_trusts_the_controller_shape() {
+fn the_unsafe_lane_keeps_a_payload_run_through_a_controller_shaped_helper() {
     let source = format!("{CONTROLLER}{A_PAYLOAD_RUN_THROUGH_THE_CONTROLLER}");
     let alloc = Allocator::default();
     let (out, _) = run_lane(&alloc, &source, false);
-    assert_eq!(out.trim(), "console.log(globalThis.marker);");
+    assert_eq!(out, printed(&source));
+    untwist_testing::node::assert_node_agrees(&source, &out);
+}
+
+#[test]
+fn the_unsafe_lane_removes_every_protection_of_one_controller_together() {
+    let source = format!("{CONTROLLER}{THE_SOURCE_CHECK}{THE_CONSOLE_DISABLE}{REST}");
+    let alloc = Allocator::default();
+    let (out, _) = run_lane(&alloc, &source, false);
+    assert_eq!(out.trim(), REST);
 }
 
 #[test]

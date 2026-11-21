@@ -28,6 +28,7 @@ use crate::directives::remove_protection_statements;
 use crate::domain_lock::is_domain_lock_callback;
 use crate::flag_home::{is_private_local, Homes, ARGUMENTS, DIRECT_EVAL};
 use crate::notes;
+use crate::protection_proxies::Proxies;
 use crate::protection_shape::{is_protection_callback, Roles};
 
 pub const PASS: &str = "self-defending";
@@ -850,7 +851,8 @@ struct Removals<'k> {
     removed: FxHashSet<Span>,
     variables: FxHashSet<SymbolId>,
     returner_calls: &'k FxHashSet<Span>,
-    proof: Option<&'k FxHashSet<SymbolId>>,
+    proof: &'k FxHashSet<SymbolId>,
+    proxies: Option<&'k Proxies>,
     unproven: FxHashSet<SymbolId>,
     kept: bool,
     frames: Vec<Frame>,
@@ -1046,9 +1048,6 @@ impl Removals<'_> {
     }
 
     fn runs_only_protection(&self, stmt: &Statement<'_>) -> bool {
-        let Some(protections) = self.proof else {
-            return true;
-        };
         let Some((own, call)) = registration(stmt) else {
             return false;
         };
@@ -1064,9 +1063,12 @@ impl Removals<'_> {
         let roles = Roles {
             own,
             controller: reference_symbol(callee, self.scoping),
-            protections: Some(protections),
+            protections: Some(self.proof),
+            proxies: self.proxies,
+            arrows: self.placed_anywhere,
         };
         is_protection_callback(callback, roles, self.scoping)
+            || (self.placed_anywhere && is_domain_lock_callback(callback))
     }
 
     fn declared_once(&self, symbol: SymbolId) -> bool {
@@ -1328,7 +1330,8 @@ struct Inputs<'k> {
     unsafe_lane: bool,
     annex_b: &'k AnnexBWrites,
     returner_calls: &'k FxHashSet<Span>,
-    proof: Option<&'k FxHashSet<SymbolId>>,
+    proof: &'k FxHashSet<SymbolId>,
+    proxies: Option<&'k Proxies>,
 }
 
 fn removals<'k>(
@@ -1345,6 +1348,7 @@ fn removals<'k>(
         variables: FxHashSet::default(),
         returner_calls: inputs.returner_calls,
         proof: inputs.proof,
+        proxies: inputs.proxies,
         unproven: FxHashSet::default(),
         kept: false,
         frames: Vec::new(),
@@ -1506,15 +1510,16 @@ fn plan(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
     if controllers.found.is_empty() && !controllers.inline {
         return Plan::Nothing;
     }
-    let protections =
-        (!unsafe_lane).then(|| crate::debug_protection::protection_symbols(program, scoping));
+    let protections = crate::debug_protection::protection_symbols(program, scoping);
+    let proxies = unsafe_lane.then(|| Proxies::of(program, scoping));
     let annex_b = AnnexBWrites::of(program, scoping);
     let inputs = Inputs {
         scoping,
         unsafe_lane,
         annex_b: &annex_b,
         returner_calls: &controllers.returner_calls,
-        proof: protections.as_ref(),
+        proof: &protections,
+        proxies: proxies.as_ref(),
     };
     let declared_once: FxHashSet<SymbolId> = controllers
         .found
@@ -1641,8 +1646,8 @@ impl<'a> Pass<'a> for SelfDefending {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
-        let (spans, tracked, partial) = match plan(program, cx.scoping(), cx.opts.unsafe_transforms)
-        {
+        let planned = plan(program, cx.scoping(), cx.opts.unsafe_transforms);
+        let (spans, tracked, partial) = match planned {
             Plan::Nothing => return,
             Plan::Refused => {
                 cx.note(notes::SELF_DEFENDING_REFERENCE_KEPT, None);
@@ -1715,11 +1720,18 @@ struct EmptiedShells<'s> {
 impl<'a> VisitJs<'a> for EmptiedShells<'_> {
     fn visit_statement(&mut self, it: &Statement<'a>) {
         let span = it.span();
+        if crate::legacy_reach::is_runner_container(span) && is_empty_container(it) {
+            self.found.push(span);
+            return;
+        }
         let held = self
             .removed
             .iter()
             .any(|inner| span.start <= inner.start && inner.end <= span.end && span != *inner);
         if !held {
+            if crate::legacy_reach::has_runner_containers() {
+                walk_js::walk_statement(self, it);
+            }
             return;
         }
         if is_empty_shell(it) {
@@ -1737,8 +1749,19 @@ fn is_empty_shell(stmt: &Statement<'_>) -> bool {
     let Some((function, arguments)) = iife(&stmt.expression) else {
         return false;
     };
-    arguments.is_empty()
-        && has_no_params(function)
+    arguments.is_empty() && is_empty_body(function)
+}
+
+fn is_empty_container(stmt: &Statement<'_>) -> bool {
+    let Statement::ExpressionStatement(stmt) = stmt else {
+        return false;
+    };
+    matches!(stmt.expression.without_parentheses(),
+        Expression::FunctionExpression(function) if is_empty_body(function))
+}
+
+fn is_empty_body(function: &Function<'_>) -> bool {
+    has_no_params(function)
         && is_plain_function(function)
         && function
             .body

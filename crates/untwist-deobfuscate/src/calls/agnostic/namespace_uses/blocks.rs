@@ -84,6 +84,8 @@ impl<'s, 'a> Walker<'s, 'a> {
                     own,
                     controller,
                     protections: Some(&self.protections),
+                    proxies: None,
+                    arrows: false,
                 };
                 if is_decoded_protection_callback(callback, roles, self.scoping, self.resolve) {
                     self.blocks.push((callback.span(), &CONSOLE_EFFECTS));

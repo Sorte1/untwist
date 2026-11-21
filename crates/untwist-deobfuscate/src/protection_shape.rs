@@ -17,6 +17,8 @@ use untwist_core::parse::{parse_with, SourceType};
 use untwist_core::semantic::build_scoping;
 use untwist_eval::value::JsString;
 
+use crate::protection_proxies::{Proxies, Proxy};
+
 pub(crate) type Decoded<'k> = Option<&'k FxHashMap<Span, &'k JsString>>;
 
 const TEMPLATES: &str = include_str!("protection_shapes.js");
@@ -37,6 +39,8 @@ pub(crate) struct Roles<'k> {
     pub(crate) own: Option<SymbolId>,
     pub(crate) controller: Option<SymbolId>,
     pub(crate) protections: Option<&'k FxHashSet<SymbolId>>,
+    pub(crate) proxies: Option<&'k Proxies>,
+    pub(crate) arrows: bool,
 }
 
 impl Roles<'_> {
@@ -387,10 +391,19 @@ impl<'a> VisitJs<'a> for Shape<'_> {
         if self.poisoned {
             return;
         }
+        if let Some(Proxy::Text(text)) = self.proxy(it) {
+            return self.literal(text);
+        }
         if let Some(text) = self.decoded_text(it) {
             return self.literal(&text);
         }
         walk_js::walk_expression(self, it);
+    }
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if !self.proxied_call(it) {
+            walk_js::walk_call_expression(self, it);
+        }
     }
 
     fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
@@ -481,7 +494,42 @@ fn unread_bare_var(stmt: &Statement<'_>, scoping: &Scoping) -> Option<Vec<Symbol
     Some(redeclared)
 }
 
-impl<'a> Shape<'_> {
+impl<'k, 'a> Shape<'k> {
+    fn proxy(&self, expr: &Expression<'a>) -> Option<&'k Proxy> {
+        let proxies = self.roles?.proxies?;
+        proxies.member(expr, self.scoping)
+    }
+
+    fn proxied_call(&mut self, it: &CallExpression<'a>) -> bool {
+        if it.optional {
+            return false;
+        }
+        let arguments: Option<Vec<&Expression<'a>>> =
+            it.arguments.iter().map(Argument::as_expression).collect();
+        let (Some(proxy), Some(arguments)) = (self.proxy(&it.callee), arguments) else {
+            return false;
+        };
+        match (proxy, arguments.as_slice()) {
+            (Proxy::Call(count), [callee, rest @ ..]) if rest.len() == *count => {
+                self.text.push_str("(CallExpression");
+                self.tag(false);
+                self.visit_expression(callee);
+                for argument in rest {
+                    self.visit_expression(argument);
+                }
+            }
+            (Proxy::Binary(operator), [left, right]) => {
+                self.text.push_str("(BinaryExpression");
+                self.tag(*operator);
+                self.visit_expression(left);
+                self.visit_expression(right);
+            }
+            _ => return false,
+        }
+        self.text.push(')');
+        true
+    }
+
     fn decoded_text(&self, expr: &Expression<'a>) -> Option<String> {
         let decoded = self.decoded?;
         match expr.without_parentheses() {
@@ -544,13 +592,29 @@ fn shape<'k>(
         return None;
     }
     let body = function.body.as_ref()?;
+    shape_of(
+        &function.params,
+        body,
+        scoping,
+        roles,
+        (any_number, decoded),
+    )
+}
+
+fn shape_of<'k>(
+    params: &FormalParameters<'_>,
+    body: &FunctionBody<'_>,
+    scoping: &'k Scoping,
+    roles: Option<Roles<'k>>,
+    (any_number, decoded): (bool, Decoded<'k>),
+) -> Option<String> {
     let mut locals = Locals {
         found: FxHashSet::default(),
         called: FxHashSet::default(),
         functions: Vec::new(),
         budget: NODE_BUDGET,
     };
-    locals.visit_formal_parameters(&function.params);
+    locals.visit_formal_parameters(params);
     locals.visit_function_body(body);
     if locals.budget == 0 {
         return None;
@@ -571,7 +635,7 @@ fn shape<'k>(
         skipped_redeclared: FxHashSet::default(),
         bound_redeclared: FxHashSet::default(),
     };
-    shape.visit_formal_parameters(&function.params);
+    shape.visit_formal_parameters(params);
     shape.visit_function_body(body);
     shape.finish()
 }
@@ -627,12 +691,21 @@ pub(crate) fn is_decoded_protection_callback<'k>(
     scoping: &'k Scoping,
     decoded: Decoded<'k>,
 ) -> bool {
-    let Expression::FunctionExpression(function) = callback.without_parentheses() else {
-        return false;
+    let text = match callback.without_parentheses() {
+        Expression::FunctionExpression(function) if function.id.is_none() => {
+            shape(function, scoping, Some(roles), (false, decoded))
+        }
+        Expression::ArrowFunctionExpression(arrow) if roles.arrows && !arrow.r#async => {
+            match &arrow.body {
+                ArrowFunctionBody::FunctionBody(body) => {
+                    shape_of(&arrow.params, body, scoping, Some(roles), (false, decoded))
+                }
+                _ => None,
+            }
+        }
+        _ => None,
     };
-    function.id.is_none()
-        && shape(function, scoping, Some(roles), (false, decoded))
-            .is_some_and(|text| templates().callbacks.contains(&text))
+    text.is_some_and(|text| templates().callbacks.contains(&text))
 }
 
 pub(crate) fn is_protection_function(function: &Function<'_>, scoping: &Scoping) -> bool {
