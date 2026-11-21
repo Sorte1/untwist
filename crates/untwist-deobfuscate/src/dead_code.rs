@@ -677,7 +677,7 @@ impl<'a> DeadCode<'a> {
             ..
         } = node;
         if value {
-            match self.try_merge(consequent, outer, stmts, cx) {
+            match self.merge_or_keep(consequent, outer, stmts, cx) {
                 Ok(()) => true,
                 Err(consequent) if branch_declares_function(&consequent) => {
                     keep_braced(consequent, stmts, cx)
@@ -688,12 +688,26 @@ impl<'a> DeadCode<'a> {
             let Some(branch) = alternate else {
                 return true;
             };
-            match self.try_merge(branch, outer, stmts, cx) {
+            match self.merge_or_keep(branch, outer, stmts, cx) {
                 Ok(()) => true,
                 Err(branch) if branch_declares_function(&branch) => keep_braced(branch, stmts, cx),
                 Err(branch) => refuse(span, test, consequent, Some(branch), stmts, cx),
             }
         }
+    }
+
+    fn merge_or_keep(
+        &mut self,
+        branch: Statement<'a>,
+        outer: ScopeId,
+        stmts: &mut AVec<'a, Statement<'a>>,
+        cx: &mut Cx<'a, '_>,
+    ) -> Result<(), Statement<'a>> {
+        if self.merges_soundly(&branch, outer, cx) {
+            return self.try_merge(branch, outer, stmts, cx);
+        }
+        keep_braced(branch, stmts, cx);
+        Ok(())
     }
 
     fn try_merge(

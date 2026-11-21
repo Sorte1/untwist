@@ -1105,3 +1105,33 @@ fn a_shared_call_controller_or_a_live_callback_prints_like_node_in_both_lanes() 
         &[default_code, unsafe_lane],
     );
 }
+
+const MERGED_BLOCK_GLOBAL_READS: &[&str] = &[
+    "dc1-u1a",
+    "dc1-u1b",
+    "dc1-m01",
+    "dc1-m02",
+    "dc1-m03",
+    "dc1-m04",
+    "dc1-m05",
+    "dc1-m06",
+    "dc1-m07",
+    "dc1-m08",
+    "dc1-m09",
+    "dc1-m10",
+    "dc1-m11",
+    "dc1-m12",
+    "dc1-m13",
+    "dc1-m14",
+    "dc1-m15",
+    "dc1-m16",
+    "dc1-mg-000",
+    "dc1-mg-050",
+    "dc1-mg-100",
+    "dc1-mg-149",
+];
+
+#[test]
+fn a_block_kept_from_a_string_comparison_does_not_capture_a_global_read_in_either_lane() {
+    prints_like_node_in(MERGED_BLOCK_GLOBAL_READS, &[default_code, unsafe_lane]);
+}
