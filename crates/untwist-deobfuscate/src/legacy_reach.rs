@@ -32,6 +32,9 @@ struct Deferral {
     escape_names: Vec<Vec<String>>,
     escape_names_opened: Vec<Vec<String>>,
     carries_names: bool,
+    strips: Vec<Span>,
+    strips_failed: bool,
+    strips_forbidden: bool,
     reached: bool,
 }
 
@@ -213,6 +216,84 @@ pub(crate) fn settle_escapes(program: &Program<'_>, scoping: &Scoping) {
             false => deferral.unverified = true,
         }
     });
+}
+
+fn spans_survive(program: &Program<'_>, spans: &[Span]) -> bool {
+    let mut surviving = Surviving {
+        spans,
+        found: Vec::new(),
+        unnamed: false,
+    };
+    surviving.visit_program(program);
+    surviving.unnamed || !surviving.found.is_empty()
+}
+
+pub fn settle_late_escapes(program: &Program<'_>) {
+    let (names, strips) = DEFERRAL.with(|deferral| {
+        let mut deferral = deferral.borrow_mut();
+        (
+            std::mem::take(&mut deferral.escape_names),
+            std::mem::take(&mut deferral.strips),
+        )
+    });
+    if !names.is_empty() {
+        let mut present = Names::default();
+        present.visit_program(program);
+        let kept: Vec<Vec<String>> = names
+            .into_iter()
+            .filter(|group| group.iter().any(|name| present.present.contains(name)))
+            .collect();
+        DEFERRAL.with(|deferral| deferral.borrow_mut().escape_names = kept);
+    }
+    if !strips.is_empty() && spans_survive(program, &strips) {
+        DEFERRAL.with(|deferral| deferral.borrow_mut().strips_failed = true);
+    }
+}
+
+pub fn abandon_strips() {
+    DEFERRAL.with(|deferral| {
+        let mut deferral = deferral.borrow_mut();
+        if !deferral.strips.is_empty() {
+            deferral.strips.clear();
+            deferral.strips_failed = true;
+        }
+    });
+}
+
+pub(crate) fn strips_allowed() -> bool {
+    DEFERRAL.with(|deferral| {
+        let deferral = deferral.borrow();
+        deferral.escapes_open && !deferral.strips_forbidden
+    })
+}
+
+pub(crate) fn watch_strips(spans: &[Span]) {
+    DEFERRAL.with(|deferral| deferral.borrow_mut().strips.extend_from_slice(spans));
+}
+
+pub fn strips_failed() -> bool {
+    DEFERRAL.with(|deferral| {
+        let deferral = deferral.borrow();
+        deferral.strips_failed || !deferral.strips.is_empty()
+    })
+}
+
+pub struct StripsForbidden(bool);
+
+impl StripsForbidden {
+    pub fn enter() -> Self {
+        Self(
+            DEFERRAL.with(|deferral| {
+                std::mem::replace(&mut deferral.borrow_mut().strips_forbidden, true)
+            }),
+        )
+    }
+}
+
+impl Drop for StripsForbidden {
+    fn drop(&mut self) {
+        DEFERRAL.with(|deferral| deferral.borrow_mut().strips_forbidden = self.0);
+    }
 }
 
 pub fn round_opened() {
@@ -448,6 +529,8 @@ pub(crate) fn forget() {
         deferral.escapes.clear();
         deferral.escape_names.clear();
         deferral.escape_names_opened.clear();
+        deferral.strips.clear();
+        deferral.strips_failed = false;
     });
 }
 

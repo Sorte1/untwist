@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use oxc_allocator::Vec as AVec;
+use oxc_allocator::{GetAllocator, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
@@ -10,6 +10,7 @@ use oxc_syntax::reference::ReferenceId;
 use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
+use untwist_core::ast_util::edit::StmtEdits;
 use untwist_core::ast_util::inline::is_plain_function;
 use untwist_core::ast_util::literal::{is_false_literal, is_true_literal};
 use untwist_core::ast_util::matcher::{anonymous_function, call_parts, iife};
@@ -156,18 +157,6 @@ fn unbraced<'k, 'a>(mut statements: &'k [Statement<'a>]) -> &'k [Statement<'a>] 
     statements
 }
 
-fn guarded_if<'k, 'a>(
-    body: &[&'k Statement<'a>],
-) -> Option<(Option<&'k str>, &'k IfStatement<'a>)> {
-    match body {
-        [Statement::IfStatement(statement)] => Some((None, statement)),
-        [declared, Statement::IfStatement(statement)] => {
-            Some((Some(bare_name(declared)?), statement))
-        }
-        _ => None,
-    }
-}
-
 fn applied_result<'k, 'a>(
     live: &[&'k Statement<'a>],
     declared: &[&str],
@@ -210,7 +199,13 @@ fn returns_guarded_apply(function: &Function<'_>, context: &str, fn_name: &str) 
         .iter()
         .filter(|statement| !is_initialised_inert_local(statement, &shape_names))
         .collect();
-    let Some((hoisted, statement)) = guarded_if(&guarded) else {
+    let hoisted: Vec<&str> = guarded.iter().filter_map(|stmt| bare_name(stmt)).collect();
+    let rest: Vec<&Statement<'_>> = guarded
+        .iter()
+        .copied()
+        .filter(|stmt| bare_name(stmt).is_none())
+        .collect();
+    let [Statement::IfStatement(statement)] = rest.as_slice() else {
         return false;
     };
     if identifier_name(&statement.test) != Some(fn_name) || statement.alternate.is_some() {
@@ -219,7 +214,10 @@ fn returns_guarded_apply(function: &Function<'_>, context: &str, fn_name: &str) 
     let Statement::BlockStatement(block) = &statement.consequent else {
         return false;
     };
-    if hoisted.is_some_and(|name| [context, fn_name, "arguments"].contains(&name)) {
+    if hoisted
+        .iter()
+        .any(|name| [context, fn_name, "arguments"].contains(name))
+    {
         return false;
     }
     let mut declared: Vec<&str> = block.body.iter().filter_map(bare_name).collect();
@@ -378,6 +376,10 @@ fn controller_shape(expr: &Expression<'_>, apply: Apply) -> bool {
         return false;
     };
     inner_matches(inner, flag, apply)
+}
+
+pub(crate) fn is_loose_call_controller(expr: &Expression<'_>) -> bool {
+    controller_shape(expr, Apply::AnyKey)
 }
 
 fn loose_controller_declaration(stmt: &Statement<'_>) -> Option<SymbolId> {
@@ -1691,7 +1693,8 @@ fn remove<'a>(program: &mut Program<'a>, spans: &[Span], cx: &mut Cx<'a, '_>, pa
             return;
         }
     };
-    cx.changed_by(applied);
+    let emptied = remove_emptied_shells(program, spans, cx);
+    cx.changed_by(applied + emptied);
     if partial && applied > 0 {
         note_provisional_removal();
     }
@@ -1701,4 +1704,60 @@ fn remove<'a>(program: &mut Program<'a>, spans: &[Span], cx: &mut Cx<'a, '_>, pa
             None,
         );
     }
+}
+
+struct EmptiedShells<'s> {
+    removed: &'s [Span],
+    found: Vec<Span>,
+}
+
+impl<'a> VisitJs<'a> for EmptiedShells<'_> {
+    fn visit_statement(&mut self, it: &Statement<'a>) {
+        let span = it.span();
+        let held = self
+            .removed
+            .iter()
+            .any(|inner| span.start <= inner.start && inner.end <= span.end && span != *inner);
+        if !held {
+            return;
+        }
+        if is_empty_shell(it) {
+            self.found.push(span);
+            return;
+        }
+        walk_js::walk_statement(self, it);
+    }
+}
+
+fn is_empty_shell(stmt: &Statement<'_>) -> bool {
+    let Statement::ExpressionStatement(stmt) = stmt else {
+        return false;
+    };
+    let Some((function, arguments)) = iife(&stmt.expression) else {
+        return false;
+    };
+    arguments.is_empty()
+        && has_no_params(function)
+        && is_plain_function(function)
+        && function
+            .body
+            .as_ref()
+            .is_some_and(|body| body.directives.is_empty() && body.statements.is_empty())
+}
+
+fn remove_emptied_shells<'a>(
+    program: &mut Program<'a>,
+    removed: &[Span],
+    cx: &mut Cx<'a, '_>,
+) -> usize {
+    let mut shells = EmptiedShells {
+        removed,
+        found: Vec::new(),
+    };
+    shells.visit_program(program);
+    let mut removals = StmtEdits::new();
+    for span in shells.found {
+        removals.remove(span);
+    }
+    removals.apply(program, cx.allocator(), cx.scoping_mut())
 }

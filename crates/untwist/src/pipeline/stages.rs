@@ -449,6 +449,7 @@ impl Pipeline {
         sem: Semantics,
     ) -> (Semantics, bool) {
         settle_layered_observations(site.program, &sem.scoping);
+        untwist_deobfuscate::legacy_reach::settle_late_escapes(site.program);
         if !self.options.deobfuscate {
             return (sem, false);
         }
