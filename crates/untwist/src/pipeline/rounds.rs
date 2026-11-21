@@ -9,7 +9,7 @@ use untwist_core::pass::{Note, NoteKind, RoundCapUndo};
 use untwist_core::print::pretty_codegen;
 use untwist_core::semantic::{build_scoping, forget_failures, Semantics};
 use untwist_core::source_map::origins::{self, Origins};
-use untwist_deobfuscate::notes::ROUND_CAP;
+use untwist_deobfuscate::notes::{DECODE_BAILED, ROUND_CAP};
 
 use super::input::Staged;
 use super::layer::Layering;
@@ -100,7 +100,8 @@ impl Pipeline {
         for _ in 1..LAYER_ROUNDS {
             let due = worth_another(site, round)
                 || cleanup_due(site, round)
-                || controller_due(site, round);
+                || controller_due(site, round)
+                || bail_due(site, round);
             if !due || untwist_core::budget::check().is_err() {
                 break;
             }
@@ -356,6 +357,15 @@ fn controller_due(site: &StageCx<'_, '_>, round: Round) -> bool {
     let mut scan = SurvivingController { found: false };
     scan.visit_program(site.program);
     scan.found
+}
+
+fn bail_due(site: &StageCx<'_, '_>, round: Round) -> bool {
+    settled_rewrites(&site.stages[round.stages..]) > 0
+        && site.notes[round.notes..].iter().any(|note| {
+            note.kind == NoteKind::Refusal
+                && note.pass == "inline-decoded-strings"
+                && note.message.starts_with(DECODE_BAILED)
+        })
 }
 
 fn worth_another(site: &StageCx<'_, '_>, round: Round) -> bool {

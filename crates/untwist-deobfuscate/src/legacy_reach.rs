@@ -208,7 +208,7 @@ fn surviving_names(
     surviving.visit_program(program);
     for symbol in scoping.symbol_ids() {
         let span = scoping.symbol_span(symbol);
-        if !escapes.contains(&span) {
+        if !escapes.contains(&span) || scoping.symbol_name(symbol).is_empty() {
             continue;
         }
         let mut group = vec![scoping.symbol_name(symbol).to_string()];
