@@ -52,6 +52,7 @@ mod for_init;
 mod inlined;
 pub(crate) mod legacy;
 mod minified;
+mod moved;
 mod patched;
 mod plain_keys;
 mod positions;

@@ -1,10 +1,9 @@
 use oxc_allocator::{TakeIn, Vec as AVec};
 use oxc_ast::ast::*;
-use oxc_ast_visit::{walk_js, VisitJs};
+use oxc_ast_visit::VisitJs;
 use oxc_semantic::Scoping;
 use oxc_span::GetSpan;
 use oxc_syntax::operator::AssignmentOperator;
-use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use untwist_core::ast_util::prop::{identifier_name, member_parts};
 use untwist_core::ast_util::respan::SYNTHETIC_BASE;
@@ -12,9 +11,10 @@ use untwist_core::pass::Cx;
 
 use super::array_declaration;
 use super::checksum::parsed_statement;
-use super::cookie_minified::countdown_declaration;
+use super::cookie_minified::{countdown_declaration, is_cookie_block};
 use super::inlined::{copied_out_of_block, used_only_in};
 use super::legacy::is_countdown;
+use super::moved::{moved_vars, never_rebound, read_by_closure};
 use crate::stamp::declaration_symbol;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -160,7 +160,7 @@ fn cookie_form<'k, 'a>(
     stmt: &'k Statement<'a>,
 ) -> Option<(Form, Vec<&'k IdentifierReference<'a>>)> {
     match stmt {
-        Statement::BlockStatement(_) => Some((Form::Block, Vec::new())),
+        Statement::BlockStatement(_) if is_cookie_block(stmt) => Some((Form::Block, Vec::new())),
         Statement::ExpressionStatement(stmt) => {
             let Expression::ConditionalExpression(choice) = stmt.expression.without_parentheses()
             else {
@@ -174,83 +174,6 @@ fn cookie_form<'k, 'a>(
         }
         _ => None,
     }
-}
-
-struct Contextual {
-    found: bool,
-}
-
-impl<'a> VisitJs<'a> for Contextual {
-    fn visit_function(&mut self, _it: &Function<'a>, _flags: ScopeFlags) {}
-
-    fn visit_this_expression(&mut self, _it: &ThisExpression) {
-        self.found = true;
-    }
-
-    fn visit_super(&mut self, _it: &Super) {
-        self.found = true;
-    }
-
-    fn visit_new_target(&mut self, _it: &NewTarget) {
-        self.found = true;
-    }
-
-    fn visit_await_expression(&mut self, _it: &AwaitExpression<'a>) {
-        self.found = true;
-    }
-
-    fn visit_yield_expression(&mut self, _it: &YieldExpression<'a>) {
-        self.found = true;
-    }
-
-    fn visit_return_statement(&mut self, _it: &ReturnStatement<'a>) {
-        self.found = true;
-    }
-
-    fn visit_break_statement(&mut self, _it: &BreakStatement<'a>) {
-        self.found = true;
-    }
-
-    fn visit_continue_statement(&mut self, _it: &ContinueStatement<'a>) {
-        self.found = true;
-    }
-
-    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        self.found |= it.name == "arguments";
-    }
-}
-
-fn movable(stmt: &Statement<'_>) -> bool {
-    let mut contextual = Contextual { found: false };
-    contextual.visit_statement(stmt);
-    !contextual.found
-}
-
-struct BlockVars<'s> {
-    found: &'s mut Vec<SymbolId>,
-}
-
-impl<'a> VisitJs<'a> for BlockVars<'_> {
-    fn visit_function(&mut self, _it: &Function<'a>, _flags: ScopeFlags) {}
-
-    fn visit_arrow_function_expression(&mut self, _it: &ArrowFunctionExpression<'a>) {}
-
-    fn visit_variable_declaration(&mut self, it: &VariableDeclaration<'a>) {
-        if it.kind == VariableDeclarationKind::Var {
-            for declarator in &it.declarations {
-                if let BindingPattern::BindingIdentifier(id) = &declarator.id {
-                    self.found.extend(id.symbol_id.get());
-                }
-            }
-        }
-        walk_js::walk_variable_declaration(self, it);
-    }
-}
-
-fn block_vars(stmt: &Statement<'_>) -> Vec<SymbolId> {
-    let mut found = Vec::new();
-    BlockVars { found: &mut found }.visit_statement(stmt);
-    found
 }
 
 struct Mentions<'s> {
@@ -336,6 +259,7 @@ fn overwritten_after(
 
     first > cookie
         && overwrites(&body[first], scoping, symbol)
+        && !read_by_closure(&body[cookie], scoping, symbol)
         && outside
             .iter()
             .all(|index| !matches!(body[*index], Statement::FunctionDeclaration(_)))
@@ -425,10 +349,13 @@ fn plan_at(body: &[Statement<'_>], array: usize, scoping: &Scoping) -> Option<Pl
         used_only_in(scoping, symbol, at.iter().map(|index| &body[*index]))
     };
     let mut owned = holder_symbols.clone();
-    if form == Form::Block {
-        owned.extend(block_vars(&body[cookie]));
-    }
-    let sealed = (direct || in_statements(alias_symbol, &[alias, rotator.at]))
+    owned.extend(moved_vars(&body[cookie])?);
+    let passed = if direct {
+        never_rebound(scoping, array_symbol)
+    } else {
+        in_statements(alias_symbol, &[alias, rotator.at])
+    };
+    let sealed = passed
         && in_statements(rotator.symbol, &rotator_uses)
         && holder_symbols
             .iter()
@@ -439,8 +366,7 @@ fn plan_at(body: &[Statement<'_>], array: usize, scoping: &Scoping) -> Option<Pl
         && holder_symbols
             .iter()
             .skip(1)
-            .all(|flag| scoping.get_resolved_reference_ids(*flag).len() == 2)
-        && movable(&body[cookie]);
+            .all(|flag| scoping.get_resolved_reference_ids(*flag).len() == 2);
     let original = [array, alias, rotator.at, cookie]
         .iter()
         .all(|index| body[*index].span().start < SYNTHETIC_BASE);

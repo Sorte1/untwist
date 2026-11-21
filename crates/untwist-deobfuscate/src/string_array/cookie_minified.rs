@@ -225,6 +225,10 @@ fn block_guard<'k, 'a>(statements: &'k [Statement<'a>]) -> Option<Cookie<'k, 'a>
     })
 }
 
+pub(super) fn is_cookie_block(stmt: &Statement<'_>) -> bool {
+    block_guard(std::slice::from_ref(stmt)).is_some()
+}
+
 fn guarded_count(cookie: &Cookie<'_, '_>, rotate: &str, source: &str) -> Option<usize> {
     let update = property(cookie.object, "updateCookie")?;
     let removal = property(cookie.object, "removeCookie")?;

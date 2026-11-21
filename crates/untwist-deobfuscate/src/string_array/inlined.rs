@@ -15,11 +15,12 @@ use super::cookie_wrap::wrap_inlined_cookie;
 use super::for_init::hoist_decoded_arrays;
 use super::legacy::{incremented, is_countdown, literal_arithmetic, predecrements, pushes_shifted};
 use super::minified::{closed_initialisers, closed_loop};
+use super::moved::never_rebound;
 use super::single_use::declare_single_use_decoder;
 use super::{array_declaration, array_literal};
 use crate::array_rotator::is_infinite_rotator_loop;
 use crate::mutants::inlined_rotator_vars_trusted;
-use crate::stamp::DynamicScopes;
+use crate::stamp::{declaration_symbol, DynamicScopes};
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Kind {
     Assigned,
@@ -393,8 +394,10 @@ fn checksum_plan(body: &[Statement<'_>], index: usize, scoping: &Scoping) -> Opt
             .unwrap_or(array)
             .to_string(),
     };
+    let passed = parameter != array
+        || declaration_symbol(&body[index]).is_some_and(|symbol| never_rebound(scoping, symbol));
     let original = region.iter().all(|stmt| stmt.span().start < SYNTHETIC_BASE);
-    original.then(|| Plan {
+    (passed && original).then(|| Plan {
         first: index + 1,
         kind: Kind::Checksum,
         moved,
