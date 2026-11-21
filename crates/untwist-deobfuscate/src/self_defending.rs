@@ -1646,8 +1646,12 @@ impl<'a> Pass<'a> for SelfDefending {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
-        let planned = plan(program, cx.scoping(), cx.opts.unsafe_transforms);
-        let (spans, tracked, partial) = match planned {
+        if crate::legacy_reach::has_runner_containers() {
+            let emptied = remove_empty_containers(program, cx);
+            cx.changed_by(emptied);
+        }
+        let (spans, tracked, partial) = match plan(program, cx.scoping(), cx.opts.unsafe_transforms)
+        {
             Plan::Nothing => return,
             Plan::Refused => {
                 cx.note(notes::SELF_DEFENDING_REFERENCE_KEPT, None);
@@ -1699,7 +1703,10 @@ fn remove<'a>(program: &mut Program<'a>, spans: &[Span], cx: &mut Cx<'a, '_>, pa
             return;
         }
     };
-    let emptied = remove_emptied_shells(program, spans, cx);
+    let mut emptied = remove_emptied_shells(program, spans, cx);
+    if crate::legacy_reach::has_runner_containers() {
+        emptied += remove_empty_containers(program, cx);
+    }
     cx.changed_by(applied + emptied);
     if partial && applied > 0 {
         note_provisional_removal();
@@ -1720,18 +1727,11 @@ struct EmptiedShells<'s> {
 impl<'a> VisitJs<'a> for EmptiedShells<'_> {
     fn visit_statement(&mut self, it: &Statement<'a>) {
         let span = it.span();
-        if crate::legacy_reach::is_runner_container(span) && is_empty_container(it) {
-            self.found.push(span);
-            return;
-        }
         let held = self
             .removed
             .iter()
             .any(|inner| span.start <= inner.start && inner.end <= span.end && span != *inner);
         if !held {
-            if crate::legacy_reach::has_runner_containers() {
-                walk_js::walk_statement(self, it);
-            }
             return;
         }
         if is_empty_shell(it) {
@@ -1789,6 +1789,35 @@ fn remove_emptied_shells<'a>(
     shells.visit_program(program);
     let mut removals = StmtEdits::new();
     for span in shells.found {
+        removals.remove(span);
+    }
+    removals.apply(program, cx.allocator(), cx.scoping_mut())
+}
+
+#[derive(Default)]
+struct EmptyContainers {
+    found: Vec<Span>,
+}
+
+impl<'a> VisitJs<'a> for EmptyContainers {
+    fn visit_statement(&mut self, it: &Statement<'a>) {
+        let span = it.span();
+        if crate::legacy_reach::is_runner_container(span) && is_empty_container(it) {
+            self.found.push(span);
+            return;
+        }
+        walk_js::walk_statement(self, it);
+    }
+}
+
+fn remove_empty_containers<'a>(program: &mut Program<'a>, cx: &mut Cx<'a, '_>) -> usize {
+    let mut containers = EmptyContainers::default();
+    containers.visit_program(program);
+    if containers.found.is_empty() {
+        return 0;
+    }
+    let mut removals = StmtEdits::new();
+    for span in containers.found {
         removals.remove(span);
     }
     removals.apply(program, cx.allocator(), cx.scoping_mut())

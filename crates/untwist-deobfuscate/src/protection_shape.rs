@@ -381,6 +381,13 @@ impl<'a> VisitJs<'a> for Shape<'_> {
         if self.poisoned {
             return;
         }
+        if self
+            .roles
+            .and_then(|roles| roles.proxies)
+            .is_some_and(|proxies| proxies.declares(it))
+        {
+            return;
+        }
         match unread_bare_var(it, self.scoping) {
             Some(redeclared) => self.skipped_redeclared.extend(redeclared),
             None => walk_js::walk_statement(self, it),

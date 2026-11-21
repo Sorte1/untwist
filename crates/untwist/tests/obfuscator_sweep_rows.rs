@@ -40,6 +40,8 @@ const DECODED_UNDER_UNSAFE: &[&str] = &[
     "alias-dead-write",
     "cfo-forwarder-arg",
     "escape-name-reused",
+    "runners-in-nested-controller",
+    "proxied-source-check",
     "pw011m3-class-proxy-gate",
     "pw011m3-class-dead-wrapper",
     "pw011m3-closures",

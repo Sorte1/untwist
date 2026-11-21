@@ -113,7 +113,7 @@ impl Head<'_> {
         arguments.is_empty() && self.controller_call(callee)
     }
 
-    fn runner_shell(&self, expr: &Expression<'_>) -> bool {
+    fn runner_shell(&mut self, expr: &Expression<'_>) -> bool {
         let Some((function, arguments)) = iife(expr.without_parentheses()) else {
             return false;
         };
@@ -128,10 +128,9 @@ impl Head<'_> {
         let Some(body) = function.body.as_ref() else {
             return false;
         };
-        let [Statement::ExpressionStatement(only)] = body.statements.as_slice() else {
-            return false;
-        };
-        body.directives.is_empty() && self.immediate_run(&only.expression)
+        body.directives.is_empty()
+            && !body.statements.is_empty()
+            && body.statements.iter().all(|stmt| self.statement(stmt))
     }
 
     fn bare_runner_call(&mut self, expr: &Expression<'_>) -> bool {
@@ -150,6 +149,11 @@ impl Head<'_> {
 
     fn statement(&mut self, stmt: &Statement<'_>) -> bool {
         match stmt {
+            Statement::ExpressionStatement(node)
+                if crate::legacy_reach::is_runner_container(node.span) =>
+            {
+                true
+            }
             Statement::ExpressionStatement(node) => self.expression(&node.expression),
             Statement::VariableDeclaration(declaration) => declaration
                 .declarations

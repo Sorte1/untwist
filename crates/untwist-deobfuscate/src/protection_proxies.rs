@@ -47,6 +47,22 @@ impl Proxies {
         Self { objects }
     }
 
+    pub(crate) fn declares(&self, statement: &Statement<'_>) -> bool {
+        let Statement::VariableDeclaration(declaration) = statement else {
+            return false;
+        };
+        let [declarator] = declaration.declarations.as_slice() else {
+            return false;
+        };
+        match &declarator.id {
+            BindingPattern::BindingIdentifier(id) => id
+                .symbol_id
+                .get()
+                .is_some_and(|symbol| self.objects.contains_key(&symbol)),
+            _ => false,
+        }
+    }
+
     pub(crate) fn member<'k>(
         &'k self,
         expr: &Expression<'_>,
@@ -274,6 +290,13 @@ var jQ = jR(this, function () { var jT = function () { return !jT.constructor(jP
     fn a_self_defending_callback_read_through_a_constant_control_flow_object_matches() {
         assert!(matches_a_template(PROXIED, true));
         assert!(!matches_a_template(PROXIED, false));
+    }
+
+    #[test]
+    fn a_control_flow_object_declared_inside_the_callback_is_read_through() {
+        let source = r#"var jQ = jR(this, function () { const P = { a: function (x, y) { return x !== y; } }; if (P.a(jQ.bind().toString().indexOf("\n"), -1)) { return; } return jQ.toString().search("(((.+)+)+)+$").toString().constructor(jQ).search("(((.+)+)+)+$"); });"#;
+        assert!(matches_a_template(source, true));
+        assert!(!matches_a_template(source, false));
     }
 
     #[test]
