@@ -1,6 +1,8 @@
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_mut, VisitMut};
 use oxc_span::{GetSpanMut, Span};
+use rustc_hash::FxHashSet;
+use std::cell::RefCell;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::source_map::origins::{is_recording, note_respanned};
@@ -47,6 +49,32 @@ impl SpanCounter {
 
 thread_local! {
     static COUNTER: SpanCounter = const { SpanCounter::new() };
+    static FOLLOWED: RefCell<FxHashSet<Span>> = RefCell::new(FxHashSet::default());
+}
+
+pub fn follow_spans(spans: &[Span]) {
+    FOLLOWED.with(|followed| followed.borrow_mut().extend(spans.iter().copied()));
+}
+
+pub fn take_followed_spans() -> Vec<Span> {
+    FOLLOWED.with(|followed| {
+        std::mem::take(&mut *followed.borrow_mut())
+            .into_iter()
+            .collect()
+    })
+}
+
+fn follows_any() -> bool {
+    FOLLOWED.with(|followed| !followed.borrow().is_empty())
+}
+
+fn follow_respan(old: Span, fresh: Span) {
+    FOLLOWED.with(|followed| {
+        let mut followed = followed.borrow_mut();
+        if followed.contains(&old) {
+            followed.insert(fresh);
+        }
+    });
 }
 
 pub fn reset_synthetic_spans() {
@@ -75,6 +103,7 @@ struct Fresh<'c> {
     counter: &'c SpanCounter,
     exhausted: bool,
     pairs: Option<Vec<(Span, Span)>>,
+    following: bool,
 }
 
 impl<'c> Fresh<'c> {
@@ -83,6 +112,7 @@ impl<'c> Fresh<'c> {
             counter,
             exhausted: false,
             pairs: is_recording().then(Vec::new),
+            following: follows_any(),
         }
     }
 
@@ -107,6 +137,9 @@ impl Fresh<'_> {
         let fresh = Span::new(start, end);
         if let Some(pairs) = self.pairs.as_mut() {
             pairs.push((fresh, *span));
+        }
+        if self.following {
+            follow_respan(*span, fresh);
         }
         *span = fresh;
     }
