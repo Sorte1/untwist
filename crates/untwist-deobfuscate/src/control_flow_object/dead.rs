@@ -40,6 +40,7 @@ fn encloses(outer: Span, inner: Span) -> bool {
 
 const MAX_TEST_DEPTH: usize = 16;
 const MAX_DEAD_ROUNDS: usize = 4;
+const MAX_EXCLUSION_ROUNDS: usize = 8;
 
 const FOLDED_GLOBALS: [&str; 3] = ["undefined", "NaN", "Infinity"];
 
@@ -94,6 +95,7 @@ struct Known<'k, 'p> {
     branches: &'k Branches<'p>,
     builtins_unpatched: bool,
     assembled: bool,
+    excluded: &'k FxHashSet<SymbolId>,
     used: RefCell<FxHashSet<SymbolId>>,
 }
 
@@ -175,7 +177,7 @@ impl<'k, 'p> Known<'k, 'p> {
     }
 
     fn assembled_property(&self, receiver: SymbolId, name: &str) -> Option<&'p Expression<'p>> {
-        if !self.assembled {
+        if !self.assembled || self.excluded.contains(&receiver) {
             return None;
         }
         let value = self.branches.assembled.get(&receiver)?.property(name)?;
@@ -184,7 +186,7 @@ impl<'k, 'p> Known<'k, 'p> {
     }
 
     fn optimistic_property(&self, receiver: SymbolId, name: &str) -> Option<&'p Expression<'p>> {
-        if !self.assembled {
+        if !self.assembled || self.excluded.contains(&receiver) {
             return None;
         }
         if !self
@@ -646,22 +648,44 @@ pub(super) fn dead_branch_parts<'p>(
 ) -> Vec<DeadPart> {
     let unpatched = cx.opts.unsafe_transforms;
     let lanes = (!branches.hazard, unpatched);
-    let (dead, used) = settled_parts(branches, symbol, props, lanes, cx.scoping());
     let proven = (unpatched, cx.scoping());
-    if used.is_empty() || assembled_uses_dead(branches, &used, &dead, proven) {
-        return dead;
+    let mut excluded = FxHashSet::default();
+    for _ in 0..MAX_EXCLUSION_ROUNDS {
+        let (dead, used) = settled_parts(branches, (symbol, &excluded), props, lanes, cx.scoping());
+        if used.is_empty() || assembled_uses_dead(branches, &used, &dead, proven) {
+            return dead;
+        }
+        let live: Vec<SymbolId> = used
+            .iter()
+            .copied()
+            .filter(|alias| {
+                !assembled_uses_dead(branches, &FxHashSet::from_iter([*alias]), &dead, proven)
+            })
+            .collect();
+        if live.is_empty() {
+            break;
+        }
+        excluded.extend(live);
     }
-    settled_parts(branches, symbol, props, (false, unpatched), cx.scoping()).0
+    let none = FxHashSet::default();
+    settled_parts(
+        branches,
+        (symbol, &none),
+        props,
+        (false, unpatched),
+        cx.scoping(),
+    )
+    .0
 }
 
 fn settled_parts<'p>(
     branches: &Branches<'p>,
-    symbol: SymbolId,
+    (symbol, excluded): (SymbolId, &FxHashSet<SymbolId>),
     props: &[(Cow<'_, str>, CffValue<'_, 'p>)],
     lanes: (bool, bool),
     scoping: &Scoping,
 ) -> (Vec<DeadPart>, FxHashSet<SymbolId>) {
-    let (mut parts, mut used) = decided_parts(branches, symbol, props, lanes, scoping);
+    let (mut parts, mut used) = decided_parts(branches, (symbol, excluded), props, lanes, scoping);
     let mut seen = 0;
     for _ in 0..MAX_DEAD_ROUNDS {
         if parts.len() <= seen {
@@ -673,7 +697,7 @@ fn settled_parts<'p>(
             .map(|part| part.span)
             .filter(|span| !span.is_empty())
             .collect();
-        (parts, used) = decided_parts(branches, symbol, props, lanes, scoping);
+        (parts, used) = decided_parts(branches, (symbol, excluded), props, lanes, scoping);
     }
     branches.dead.borrow_mut().clear();
     (parts, used)
@@ -681,7 +705,7 @@ fn settled_parts<'p>(
 
 fn decided_parts<'p>(
     branches: &Branches<'p>,
-    symbol: SymbolId,
+    (symbol, excluded): (SymbolId, &FxHashSet<SymbolId>),
     props: &[(Cow<'_, str>, CffValue<'_, 'p>)],
     (assembled, builtins_unpatched): (bool, bool),
     scoping: &Scoping,
@@ -693,6 +717,7 @@ fn decided_parts<'p>(
         branches,
         builtins_unpatched,
         assembled,
+        excluded,
         used: RefCell::default(),
     };
     let mut seen = FxHashSet::default();

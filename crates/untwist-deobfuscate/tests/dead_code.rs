@@ -492,6 +492,43 @@ fn the_default_lane_keeps_the_block_when_a_merge_could_change_a_name() {
 }
 
 #[test]
+fn the_default_lane_merges_a_block_whose_name_is_read_as_a_global_only_elsewhere() {
+    assert_eq!(
+        default_lane(
+            "function g() {\n  if (\"a\" === \"a\") {\n    let x = 1;\n    return x;\n  }\n}\nfunction h() {\n  return typeof x;\n}"
+        ),
+        "function g() {\n  let x = 1;\n  return x;\n}\nfunction h() {\n  return typeof x;\n}"
+    );
+    assert_eq!(
+        default_lane(
+            "function g(c) {\n  if (c) {\n    if (\"a\" === \"a\") {\n      let x = 1;\n      return x;\n    }\n  } else {\n    return x;\n  }\n}"
+        ),
+        "function g(c) {\n  if (c) {\n    let x = 1;\n    return x;\n  } else {\n    return x;\n  }\n}"
+    );
+}
+
+#[test]
+fn the_default_lane_merges_a_block_when_only_the_discarded_branch_reads_the_name_as_a_global() {
+    assert_eq!(
+        default_lane(
+            "function g(c) {\n  if (c) {\n    if (\"a\" === \"a\") {\n      let x = 1;\n      return x;\n    } else {\n      return x;\n    }\n  }\n}"
+        ),
+        "function g(c) {\n  if (c) {\n    let x = 1;\n    return x;\n  }\n}"
+    );
+}
+
+#[test]
+fn the_default_lane_keeps_the_block_when_a_nested_function_reads_the_name_as_a_global() {
+    let code = default_lane(
+        "function g() {\n  if (\"a\" === \"a\") {\n    let x = 1;\n    h(x);\n  }\n  return function () {\n    return x;\n  };\n}",
+    );
+    assert!(
+        code.contains("  {\n    let x = 1;\n    h(x);\n  }\n"),
+        "{code}"
+    );
+}
+
+#[test]
 fn the_default_lane_braces_a_bodiless_function_it_keeps() {
     assert_eq!(
         default_lane("if (\"a\" === \"a\") function f() {}"),
