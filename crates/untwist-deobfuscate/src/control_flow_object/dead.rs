@@ -8,7 +8,7 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::global::{references_are_global, references_are_global_or};
 use untwist_core::ast_util::inline::{is_plain_function, param_names, returned_expression};
-use untwist_core::ast_util::prop::member_parts;
+use untwist_core::ast_util::prop::{literal_key, member_parts};
 use untwist_core::ast_util::readonly::{
     is_readonly_object, is_readonly_object_outside, ObjectUses,
 };
@@ -16,12 +16,12 @@ use untwist_core::pass::Cx;
 use untwist_eval::fold::{fold_binary, fold_to_const, fold_unary, Const, FoldOptions};
 
 use std::borrow::Cow;
-use std::cell::{OnceCell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 
 use super::assembled::{aliases_mutated_only_in_dead, assembled_alias, Assembled};
 use super::nested_proof::{
-    annex_b_written, builtins_proven_intact, proven_readonly_uses, reaches_its_receiver,
-    static_property, touches_builtins,
+    annex_b_written, builtins_proven_intact, proven_readonly_uses, static_property,
+    touches_builtins,
 };
 use super::CffValue;
 
@@ -38,9 +38,10 @@ fn encloses(outer: Span, inner: Span) -> bool {
     outer.start <= inner.start && inner.end <= outer.end
 }
 
-const MAX_TEST_DEPTH: usize = 16;
+const MAX_TEST_DEPTH: usize = 48;
 const MAX_DEAD_ROUNDS: usize = 4;
 const MAX_EXCLUSION_ROUNDS: usize = 8;
+const MAX_STEPS: usize = 1 << 16;
 
 const FOLDED_GLOBALS: [&str; 3] = ["undefined", "NaN", "Infinity"];
 
@@ -68,6 +69,11 @@ fn tested_receivers(
         found.push(symbol);
         return;
     }
+    if let Some((symbol, key)) = computed_member(inner, scoping) {
+        found.push(symbol);
+        tested_receivers(key, scoping, depth + 1, found);
+        return;
+    }
     match inner {
         Expression::CallExpression(call) if !call.optional => {
             tested_receivers(&call.callee, scoping, depth + 1, found);
@@ -88,6 +94,24 @@ fn tested_receivers(
     }
 }
 
+fn computed_member<'e, 'a>(
+    expr: &'e Expression<'a>,
+    scoping: &Scoping,
+) -> Option<(SymbolId, &'e Expression<'a>)> {
+    let Expression::ComputedMemberExpression(member) = expr else {
+        return None;
+    };
+    if member.optional || literal_key(&member.expression).is_some() {
+        return None;
+    }
+    let Expression::Identifier(id) = &member.object else {
+        return None;
+    };
+    Some((symbol_of(id, scoping)?, &member.expression))
+}
+
+pub(super) type ComputedKeys = FxHashMap<usize, String>;
+
 struct Known<'k, 'p> {
     symbol: SymbolId,
     props: &'k [(Cow<'k, str>, CffValue<'k, 'p>)],
@@ -97,6 +121,8 @@ struct Known<'k, 'p> {
     assembled: bool,
     excluded: &'k FxHashSet<SymbolId>,
     used: RefCell<FxHashSet<SymbolId>>,
+    keys: RefCell<ComputedKeys>,
+    steps: Cell<usize>,
 }
 
 enum Resolved<'k, 'p> {
@@ -130,12 +156,11 @@ fn param_symbols(function: &Function<'_>) -> Option<Vec<SymbolId>> {
 }
 
 impl<'k, 'p> Known<'k, 'p> {
-    fn own(&self, member: &Expression<'_>) -> Option<Resolved<'k, 'p>> {
-        let (_, name) = member_parts(member)?;
+    fn own(&self, name: &str) -> Option<Resolved<'k, 'p>> {
         let value = self
             .props
             .iter()
-            .find(|(key, _)| key.as_ref() == name.as_ref())
+            .find(|(key, _)| key.as_ref() == name)
             .map(|(_, value)| value)?;
         match value {
             CffValue::Text(literal) => literal
@@ -146,24 +171,19 @@ impl<'k, 'p> Known<'k, 'p> {
         }
     }
 
-    fn other(
-        &self,
-        receiver: SymbolId,
-        member: &Expression<'_>,
-        depth: usize,
-    ) -> Option<Resolved<'k, 'p>> {
-        let (_, name) = member_parts(member)?;
-        let value = match self.assembled_property(receiver, name.as_ref()) {
+    fn other(&self, receiver: SymbolId, name: &str, depth: usize) -> Option<Resolved<'k, 'p>> {
+        let value = match self.assembled_property(receiver, name) {
             Some(value) => value,
-            None => match self.branches.readonly_object(
-                receiver,
-                self.symbol,
-                self.scoping,
-                self.builtins_unpatched,
-            ) {
-                Some(object) => static_property(object, name.as_ref())?,
-                None => self.optimistic_property(receiver, name.as_ref())?,
-            },
+            None => {
+                match self.branches.readonly_object(
+                    (receiver, self.symbol),
+                    self.scoping,
+                    self.builtins_unpatched,
+                ) {
+                    Some(object) => static_property(object, name)?,
+                    None => self.optimistic_property(receiver, name)?,
+                }
+            }
         };
         match value.without_parentheses() {
             Expression::FunctionExpression(function) if is_plain_function(function) => {
@@ -189,32 +209,84 @@ impl<'k, 'p> Known<'k, 'p> {
         if !self.assembled || self.excluded.contains(&receiver) {
             return None;
         }
-        if !self
-            .branches
-            .reaches_owner(receiver, self.symbol, self.scoping)
-        {
-            return None;
-        }
         let value = self.branches.optimistic.get(&receiver)?.property(name)?;
         self.used.borrow_mut().insert(receiver);
         Some(value)
     }
 
-    fn member(&self, member: &Expression<'_>, depth: usize) -> Option<Resolved<'k, 'p>> {
-        let receiver = receiver_symbol(member, self.scoping)?;
+    fn member(&self, member: &Expression<'_>, env: &Env, depth: usize) -> Option<Resolved<'k, 'p>> {
+        let (receiver, name) = match member_parts(member) {
+            Some((Expression::Identifier(id), name)) => (symbol_of(id, self.scoping)?, name),
+            Some(_) => return None,
+            None => {
+                let (receiver, key) = computed_member(member, self.scoping)?;
+                let Const::Str(name) = self.value(key, env, depth + 1)? else {
+                    return None;
+                };
+                self.record_key(member, key, &name, depth);
+                (receiver, Cow::Owned(name))
+            }
+        };
         if receiver == self.symbol {
-            return self.own(member);
+            return self.own(&name);
         }
-        self.other(receiver, member, depth)
+        self.other(receiver, &name, depth)
+    }
+
+    fn resolve_keys(&self, computed: &FxHashMap<SymbolId, Vec<&Expression<'_>>>) {
+        let mut resolved: FxHashSet<SymbolId> = FxHashSet::default();
+        loop {
+            let pending: Vec<SymbolId> = self
+                .used
+                .borrow()
+                .iter()
+                .filter(|symbol| !resolved.contains(*symbol))
+                .copied()
+                .collect();
+            if pending.is_empty() {
+                return;
+            }
+            resolved.extend(pending.iter().copied());
+            let members = pending
+                .iter()
+                .filter_map(|receiver| computed.get(receiver))
+                .flatten();
+            for member in members {
+                let Some((_, key)) = computed_member(member, self.scoping) else {
+                    continue;
+                };
+                let address = std::ptr::from_ref(*member) as usize;
+                if self.keys.borrow().contains_key(&address) {
+                    continue;
+                }
+                self.steps.set(0);
+                if let Some(Const::Str(name)) = self.value(key, &Env::default(), 0) {
+                    self.keys.borrow_mut().insert(address, name);
+                }
+            }
+        }
+    }
+
+    fn record_key(&self, member: &Expression<'_>, key: &Expression<'_>, name: &str, depth: usize) {
+        let fixed = self.value(key, &Env::default(), depth + 1);
+        if matches!(&fixed, Some(Const::Str(text)) if text == name) {
+            self.keys
+                .borrow_mut()
+                .insert(std::ptr::from_ref(member) as usize, name.to_string());
+        }
     }
 
     fn value(&self, expr: &Expression<'_>, env: &Env, depth: usize) -> Option<Const> {
-        if depth > MAX_TEST_DEPTH {
+        let steps = self.steps.get() + 1;
+        self.steps.set(steps);
+        if depth > MAX_TEST_DEPTH || steps > MAX_STEPS {
             return None;
         }
         let inner = expr.without_parentheses();
-        if receiver_symbol(inner, self.scoping).is_some() {
-            return match self.member(inner, depth)? {
+        if receiver_symbol(inner, self.scoping).is_some()
+            || computed_member(inner, self.scoping).is_some()
+        {
+            return match self.member(inner, env, depth)? {
                 Resolved::Value(value) => Some(value),
                 Resolved::Function(_) => None,
             };
@@ -274,7 +346,7 @@ impl<'k, 'p> Known<'k, 'p> {
     }
 
     fn call(&self, call: &CallExpression<'_>, env: &Env, depth: usize) -> Option<Const> {
-        let Resolved::Function(function) = self.member(&call.callee, depth)? else {
+        let Resolved::Function(function) = self.member(&call.callee, env, depth)? else {
             return None;
         };
         if !is_plain_function(function) {
@@ -295,11 +367,33 @@ impl<'k, 'p> Known<'k, 'p> {
         if bound.is_empty() {
             return None;
         }
-        self.value(returned_expression(function)?, &bound, depth + 1)
+        self.returned(&function.body.as_ref()?.statements, &bound, depth + 1)
+    }
+
+    fn returned(&self, statements: &[Statement<'_>], env: &Env, depth: usize) -> Option<Const> {
+        if depth > MAX_TEST_DEPTH {
+            return None;
+        }
+        match statements {
+            [Statement::ReturnStatement(statement)] => {
+                self.value(statement.argument.as_ref()?, env, depth + 1)
+            }
+            [Statement::BlockStatement(block)] => self.returned(&block.body, env, depth + 1),
+            [Statement::IfStatement(branch)] => {
+                let taken = truthy(&self.value(&branch.test, env, depth + 1)?);
+                let next = match taken {
+                    true => &branch.consequent,
+                    false => branch.alternate.as_ref()?,
+                };
+                self.returned(std::slice::from_ref(next), env, depth + 1)
+            }
+            _ => None,
+        }
     }
 }
 
 fn decide(test: &Expression<'_>, known: &Known<'_, '_>) -> Option<bool> {
+    known.steps.set(0);
     known
         .value(test, &Env::default(), 0)
         .map(|value| truthy(&value))
@@ -327,15 +421,6 @@ impl<'a> VisitJs<'a> for Mentions<'_> {
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
         self.found.extend(symbol_of(it, self.scoping));
     }
-}
-
-fn mentioned(object: &ObjectExpression<'_>, scoping: &Scoping) -> FxHashSet<SymbolId> {
-    let mut scan = Mentions {
-        scoping,
-        found: FxHashSet::default(),
-    };
-    scan.visit_object_expression(object);
-    scan.found
 }
 
 #[derive(Clone, Copy)]
@@ -369,6 +454,7 @@ pub(super) struct Branch<'p> {
 #[derive(Default)]
 pub(super) struct Branches<'p> {
     by_receiver: FxHashMap<SymbolId, Vec<Branch<'p>>>,
+    computed: FxHashMap<SymbolId, Vec<&'p Expression<'p>>>,
     statements: Vec<Span>,
     objects: FxHashMap<SymbolId, &'p ObjectExpression<'p>>,
     assembled: FxHashMap<SymbolId, Assembled<'p>>,
@@ -385,8 +471,7 @@ pub(super) struct Branches<'p> {
 impl<'p> Branches<'p> {
     fn readonly_object(
         &self,
-        receiver: SymbolId,
-        owner: SymbolId,
+        (receiver, owner): (SymbolId, SymbolId),
         scoping: &Scoping,
         builtins_unpatched: bool,
     ) -> Option<&'p ObjectExpression<'p>> {
@@ -433,20 +518,32 @@ impl<'p> Branches<'p> {
             if !seen.insert(symbol) {
                 continue;
             }
-            let Some(object) = self.objects.get(&symbol) else {
-                continue;
-            };
-            let found = mentioned(object, scoping);
+            let found = self.mentioned_by(symbol, scoping);
             if found.contains(&owner) {
                 return true;
             }
-            pending.extend(
-                found
-                    .into_iter()
-                    .filter(|next| self.objects.contains_key(next)),
-            );
+            pending.extend(found.into_iter().filter(|next| {
+                self.objects.contains_key(next) || self.assembled.contains_key(next)
+            }));
         }
         false
+    }
+
+    fn mentioned_by(&self, symbol: SymbolId, scoping: &Scoping) -> FxHashSet<SymbolId> {
+        let mut scan = Mentions {
+            scoping,
+            found: FxHashSet::default(),
+        };
+        if let Some(object) = self.objects.get(&symbol) {
+            scan.visit_object_expression(object);
+        }
+        if let Some(assembled) = self.assembled.get(&symbol) {
+            scan.visit_object_expression(assembled.object());
+            for value in assembled.added_values() {
+                scan.visit_expression(value);
+            }
+        }
+        scan.found
     }
 
     fn tested_by(&self, symbol: SymbolId) -> impl Iterator<Item = &Branch<'p>> {
@@ -513,9 +610,7 @@ impl<'p> BranchScan<'_, 'p> {
             let object: &'p ObjectExpression<'p> = self.alloc(&**object);
             self.found.objects.insert(symbol, object);
             let root = self.bodies.last().copied();
-            let plain = root
-                .filter(|_| !reaches_its_receiver(object))
-                .and_then(|_| Assembled::plain(symbol, object, self.scoping));
+            let plain = root.and_then(|_| Assembled::plain(symbol, object, self.scoping));
             if let Some(plain) = plain {
                 self.found.optimistic.insert(symbol, plain.within(root));
             }
@@ -524,6 +619,14 @@ impl<'p> BranchScan<'_, 'p> {
 }
 
 impl<'p> VisitJs<'p> for BranchScan<'_, 'p> {
+    fn visit_expression(&mut self, it: &Expression<'p>) {
+        let it: &'p Expression<'p> = self.alloc(it);
+        if let Some((receiver, _)) = computed_member(it, self.scoping) {
+            self.found.computed.entry(receiver).or_default().push(it);
+        }
+        walk_js::walk_expression(self, it);
+    }
+
     fn visit_function_body(&mut self, it: &FunctionBody<'p>) {
         let it: &'p FunctionBody<'p> = self.alloc(it);
         self.bodies.push(it);
@@ -651,15 +754,17 @@ pub(super) fn dead_branch_parts<'p>(
     let proven = (unpatched, cx.scoping());
     let mut excluded = FxHashSet::default();
     for _ in 0..MAX_EXCLUSION_ROUNDS {
-        let (dead, used) = settled_parts(branches, (symbol, &excluded), props, lanes, cx.scoping());
-        if used.is_empty() || assembled_uses_dead(branches, &used, &dead, proven) {
+        let (dead, used, keys) =
+            settled_parts(branches, (symbol, &excluded), props, lanes, cx.scoping());
+        if used.is_empty() || assembled_uses_dead(branches, (&used, &keys), &dead, proven) {
             return dead;
         }
         let live: Vec<SymbolId> = used
             .iter()
             .copied()
             .filter(|alias| {
-                !assembled_uses_dead(branches, &FxHashSet::from_iter([*alias]), &dead, proven)
+                let alone = FxHashSet::from_iter([*alias]);
+                !assembled_uses_dead(branches, (&alone, &keys), &dead, proven)
             })
             .collect();
         if live.is_empty() {
@@ -684,8 +789,9 @@ fn settled_parts<'p>(
     props: &[(Cow<'_, str>, CffValue<'_, 'p>)],
     lanes: (bool, bool),
     scoping: &Scoping,
-) -> (Vec<DeadPart>, FxHashSet<SymbolId>) {
-    let (mut parts, mut used) = decided_parts(branches, (symbol, excluded), props, lanes, scoping);
+) -> (Vec<DeadPart>, FxHashSet<SymbolId>, ComputedKeys) {
+    let (mut parts, mut used, mut keys) =
+        decided_parts(branches, (symbol, excluded), props, lanes, scoping);
     let mut seen = 0;
     for _ in 0..MAX_DEAD_ROUNDS {
         if parts.len() <= seen {
@@ -697,10 +803,10 @@ fn settled_parts<'p>(
             .map(|part| part.span)
             .filter(|span| !span.is_empty())
             .collect();
-        (parts, used) = decided_parts(branches, (symbol, excluded), props, lanes, scoping);
+        (parts, used, keys) = decided_parts(branches, (symbol, excluded), props, lanes, scoping);
     }
     branches.dead.borrow_mut().clear();
-    (parts, used)
+    (parts, used, keys)
 }
 
 fn decided_parts<'p>(
@@ -709,7 +815,7 @@ fn decided_parts<'p>(
     props: &[(Cow<'_, str>, CffValue<'_, 'p>)],
     (assembled, builtins_unpatched): (bool, bool),
     scoping: &Scoping,
-) -> (Vec<DeadPart>, FxHashSet<SymbolId>) {
+) -> (Vec<DeadPart>, FxHashSet<SymbolId>, ComputedKeys) {
     let known = Known {
         symbol,
         props,
@@ -719,6 +825,8 @@ fn decided_parts<'p>(
         assembled,
         excluded,
         used: RefCell::default(),
+        keys: RefCell::default(),
+        steps: Cell::new(0),
     };
     let mut seen = FxHashSet::default();
     let dead = branches
@@ -733,12 +841,13 @@ fn decided_parts<'p>(
             }
         })
         .collect();
-    (dead, known.used.into_inner())
+    known.resolve_keys(&branches.computed);
+    (dead, known.used.into_inner(), known.keys.into_inner())
 }
 
 fn assembled_uses_dead(
     branches: &Branches<'_>,
-    used: &FxHashSet<SymbolId>,
+    (used, keys): (&FxHashSet<SymbolId>, &ComputedKeys),
     dead: &[DeadPart],
     (builtins_unpatched, scoping): (bool, &Scoping),
 ) -> bool {
@@ -758,7 +867,7 @@ fn assembled_uses_dead(
         .collect();
     objects.is_some_and(|objects| {
         let proven = (scoping, builtins_unpatched);
-        aliases_mutated_only_in_dead(program, proven, objects.into_iter(), &nodes)
+        aliases_mutated_only_in_dead(program, proven, objects.into_iter(), (&nodes, keys))
     })
 }
 

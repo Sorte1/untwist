@@ -20,7 +20,9 @@ use crate::stamp::{
     declaration_symbol, decoder_index, decoder_name, owning_unit, reached_outside_its_block,
     string_array_unit, IndexAllocator, RefusedByDecode,
 };
-use crate::wrapper_speculation::{branched_writes_outside, declared_by_function};
+use crate::wrapper_speculation::{
+    branched_writes_outside, declared_by_function, guarded_writes_outside,
+};
 
 const SHORT_DECODER_BODY: usize = 4;
 
@@ -235,6 +237,7 @@ impl<'a> Pass<'a> for FindDecoders {
             .collect();
         let early = read_before_declaration(program, cx.scoping(), &bound);
         let speculated = speculated_decoders(program, cx, &unstamped, &watched);
+        let guarded = guarded_decoders(program, cx.scoping(), &unstamped, &watched, &speculated);
         let mut indices = IndexAllocator::decoders(cx.scoping());
         let mut renames = Renames::new();
         let mut deferred = Vec::new();
@@ -247,7 +250,8 @@ impl<'a> Pass<'a> for FindDecoders {
                 continue;
             }
             let written = speculated.get(&shape.symbol);
-            let checked = (cx.scoping(), &watched, written.is_some());
+            let unwritten = written.is_some() || guarded.contains(&shape.symbol);
+            let checked = (cx.scoping(), &watched, unwritten);
             if let Some((note, span)) = decoder_refusal(checked, shape, index) {
                 cx.note(note, Some(span));
                 continue;
@@ -302,6 +306,37 @@ fn speculated_decoders(
     }
     let candidates: FxHashSet<SymbolId> = homes.keys().copied().collect();
     branched_writes_outside(program, scoping, &candidates, &homes)
+}
+
+fn guarded_decoders(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    unstamped: &[DecoderShape],
+    watched: &Watched,
+    speculated: &FxHashMap<SymbolId, Vec<Span>>,
+) -> FxHashSet<SymbolId> {
+    let homes: FxHashMap<SymbolId, Span> = unstamped
+        .iter()
+        .enumerate()
+        .filter(|(index, shape)| {
+            !shape.bound
+                && !speculated.contains_key(&shape.symbol)
+                && declared_by_function(scoping, shape.symbol)
+                && writes_outside(
+                    scoping,
+                    shape.symbol,
+                    shape.statement,
+                    &watched.writes,
+                    *index,
+                )
+        })
+        .map(|(_, shape)| (shape.symbol, shape.statement))
+        .collect();
+    if homes.is_empty() {
+        return FxHashSet::default();
+    }
+    let candidates: FxHashSet<SymbolId> = homes.keys().copied().collect();
+    guarded_writes_outside(program, scoping, &candidates, &homes)
 }
 
 fn decoder_refusal(
