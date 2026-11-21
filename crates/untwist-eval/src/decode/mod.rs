@@ -157,6 +157,7 @@ pub struct Session<'a> {
     pub(crate) interp: Interp<'a>,
     pub(crate) dead_terms: DeadTerms,
     pub(crate) dead_tail_proven: bool,
+    pub(crate) repeats_calls: bool,
     pub(crate) env: FrameRef<'a>,
     pub(crate) array: Value<'a>,
     pub(crate) decoders: Vec<DecoderSlot<'a>>,
@@ -200,6 +201,9 @@ impl<'realm> Session<'realm> {
         let args = self.eval_call_arguments(call)?;
         let value = self.dispatch_decoder_call(&callee, &args)?;
         self.settle_decoder(call.decoder)?;
+        if self.repeats_calls {
+            self.repeat_call(call.decoder, &args, &value)?;
+        }
         #[cfg(feature = "test-hooks")]
         crate::test_hooks::note_site(self.interp.budget.steps_used());
         Ok(value)
@@ -281,6 +285,7 @@ impl InterpEvaluator {
             interp,
             dead_terms: DeadTerms::Skip,
             dead_tail_proven: false,
+            repeats_calls: false,
             env,
             array,
             decoders,
@@ -522,6 +527,7 @@ impl<'a> Session<'a> {
 }
 
 const CALL_THREW: &str = "a decoder call threw";
+const REPEAT_DIFFERED: &str = "a memoised decoder call returned another value when repeated";
 
 impl<'a> Session<'a> {
     fn dispatch_decoder_call(
@@ -535,6 +541,26 @@ impl<'a> Session<'a> {
                 AbruptKind::Bail(bail) => Err(bail),
                 AbruptKind::Throw(_) => Err(Bail::Unsupported(&CALL_THREW)),
             },
+        }
+    }
+
+    fn repeat_call(
+        &mut self,
+        decoder: usize,
+        args: &[Value<'a>],
+        first: &Value<'a>,
+    ) -> EvalResult<()> {
+        let callee = self.current_decoder(decoder)?;
+        let again = match self.dispatch_decoder_call(&callee, args) {
+            Err(Bail::Unsupported(reason)) if *reason == CALL_THREW => {
+                return Err(Bail::Unsupported(&REPEAT_DIFFERED))
+            }
+            other => other?,
+        };
+        if strict_equals(first, &again) {
+            Ok(())
+        } else {
+            Err(Bail::Unsupported(&REPEAT_DIFFERED))
         }
     }
 
@@ -688,7 +714,6 @@ impl InterpEvaluator {
         };
         let result = self.decode_with_memo_traced(program, calls, memo, dead_terms, skipped);
         match (result, crate::state::take_violation()) {
-            (Ok((values, thrown)), _) if !thrown.is_empty() => Ok((values, thrown)),
             (Ok(evaluated), None) => Ok(evaluated),
             (_, Some(reason)) => Err(Bail::Unsupported(reason)),
             (Err(bail), None) => Err(bail),
@@ -704,6 +729,7 @@ impl InterpEvaluator {
         skipped: &FxHashSet<usize>,
     ) -> EvalResult<Evaluated<'a>> {
         let mut session = self.instantiate(program)?;
+        session.repeats_calls = dead_terms != DeadTerms::Skip;
         session.dead_terms = dead_terms;
         let rotated = session.apply_rotation_with(program, memo);
         self.proto_reads
