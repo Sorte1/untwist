@@ -11,6 +11,7 @@ use untwist_core::semantic::is_hoisted_block_function;
 
 use super::checksum::{parsed_statement, sees_its_parameters, unused_name};
 use super::inlined::used_only_in_with;
+use super::moved::disposes;
 use super::{array_literal, match_string_array};
 use crate::array_rotator::is_infinite_rotator_loop;
 use crate::mutants::minified_rotators_trusted;
@@ -118,6 +119,16 @@ impl<'a> VisitJs<'a> for LoopEscapes {
 
     fn visit_with_statement(&mut self, _it: &WithStatement<'a>) {
         self.found = true;
+    }
+
+    fn visit_for_of_statement(&mut self, it: &ForOfStatement<'a>) {
+        self.found |= it.r#await;
+        walk_js::walk_for_of_statement(self, it);
+    }
+
+    fn visit_variable_declaration(&mut self, it: &VariableDeclaration<'a>) {
+        self.found |= disposes(it);
+        walk_js::walk_variable_declaration(self, it);
     }
 }
 
