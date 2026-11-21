@@ -263,7 +263,9 @@ are decoded, even when the program enumerates or tests the global object's names
 them by key, through `Object.assign`, `Reflect.set`, `Object.defineProperty` or a loop over keys,
 or runs code text through any runner, `(0, eval)`,
 `Function`, a timer string, or a runner that code text hands back such as
-`Function("return eval")()(s)`). No function declared in a block or directly in an `if` clause
+`Function("return eval")()(s)`). A string-array rotator is assumed to reach its checksum, so a
+unit no call uses is removed even when its rotator would loop forever, and the output then finishes
+where the input hangs. No function declared in a block or directly in an `if` clause
 overwrites a decoder alias, a decoder wrapper or a constant used as a decoder argument through
 Annex B hoisting, and no direct `eval` redeclares one in its own scope (`var d = dec;
 { function d() {} } d(1)`, `var d = dec; if (1) function d() {} d(1)` and
