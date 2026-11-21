@@ -1004,7 +1004,7 @@ fn deobfuscate_with<'a>(
         Some(before) => kept_when_stamps_survive(alloc, program, (sem, before), &mut aggregate),
         None => sem,
     };
-    crate::legacy_reach::settle_escapes(program, &sem.scoping);
+    crate::legacy_reach::settle_escapes(program, &sem.scoping, alloc);
 
     crate::decoded::settle_layered(program, &sem.scoping);
     let mut report = aggregate.finish();

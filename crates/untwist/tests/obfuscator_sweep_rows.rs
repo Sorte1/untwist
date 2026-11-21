@@ -37,6 +37,9 @@ const DECODED_UNDER_UNSAFE: &[&str] = &[
     "dp-redeclared-var",
     "dp-key-object-assigned",
     "wrapper-emptied-shell",
+    "alias-dead-write",
+    "cfo-forwarder-arg",
+    "escape-name-reused",
 ];
 
 const FINGERPRINTS: &[&str] = &[
@@ -127,6 +130,14 @@ fn dead_code_and_control_flow_cases_print_the_source_output_under_unsafe() {
             expected.is_ok() && expected == actual,
             "{label}: {expected:?} vs {actual:?}"
         );
+    }
+}
+
+#[test]
+fn writes_in_branches_only_decoding_proves_dead_print_like_node_by_default() {
+    for label in ["alias-dead-write", "cfo-forwarder-arg"] {
+        let source = read(&format!("{label}.js"));
+        prints_the_same(&source, &default_code(&source));
     }
 }
 

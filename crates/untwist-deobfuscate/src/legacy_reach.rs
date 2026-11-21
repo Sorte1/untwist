@@ -1,10 +1,16 @@
 use std::cell::RefCell;
 
+use oxc_allocator::Allocator;
 use oxc_ast::ast::{BindingIdentifier, CallExpression, Expression, IdentifierReference, Program};
-use oxc_ast_visit::VisitJs;
+use oxc_ast_visit::{VisitJs, VisitMut};
 use oxc_semantic::Scoping;
 use oxc_span::Span;
-use rustc_hash::FxHashSet;
+use oxc_str::Ident;
+use oxc_syntax::symbol::SymbolId;
+use rustc_hash::{FxHashMap, FxHashSet};
+use untwist_core::ast_util::rename::{unique_name_avoiding, Renames};
+use untwist_core::semantic::scope_hazard;
+use untwist_core::semantic::unbound::is_unbound_name;
 
 use crate::mutants::deferred_legacy_reach_trusted;
 
@@ -107,33 +113,63 @@ pub(crate) fn defer_escapes(decoders: &[Span]) {
     DEFERRAL.with(|deferral| deferral.borrow_mut().escapes.extend_from_slice(decoders));
 }
 
+#[derive(Clone, Copy, Debug)]
+enum Mark {
+    Symbol(SymbolId),
+    Reference(Span),
+}
+
 struct Surviving<'s> {
     spans: &'s [Span],
-    found: Vec<Vec<String>>,
+    scoping: Option<&'s Scoping>,
+    found: Vec<Survivor>,
     unnamed: bool,
 }
 
-impl Surviving<'_> {
-    fn note(&mut self, span: Span, name: &str) {
-        if self.spans.contains(&span) {
-            self.found.push(vec![name.to_string()]);
+impl<'s> Surviving<'s> {
+    fn new(spans: &'s [Span], scoping: Option<&'s Scoping>) -> Self {
+        Self {
+            spans,
+            scoping,
+            found: Vec::new(),
+            unnamed: false,
         }
+    }
+
+    fn note(&mut self, span: Span, name: &str, mark: Option<Mark>) {
+        if self.spans.contains(&span) {
+            self.found.push((vec![name.to_string()], mark));
+        }
+    }
+
+    fn mark(&self, it: &IdentifierReference<'_>) -> Option<Mark> {
+        let scoping = self.scoping?;
+        let reference = scoping.get_reference(it.reference_id.get()?);
+        Some(match reference.symbol_id() {
+            Some(symbol) => Mark::Symbol(symbol),
+            None => Mark::Reference(it.span),
+        })
     }
 }
 
 impl<'a> VisitJs<'a> for Surviving<'_> {
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        self.note(it.span, it.name.as_str());
+        let mark = self.mark(it);
+        self.note(it.span, it.name.as_str(), mark);
     }
 
     fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
-        self.note(it.span, it.name.as_str());
+        let mark = it.symbol_id.get().map(Mark::Symbol);
+        self.note(it.span, it.name.as_str(), mark);
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
         if self.spans.contains(&it.span) {
             match &it.callee {
-                Expression::Identifier(callee) => self.found.push(vec![callee.name.to_string()]),
+                Expression::Identifier(callee) => {
+                    let mark = self.mark(callee);
+                    self.found.push((vec![callee.name.to_string()], mark));
+                }
                 _ => self.unnamed = true,
             }
         }
@@ -156,15 +192,13 @@ impl<'a> VisitJs<'a> for Names {
     }
 }
 
+type Survivor = (Vec<String>, Option<Mark>);
+
 fn surviving_names(
     (program, scoping): (&Program<'_>, &Scoping),
     escapes: &[Span],
-) -> Option<Vec<Vec<String>>> {
-    let mut surviving = Surviving {
-        spans: escapes,
-        found: Vec::new(),
-        unnamed: false,
-    };
+) -> Option<Vec<Survivor>> {
+    let mut surviving = Surviving::new(escapes, Some(scoping));
     surviving.visit_program(program);
     for symbol in scoping.symbol_ids() {
         let span = scoping.symbol_span(symbol);
@@ -178,12 +212,110 @@ fn surviving_names(
         {
             group.push(text.to_string());
         }
-        surviving.found.push(group);
+        surviving.found.push((group, Some(Mark::Symbol(symbol))));
     }
     (!surviving.unnamed).then_some(surviving.found)
 }
 
-pub(crate) fn settle_escapes(program: &Program<'_>, scoping: &Scoping) {
+const ESCAPE_MARK: &str = "untwist_escape";
+
+struct ReferenceMarks<'a, 'm> {
+    marks: &'m FxHashMap<Span, Ident<'a>>,
+    count: usize,
+}
+
+impl<'a> VisitMut<'a> for ReferenceMarks<'a, '_> {
+    fn visit_identifier_reference(&mut self, it: &mut IdentifierReference<'a>) {
+        if let Some(mark) = self.marks.get(&it.span) {
+            it.name = *mark;
+            self.count += 1;
+        }
+    }
+}
+
+#[derive(Default)]
+struct Marks<'a> {
+    symbols: FxHashMap<SymbolId, Ident<'a>>,
+    references: FxHashMap<Span, Ident<'a>>,
+    reserved: FxHashSet<String>,
+}
+
+impl<'a> Marks<'a> {
+    fn fresh(&mut self, scoping: &Scoping, alloc: &'a Allocator) -> Option<Ident<'a>> {
+        let mark = unique_name_avoiding(ESCAPE_MARK, scoping, &self.reserved, &alloc)?;
+        self.reserved.insert(mark.to_string());
+        Some(mark)
+    }
+
+    fn of(&mut self, mark: Mark, scoping: &Scoping, alloc: &'a Allocator) -> Option<Ident<'a>> {
+        match mark {
+            Mark::Symbol(symbol) => {
+                let markable = scoping.symbol_scope_id(symbol) != scoping.root_scope_id()
+                    && !is_unbound_name(scoping.symbol_name(symbol));
+                if !markable {
+                    return None;
+                }
+                if let Some(found) = self.symbols.get(&symbol) {
+                    return Some(*found);
+                }
+                let fresh = self.fresh(scoping, alloc)?;
+                self.symbols.insert(symbol, fresh);
+                Some(fresh)
+            }
+            Mark::Reference(span) => {
+                if let Some(found) = self.references.get(&span) {
+                    return Some(*found);
+                }
+                let fresh = self.fresh(scoping, alloc)?;
+                self.references.insert(span, fresh);
+                Some(fresh)
+            }
+        }
+    }
+}
+
+fn marked_survivors<'a>(
+    (program, scoping): (&mut Program<'a>, &Scoping),
+    alloc: &'a Allocator,
+    survivors: Vec<Survivor>,
+) -> Vec<Vec<String>> {
+    if scope_hazard(scoping).is_some() {
+        return survivors.into_iter().map(|(group, _)| group).collect();
+    }
+    let mut marks = Marks::default();
+    let mut groups = Vec::with_capacity(survivors.len());
+    for (group, mark) in survivors {
+        match mark.and_then(|mark| marks.of(mark, scoping, alloc)) {
+            Some(mark) => groups.push(vec![mark.to_string()]),
+            None => groups.push(group),
+        }
+    }
+    let mut renames = Renames::new();
+    for (symbol, mark) in &marks.symbols {
+        renames.insert(*symbol, *mark);
+    }
+    let renamed = match renames.is_empty() {
+        true => true,
+        false => renames.apply(program, scoping) > 0,
+    };
+    let mut references = ReferenceMarks {
+        marks: &marks.references,
+        count: 0,
+    };
+    if !marks.references.is_empty() {
+        references.visit_program(program);
+    }
+    if !renamed || references.count < marks.references.len() {
+        DEFERRAL.with(|deferral| deferral.borrow_mut().unverified = true);
+    }
+    groups
+}
+
+pub(crate) fn settle_escapes<'a>(
+    program: &mut Program<'a>,
+    scoping: &Scoping,
+    alloc: &'a Allocator,
+) {
     let (escapes, carried, carries) = DEFERRAL.with(|deferral| {
         let mut deferral = deferral.borrow_mut();
         (
@@ -195,35 +327,29 @@ pub(crate) fn settle_escapes(program: &Program<'_>, scoping: &Scoping) {
     if escapes.is_empty() && carried.is_empty() {
         return;
     }
-    let Some(mut pending) = surviving_names((program, scoping), &escapes) else {
+    let Some(mut survivors) = surviving_names((program, scoping), &escapes) else {
         DEFERRAL.with(|deferral| deferral.borrow_mut().unverified = true);
         return;
     };
-    pending.extend(carried);
-    if pending.is_empty() {
-        return;
-    }
     let mut names = Names::default();
     names.visit_program(program);
-    pending.retain(|group| group.iter().any(|name| names.present.contains(name)));
-    if pending.is_empty() {
+    let present = |group: &Vec<String>| group.iter().any(|name| names.present.contains(name));
+    survivors.retain(|(group, _)| present(group));
+    let carried: Vec<Vec<String>> = carried.into_iter().filter(present).collect();
+    if survivors.is_empty() && carried.is_empty() {
         return;
     }
-    DEFERRAL.with(|deferral| {
-        let mut deferral = deferral.borrow_mut();
-        match carries {
-            true => deferral.escape_names = pending,
-            false => deferral.unverified = true,
-        }
-    });
+    if !carries {
+        DEFERRAL.with(|deferral| deferral.borrow_mut().unverified = true);
+        return;
+    }
+    let mut pending = marked_survivors((program, scoping), alloc, survivors);
+    pending.extend(carried);
+    DEFERRAL.with(|deferral| deferral.borrow_mut().escape_names = pending);
 }
 
 fn spans_survive(program: &Program<'_>, spans: &[Span]) -> bool {
-    let mut surviving = Surviving {
-        spans,
-        found: Vec::new(),
-        unnamed: false,
-    };
+    let mut surviving = Surviving::new(spans, None);
     surviving.visit_program(program);
     surviving.unnamed || !surviving.found.is_empty()
 }

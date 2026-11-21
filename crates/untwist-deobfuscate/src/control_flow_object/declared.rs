@@ -341,7 +341,9 @@ fn speculated_mutations(
     if !passes_decoders_to_members(program) {
         return false;
     }
-    let mutations = mutation_spans(uses);
+    let Some(mutations) = mutated_identifiers(program, uses) else {
+        return false;
+    };
     let spans: FxHashSet<Span> = mutations.iter().copied().collect();
     if spans.is_empty() || in_branches(program, cx.scoping(), &spans).len() != spans.len() {
         return false;
@@ -352,12 +354,93 @@ fn speculated_mutations(
     true
 }
 
+struct WrittenObjects<'w> {
+    writes: &'w FxHashSet<Span>,
+    found: Vec<Span>,
+}
+
+impl<'a> VisitJs<'a> for WrittenObjects<'_> {
+    fn visit_member_expression(&mut self, it: &MemberExpression<'a>) {
+        if self.writes.contains(&it.span()) {
+            if let Expression::Identifier(object) = it.object().without_parentheses() {
+                self.found.push(object.span);
+            }
+        }
+        walk_js::walk_member_expression(self, it);
+    }
+}
+
+fn mutated_identifiers(program: &Program<'_>, uses: &ObjectUses) -> Option<Vec<Span>> {
+    let writes: FxHashSet<Span> = uses.write_spans.iter().copied().collect();
+    let mut search = WrittenObjects {
+        writes: &writes,
+        found: Vec::new(),
+    };
+    if !writes.is_empty() {
+        search.visit_program(program);
+    }
+    if search.found.len() != uses.write_spans.len() {
+        return None;
+    }
+    search.found.extend(uses.opaque_spans.iter().copied());
+    Some(search.found)
+}
+
 #[derive(Default)]
-struct DecoderArguments {
+struct Forwarders<'a> {
+    calls: Vec<(&'a str, &'a str)>,
+}
+
+impl<'a> VisitJs<'a> for Forwarders<'a> {
+    fn visit_function(&mut self, it: &Function<'a>, flags: oxc_syntax::scope::ScopeFlags) {
+        if let Some(pair) = forwarded_call(it) {
+            self.calls.push(pair);
+        }
+        walk_js::walk_function(self, it, flags);
+    }
+}
+
+fn forwarded_call<'a>(function: &Function<'a>) -> Option<(&'a str, &'a str)> {
+    let name = function.id.as_ref()?.name.as_str();
+    let [Statement::ReturnStatement(statement)] = function.body.as_ref()?.statements.as_slice()
+    else {
+        return None;
+    };
+    let Some(Expression::CallExpression(call)) = &statement.argument else {
+        return None;
+    };
+    let Expression::Identifier(callee) = &call.callee else {
+        return None;
+    };
+    Some((name, callee.name.as_str()))
+}
+
+fn is_decoder_name(name: &str) -> bool {
+    untwist_core::machinery_name::decoder_index(name).is_some()
+}
+
+fn decoder_forwarders<'a>(program: &Program<'a>) -> FxHashSet<&'a str> {
+    let mut search = Forwarders::default();
+    search.visit_program(program);
+    let mut names: FxHashSet<&'a str> = FxHashSet::default();
+    let mut grown = true;
+    while grown {
+        grown = false;
+        for (name, callee) in &search.calls {
+            if (is_decoder_name(callee) || names.contains(callee)) && names.insert(name) {
+                grown = true;
+            }
+        }
+    }
+    names
+}
+
+struct DecoderArguments<'n, 'a> {
+    forwarders: &'n FxHashSet<&'a str>,
     found: bool,
 }
 
-impl<'a> VisitJs<'a> for DecoderArguments {
+impl<'a> VisitJs<'a> for DecoderArguments<'_, 'a> {
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
         if self.found {
             return;
@@ -365,14 +448,19 @@ impl<'a> VisitJs<'a> for DecoderArguments {
         self.found = it.callee.without_parentheses().is_member_expression()
             && it.arguments.iter().any(|argument| {
                 matches!(argument, Argument::Identifier(id)
-                    if untwist_core::machinery_name::decoder_index(id.name.as_str()).is_some())
+                    if is_decoder_name(id.name.as_str())
+                        || self.forwarders.contains(id.name.as_str()))
             });
         walk_js::walk_call_expression(self, it);
     }
 }
 
 fn passes_decoders_to_members(program: &Program<'_>) -> bool {
-    let mut search = DecoderArguments::default();
+    let forwarders = decoder_forwarders(program);
+    let mut search = DecoderArguments {
+        forwarders: &forwarders,
+        found: false,
+    };
     search.visit_program(program);
     search.found
 }
