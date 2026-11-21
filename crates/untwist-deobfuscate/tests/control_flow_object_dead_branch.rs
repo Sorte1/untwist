@@ -275,3 +275,28 @@ fn a_predicate_on_another_objects_property_decides_nothing() {
     let code = default_run(&alloc, A_PREDICATE_ON_ANOTHER_OBJECTS_PROPERTY, boxed);
     assert!(code.contains("sink(obj)"), "{code}");
 }
+
+const A_GATE_OBJECT_BESIDE_AN_ESCAPING_ONE: &str = "function hi(x) {\n  const obj = {\n    rLxJs: \"6|0|4\",\n    aokfw: function (a, b) {\n      return a !== b;\n    },\n    bqwer: function (a, b) {\n      return a + b;\n    }\n  };\n  const gate = {\n    cNeQz: function (a, b) {\n      return obj.aokfw(a, b);\n    },\n    kLwOn: \"xx\",\n    kPzTw: \"yy\",\n    pLxUb: function (a, b) {\n      return obj.bqwer(a, b);\n    }\n  };\n  const kept = {\n    mHaOn: \"mm\",\n    pLxUb: function (a, b) {\n      return obj.bqwer(a, b);\n    }\n  };\n  sink(kept);\n  if (kept.mHaOn === \"zz\") {\n    x = 3;\n  }\n  if (gate.cNeQz(gate.kLwOn, \"qq\")) {\n    if (x) {\n      if (\"ww\" === gate.kPzTw) {\n        return obj[gate.pLxUb(\"con\", \"structor\")] + gate[gate.pLxUb(\"bi\", \"nd\")];\n      }\n    }\n  }\n  return obj.rLxJs + x;\n}";
+
+#[test]
+fn an_escaping_gate_object_does_not_stop_another_gate_from_deciding_a_branch() {
+    let alloc = Allocator::default();
+    let code = default_run(&alloc, A_GATE_OBJECT_BESIDE_AN_ESCAPING_ONE, boxed);
+    assert!(code.contains(r#"return "6|0|4" + x;"#), "{code}");
+    assert!(!code.contains("const obj"), "{code}");
+    assert!(code.contains("sink(kept)"), "{code}");
+}
+
+const AN_ALIAS_READ_UNDER_A_FOREIGN_KEY_IN_A_DEAD_BRANCH: &str = "function hi(c) {\n  const obj = {\n    rLxJs: \"6|0|4\",\n    qWert: \"abcde\"\n  };\n  const m = { zXcVb: \"q\" };\n  m.pOiUy = obj.qWert;\n  const v = m;\n  if (v.pOiUy === \"abcde\") {\n    console.log(obj.rLxJs, c);\n  } else {\n    m.map(obj);\n  }\n}";
+
+#[test]
+fn an_alias_read_under_a_foreign_key_in_a_dead_branch_still_decides_it() {
+    let alloc = Allocator::default();
+    let code = default_run(
+        &alloc,
+        AN_ALIAS_READ_UNDER_A_FOREIGN_KEY_IN_A_DEAD_BRANCH,
+        boxed,
+    );
+    assert!(code.contains(r#"console.log("6|0|4", c)"#), "{code}");
+    assert!(!code.contains("m.map(obj)"), "{code}");
+}

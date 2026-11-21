@@ -285,7 +285,7 @@ impl<'a> VisitJs<'a> for AliasUses<'_, '_, '_> {
             });
             if own {
                 self.reads.insert(address_of(id));
-            } else {
+            } else if self.depth == 0 {
                 self.live = true;
             }
         }
