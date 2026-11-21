@@ -729,7 +729,8 @@ impl InterpEvaluator {
         skipped: &FxHashSet<usize>,
     ) -> EvalResult<Evaluated<'a>> {
         let mut session = self.instantiate(program)?;
-        session.repeats_calls = dead_terms != DeadTerms::Skip;
+        session.repeats_calls =
+            dead_terms != DeadTerms::Skip && !crate::mutants::calls_unrepeated();
         session.dead_terms = dead_terms;
         let rotated = session.apply_rotation_with(program, memo);
         self.proto_reads
