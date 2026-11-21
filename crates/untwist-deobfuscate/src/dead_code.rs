@@ -676,24 +676,55 @@ impl<'a> DeadCode<'a> {
             alternate,
             ..
         } = node;
+        let dropped = references_in(if value {
+            alternate.as_ref()
+        } else {
+            Some(&consequent)
+        });
+        self.dropped.extend(dropped.iter().copied());
         if value {
-            match self.try_merge(consequent, outer, stmts, cx) {
+            match self.merge_or_keep(consequent, outer, stmts, cx) {
                 Ok(()) => true,
                 Err(consequent) if branch_declares_function(&consequent) => {
                     keep_braced(consequent, stmts, cx)
                 }
-                Err(consequent) => refuse(span, test, consequent, alternate, stmts, cx),
+                Err(consequent) => {
+                    self.restore_dropped(&dropped);
+                    refuse(span, test, consequent, alternate, stmts, cx)
+                }
             }
         } else {
             let Some(branch) = alternate else {
                 return true;
             };
-            match self.try_merge(branch, outer, stmts, cx) {
+            match self.merge_or_keep(branch, outer, stmts, cx) {
                 Ok(()) => true,
                 Err(branch) if branch_declares_function(&branch) => keep_braced(branch, stmts, cx),
-                Err(branch) => refuse(span, test, consequent, Some(branch), stmts, cx),
+                Err(branch) => {
+                    self.restore_dropped(&dropped);
+                    refuse(span, test, consequent, Some(branch), stmts, cx)
+                }
             }
         }
+    }
+
+    fn restore_dropped(&mut self, dropped: &FxHashSet<ReferenceId>) {
+        self.dropped
+            .retain(|reference| !dropped.contains(reference));
+    }
+
+    fn merge_or_keep(
+        &mut self,
+        branch: Statement<'a>,
+        outer: ScopeId,
+        stmts: &mut AVec<'a, Statement<'a>>,
+        cx: &mut Cx<'a, '_>,
+    ) -> Result<(), Statement<'a>> {
+        if self.merges_soundly(&branch, outer, cx) {
+            return self.try_merge(branch, outer, stmts, cx);
+        }
+        keep_braced(branch, stmts, cx);
+        Ok(())
     }
 
     fn try_merge(
