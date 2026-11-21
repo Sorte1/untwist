@@ -39,11 +39,13 @@ fn remove_false_branch_without_else() {
 #[test]
 fn merge_scopes() {
     assert_transform!(
-        "let foo = 1;\nif (\"a\" === \"a\") {\n  let foo = 2;\n}",
+        "function f() {\n  let foo = 1;\n  if (\"a\" === \"a\") {\n    let foo = 2;\n  }\n}",
         [untwist_deobfuscate::dead_code::boxed],
         @r#"
-    let foo = 1;
-    let _foo = 2;
+    function f() {
+      let foo = 1;
+      let _foo = 2;
+    }
     "#
     );
 }
@@ -104,13 +106,15 @@ fn a_side_effecting_or_non_literal_test_is_left_alone() {
 #[test]
 fn two_merges_into_the_same_scope_do_not_duplicate_bindings() {
     assert_transform!(
-        "if (\"a\" === \"a\") {\n  let bar = 2;\n  console.log(bar);\n}\nif (\"b\" === \"b\") {\n  let bar = 3;\n  console.log(bar);\n}",
+        "function f() {\n  if (\"a\" === \"a\") {\n    let bar = 2;\n    console.log(bar);\n  }\n  if (\"b\" === \"b\") {\n    let bar = 3;\n    console.log(bar);\n  }\n}",
         [untwist_deobfuscate::dead_code::boxed],
         @r#"
-    let bar = 2;
-    console.log(bar);
-    let _bar = 3;
-    console.log(_bar);
+    function f() {
+      let bar = 2;
+      console.log(bar);
+      let _bar = 3;
+      console.log(_bar);
+    }
     "#
     );
 }
@@ -118,15 +122,17 @@ fn two_merges_into_the_same_scope_do_not_duplicate_bindings() {
 #[test]
 fn two_colliding_blocks_get_foo_then_foo2() {
     assert_transform!(
-        "let foo = 1;\nif (\"a\" === \"a\") {\n  let foo = 2;\n  console.log(foo);\n}\nif (\"b\" === \"b\") {\n  let foo = 3;\n  console.log(foo);\n}\nconsole.log(foo);",
+        "function f() {\n  let foo = 1;\n  if (\"a\" === \"a\") {\n    let foo = 2;\n    console.log(foo);\n  }\n  if (\"b\" === \"b\") {\n    let foo = 3;\n    console.log(foo);\n  }\n  console.log(foo);\n}",
         [untwist_deobfuscate::dead_code::boxed],
         @r#"
-    let foo = 1;
-    let _foo = 2;
-    console.log(_foo);
-    let _foo2 = 3;
-    console.log(_foo2);
-    console.log(foo);
+    function f() {
+      let foo = 1;
+      let _foo = 2;
+      console.log(_foo);
+      let _foo2 = 3;
+      console.log(_foo2);
+      console.log(foo);
+    }
     "#
     );
 }
@@ -134,13 +140,15 @@ fn two_colliding_blocks_get_foo_then_foo2() {
 #[test]
 fn nested_merges_see_what_the_inner_merge_already_moved() {
     assert_transform!(
-        "let foo = 1;\nif (\"a\" === \"a\") {\n  if (\"b\" === \"b\") {\n    let foo = 2;\n    console.log(foo);\n  }\n}\nconsole.log(foo);",
+        "function f() {\n  let foo = 1;\n  if (\"a\" === \"a\") {\n    if (\"b\" === \"b\") {\n      let foo = 2;\n      console.log(foo);\n    }\n  }\n  console.log(foo);\n}",
         [untwist_deobfuscate::dead_code::boxed],
         @r#"
-    let foo = 1;
-    let _foo = 2;
-    console.log(_foo);
-    console.log(foo);
+    function f() {
+      let foo = 1;
+      let _foo = 2;
+      console.log(_foo);
+      console.log(foo);
+    }
     "#
     );
 }
@@ -148,13 +156,15 @@ fn nested_merges_see_what_the_inner_merge_already_moved() {
 #[test]
 fn a_name_forwarded_through_moved_still_collides_with_a_later_sibling() {
     assert_transform!(
-        "if (\"a\" === \"a\") {\n  let bar = 1;\n  console.log(bar);\n}\nif (\"b\" === \"b\") {\n  if (\"c\" === \"c\") {\n    let bar = 2;\n    console.log(bar);\n  }\n}",
+        "function f() {\n  if (\"a\" === \"a\") {\n    let bar = 1;\n    console.log(bar);\n  }\n  if (\"b\" === \"b\") {\n    if (\"c\" === \"c\") {\n      let bar = 2;\n      console.log(bar);\n    }\n  }\n}",
         [untwist_deobfuscate::dead_code::boxed],
         @r#"
-    let bar = 1;
-    console.log(bar);
-    let _bar = 2;
-    console.log(_bar);
+    function f() {
+      let bar = 1;
+      console.log(bar);
+      let _bar = 2;
+      console.log(_bar);
+    }
     "#
     );
 }
@@ -162,13 +172,15 @@ fn a_name_forwarded_through_moved_still_collides_with_a_later_sibling() {
 #[test]
 fn a_three_level_nesting_still_collides_with_a_flat_sibling() {
     assert_transform!(
-        "if (\"a\" === \"a\") {\n  if (\"b\" === \"b\") {\n    if (\"c\" === \"c\") {\n      let bar = 1;\n      console.log(bar);\n    }\n  }\n}\nif (\"d\" === \"d\") {\n  let bar = 2;\n  console.log(bar);\n}",
+        "function f() {\n  if (\"a\" === \"a\") {\n    if (\"b\" === \"b\") {\n      if (\"c\" === \"c\") {\n        let bar = 1;\n        console.log(bar);\n      }\n    }\n  }\n  if (\"d\" === \"d\") {\n    let bar = 2;\n    console.log(bar);\n  }\n}",
         [untwist_deobfuscate::dead_code::boxed],
         @r#"
-    let bar = 1;
-    console.log(bar);
-    let _bar = 2;
-    console.log(_bar);
+    function f() {
+      let bar = 1;
+      console.log(bar);
+      let _bar = 2;
+      console.log(_bar);
+    }
     "#
     );
 }
@@ -176,13 +188,15 @@ fn a_three_level_nesting_still_collides_with_a_flat_sibling() {
 #[test]
 fn the_forwarded_name_is_checked_even_when_the_nested_chain_comes_first() {
     assert_transform!(
-        "if (\"b\" === \"b\") {\n  if (\"c\" === \"c\") {\n    let bar = 2;\n    console.log(bar);\n  }\n}\nif (\"a\" === \"a\") {\n  let bar = 1;\n  console.log(bar);\n}",
+        "function f() {\n  if (\"b\" === \"b\") {\n    if (\"c\" === \"c\") {\n      let bar = 2;\n      console.log(bar);\n    }\n  }\n  if (\"a\" === \"a\") {\n    let bar = 1;\n    console.log(bar);\n  }\n}",
         [untwist_deobfuscate::dead_code::boxed],
         @r#"
-    let bar = 2;
-    console.log(bar);
-    let _bar = 1;
-    console.log(_bar);
+    function f() {
+      let bar = 2;
+      console.log(bar);
+      let _bar = 1;
+      console.log(_bar);
+    }
     "#
     );
 }
@@ -190,14 +204,40 @@ fn the_forwarded_name_is_checked_even_when_the_nested_chain_comes_first() {
 #[test]
 fn a_symbol_forwarded_through_two_merge_levels_keeps_exactly_one_final_name() {
     let alloc = Allocator::default();
-    let source = "let bar = 1;\nif (\"w\" === \"w\") {\n  let _bar = 0;\n  console.log(_bar);\n}\nif (\"x\" === \"x\") {\n  if (\"y\" === \"y\") {\n    let bar = 2;\n    console.log(bar);\n  }\n}";
+    let source = "function f() {\n  let bar = 1;\n  if (\"w\" === \"w\") {\n    let _bar = 0;\n    console.log(_bar);\n  }\n  if (\"x\" === \"x\") {\n    if (\"y\" === \"y\") {\n      let bar = 2;\n      console.log(bar);\n    }\n  }\n}";
     let code = untwist_testing::transform(&alloc, source, &[untwist_deobfuscate::dead_code::boxed]);
     assert_eq!(
         code,
-        "let bar = 1;\nlet _bar = 0;\nconsole.log(_bar);\nlet _bar2 = 2;\nconsole.log(_bar2);"
+        "function f() {\n  let bar = 1;\n  let _bar = 0;\n  console.log(_bar);\n  let _bar2 = 2;\n  console.log(_bar2);\n}"
     );
     assert_eq!(code.matches("_bar2").count(), 2, "{code}");
     assert!(!code.contains("let bar = 2"), "{code}");
+}
+
+#[test]
+fn a_block_at_the_top_level_is_kept_braced_under_unsafe() {
+    let (code, _report) = run_dead_code(
+        "let foo = 1;\nif (\"a\" === \"a\") {\n  let foo = 2;\n  console.log(foo);\n}",
+    );
+    assert_eq!(
+        code,
+        "let foo = 1;\n{\n  let foo = 2;\n  console.log(foo);\n}"
+    );
+}
+
+#[test]
+fn a_block_whose_binding_a_global_read_in_the_function_could_see_is_kept_braced_under_unsafe() {
+    let (code, _report) = run_dead_code("function g() {\n  if (\"a\" === \"a\") {\n    let x = 1;\n    console.log(x);\n  }\n  return typeof x;\n}");
+    assert_eq!(
+        code,
+        "function g() {\n  {\n    let x = 1;\n    console.log(x);\n  }\n  return typeof x;\n}"
+    );
+}
+
+#[test]
+fn a_global_read_only_in_the_dropped_branch_does_not_keep_the_block_under_unsafe() {
+    let (code, _report) = run_dead_code("function g() {\n  if (\"a\" === \"a\") {\n    let x = 1;\n    console.log(x);\n  } else {\n    console.log(x);\n  }\n}");
+    assert_eq!(code, "function g() {\n  let x = 1;\n  console.log(x);\n}");
 }
 
 #[test]
@@ -273,7 +313,7 @@ fn an_unsafe_run_removes_the_if_and_reports_the_count_under_dead_code() {
 }
 
 fn every_fresh_foo_bound() -> String {
-    let mut source = String::from("let _foo = 0;\n");
+    let mut source = String::from("function f() {\nlet _foo = 0;\n");
     for suffix in 2..=UNIQUE_NAME_SUFFIX_CAP {
         source.push_str(&format!("let _foo{suffix} = 0;\n"));
     }
@@ -297,7 +337,7 @@ fn run_dead_code(source: &str) -> (String, RunReport) {
 fn a_merge_whose_fresh_name_budget_is_exhausted_is_refused_not_captured() {
     let mut source = every_fresh_foo_bound();
     source.push_str(
-        "let foo = 1;\nif (\"a\" === \"a\") {\n  let foo = 2;\n  console.log(foo);\n}\nconsole.log(foo);",
+        "let foo = 1;\nif (\"a\" === \"a\") {\n  let foo = 2;\n  console.log(foo);\n}\nconsole.log(foo);\n}",
     );
     let (code, report) = run_dead_code(&source);
     assert!(
@@ -316,15 +356,18 @@ fn a_merge_whose_fresh_name_budget_is_exhausted_is_refused_not_captured() {
 const A_BLOCK_WHOSE_SECOND_BINDING_EXHAUSTS: &str =
     "if (\"a\" === \"a\") {\n  let bar = 2;\n  let foo = 2;\n  console.log(bar, foo);\n}";
 
+const THE_BLOCK_AS_PRINTED_IN_THE_FUNCTION: &str =
+    "  if (\"a\" === \"a\") {\n    let bar = 2;\n    let foo = 2;\n    console.log(bar, foo);\n  }";
+
 #[test]
 fn a_refused_merge_leaves_every_binding_name_and_the_tally_untouched() {
     let mut source = every_fresh_foo_bound();
     source.push_str("let bar = 1;\nlet foo = 1;\n");
     source.push_str(A_BLOCK_WHOSE_SECOND_BINDING_EXHAUSTS);
-    source.push_str("\nconsole.log(bar, foo);");
+    source.push_str("\nconsole.log(bar, foo);\n}");
     let (code, report) = run_dead_code(&source);
     assert!(
-        code.contains(A_BLOCK_WHOSE_SECOND_BINDING_EXHAUSTS),
+        code.contains(THE_BLOCK_AS_PRINTED_IN_THE_FUNCTION),
         "the kept block is not byte-identical to the input: {code}"
     );
     assert!(!code.contains("_bar"), "a staged rename leaked: {code}");
