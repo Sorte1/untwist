@@ -448,8 +448,17 @@ impl Pipeline {
         site: &mut StageCx<'a, '_>,
         sem: Semantics,
     ) -> (Semantics, bool) {
+        self.machinery_settled(site, sem, true)
+    }
+
+    pub(super) fn machinery_settled<'a>(
+        &self,
+        site: &mut StageCx<'a, '_>,
+        sem: Semantics,
+        protections_ran: bool,
+    ) -> (Semantics, bool) {
         settle_layered_observations(site.program, &sem.scoping);
-        untwist_deobfuscate::legacy_reach::settle_late_escapes(site.program);
+        untwist_deobfuscate::legacy_reach::settle_late_escapes(site.program, protections_ran);
         if !self.options.deobfuscate {
             return (sem, false);
         }

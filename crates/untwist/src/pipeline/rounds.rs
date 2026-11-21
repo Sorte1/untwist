@@ -239,7 +239,7 @@ impl Pipeline {
         if removals(stages, &REMOVING_PASSES) == 0 && settled_rewrites(stages) == 0 {
             return (self.plugin_stage(Stage::AfterDeobfuscate, site, sem), false);
         }
-        let (sem, _) = self.final_machinery_stage(site, sem);
+        let (sem, _) = self.machinery_settled(site, sem, false);
         let after = pretty_codegen(site.program);
         let decoded = after != before.as_deref().unwrap_or(printed);
         (
