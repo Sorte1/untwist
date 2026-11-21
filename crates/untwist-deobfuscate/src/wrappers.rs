@@ -36,7 +36,7 @@ use crate::stamp::{find_stamped_named, is_unedited};
 use crate::units::MachineryDepth;
 use crate::wrapper_calls::inline_function_wrappers;
 use crate::wrapper_immediate::inline_immediate_wrappers;
-use crate::wrapper_speculation::branched_writes_outside;
+use crate::wrapper_speculation::{branched_writes_outside, writes_outside_homes};
 
 pub const ALIAS_FORM_CHECKS: &str = "inline-decoder-wrappers/alias-form-checks";
 
@@ -320,12 +320,41 @@ struct VariablePlan<'a> {
 fn decoder_targets<'a>(program: &Program<'_>, cx: &Cx<'a, '_>) -> FxHashMap<SymbolId, Ident<'a>> {
     let stamped = find_stamped_named(program, cx.scoping(), is_unedited(cx));
     let mut targets: FxHashMap<SymbolId, Ident<'a>> = FxHashMap::default();
+    let mut homes: FxHashMap<SymbolId, Span> = FxHashMap::default();
     for decoder in &stamped.decoders {
         if let Some(symbol) = decoder.symbol {
             targets.insert(symbol, Ident::from_str_in(decoder.name, cx));
+            homes.insert(symbol, decoder.statement);
         }
     }
+    for symbol in written_outside_homes(program, cx.scoping(), &homes) {
+        targets.remove(&symbol);
+    }
     targets
+}
+
+fn written_outside_homes(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    homes: &FxHashMap<SymbolId, Span>,
+) -> Vec<SymbolId> {
+    let written: FxHashSet<SymbolId> = homes
+        .keys()
+        .copied()
+        .filter(|symbol| {
+            scoping
+                .get_resolved_reference_ids(*symbol)
+                .iter()
+                .any(|reference| scoping.get_reference(*reference).is_write())
+        })
+        .collect();
+    if written.is_empty() {
+        return Vec::new();
+    }
+    writes_outside_homes(program, scoping, &written, homes)
+        .into_iter()
+        .map(|(symbol, _)| symbol)
+        .collect()
 }
 
 fn alias_target<'a>(

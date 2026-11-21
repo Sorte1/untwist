@@ -107,7 +107,7 @@ pub(crate) fn declared_by_function(scoping: &Scoping, symbol: SymbolId) -> bool 
             .is_var()
 }
 
-fn writes_outside_homes(
+pub(crate) fn writes_outside_homes(
     program: &Program<'_>,
     scoping: &Scoping,
     candidates: &FxHashSet<SymbolId>,
