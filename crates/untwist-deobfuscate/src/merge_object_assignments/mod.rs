@@ -628,10 +628,18 @@ pub struct MergeObjectAssignments {
     resolved: FxHashSet<SymbolId>,
     memo: FxHashMap<SymbolId, bool>,
     hazard: bool,
+    literal_heads: bool,
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
     Box::new(MergeObjectAssignments::default())
+}
+
+pub fn boxed_with_literal_heads<'a>() -> Box<dyn Pass<'a> + 'a> {
+    Box::new(MergeObjectAssignments {
+        literal_heads: true,
+        ..MergeObjectAssignments::default()
+    })
 }
 
 impl<'a> Pass<'a> for MergeObjectAssignments {
@@ -684,7 +692,12 @@ impl<'a> Pass<'a> for MergeObjectAssignments {
         if self.hazard {
             return;
         }
-        let folded = fold_assignments(stmts, &mut self.folded, &self.resolved, cx);
+        let folded = fold_assignments(
+            stmts,
+            &mut self.folded,
+            (&self.resolved, self.literal_heads),
+            cx,
+        );
         cx.changed_by(folded);
     }
 }

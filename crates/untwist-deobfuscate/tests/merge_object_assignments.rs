@@ -963,3 +963,45 @@ fn a_top_level_object_of_a_classic_script_stays_declared_in_the_default_lane() {
     );
     assert_eq!(code.trim(), "const o = { a: 1 };\nuse(o);");
 }
+
+fn run_literal_heads<'a>(alloc: &'a Allocator, source: &'a str) -> String {
+    common::run_ctors(
+        alloc,
+        source,
+        &[untwist_deobfuscate::merge_object_assignments::boxed_with_literal_heads],
+    )
+    .0
+}
+
+const HEADED: &str = "function f() {\n  const o = { a: \"x\" };\n  o.b = 1;\n  o.c = \"y\";\n  return o;\n}\nconsole.log(f());\n";
+
+#[test]
+fn the_default_pass_leaves_a_literal_that_already_has_keys_alone() {
+    let alloc = Allocator::default();
+    let (out, _) = run_with_notes(&alloc, HEADED);
+    assert!(out.contains("o.b = 1;"), "{out}");
+}
+
+#[test]
+fn the_literal_heads_pass_folds_assignments_into_a_literal_with_keys() {
+    let alloc = Allocator::default();
+    let out = run_literal_heads(&alloc, HEADED);
+    assert!(!out.contains("o.b = 1;"), "{out}");
+    assert!(out.contains("c: \"y\""), "{out}");
+}
+
+#[test]
+fn a_head_with_an_accessor_keeps_its_assignments() {
+    let alloc = Allocator::default();
+    let source = HEADED.replacen("{ a: \"x\" }", "{ set b(v) {} }", 1);
+    let out = run_literal_heads(&alloc, &source);
+    assert!(out.contains("o.b = 1;"), "{out}");
+}
+
+#[test]
+fn a_head_that_sets_the_prototype_keeps_its_assignments() {
+    let alloc = Allocator::default();
+    let source = HEADED.replacen("{ a: \"x\" }", "{ __proto__: p }", 1);
+    let out = run_literal_heads(&alloc, &source);
+    assert!(out.contains("o.b = 1;"), "{out}");
+}

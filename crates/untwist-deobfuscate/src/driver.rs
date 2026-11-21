@@ -862,6 +862,25 @@ fn unguard_rotators<'a>(
     (sem, report.total_changes > 0)
 }
 
+fn fold_external_key_objects<'a>(
+    alloc: &'a Allocator,
+    program: &mut Program<'a>,
+    sem: Semantics,
+    opts: &PassOptions,
+    aggregate: &Aggregate,
+) -> (Semantics, bool) {
+    if !opts.unsafe_transforms || !aggregate.notes.holds_message(notes::NO_LITERAL_INITIALISER) {
+        return (sem, false);
+    }
+    let ctors: [PassCtor<'a>; 2] = [
+        crate::merge_object_assignments::boxed_with_literal_heads,
+        object_props::boxed,
+    ];
+    let mut group = group_of(&ctors, opts.clone());
+    let (sem, report) = run_to_fixpoint(alloc, program, sem, &mut group);
+    (sem, report.total_changes > 0)
+}
+
 fn run_rounds<'a>(
     alloc: &'a Allocator,
     program: &mut Program<'a>,
@@ -886,6 +905,12 @@ fn run_rounds<'a>(
             false => (sem, false),
         };
         sem = next;
+        let (next, folded) = match changes == 0 && !retry && !unguarded {
+            true => fold_external_key_objects(alloc, program, sem, opts, aggregate),
+            false => (sem, false),
+        };
+        sem = next;
+        let unguarded = unguarded || folded;
         if changes == 0 && !retry && !unguarded {
             opts.defer_disabled.set(disabled);
             return sem;
