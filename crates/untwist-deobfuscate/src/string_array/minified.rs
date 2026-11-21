@@ -11,7 +11,7 @@ use untwist_core::semantic::is_hoisted_block_function;
 
 use super::checksum::{parsed_statement, sees_its_parameters, unused_name};
 use super::inlined::used_only_in_with;
-use super::moved::disposes;
+use super::moved::{disposes, loop_aware_visits};
 use super::{array_literal, match_string_array};
 use crate::array_rotator::is_infinite_rotator_loop;
 use crate::mutants::minified_rotators_trusted;
@@ -546,6 +546,7 @@ struct Normalise<'c, 'a, 'x> {
     cx: &'c Cx<'a, 'x>,
     changed: usize,
     dynamic: std::cell::OnceCell<DynamicScopes>,
+    looped: bool,
 }
 
 impl<'a> Normalise<'_, 'a, '_> {
@@ -717,7 +718,9 @@ impl<'a> Normalise<'_, 'a, '_> {
     }
 
     fn function_array_statements(&mut self, it: &mut AVec<'a, Statement<'a>>, array: &str) {
-        self.wrap_loop(it, array);
+        if !self.looped {
+            self.wrap_loop(it, array);
+        }
         let splits = it.iter().any(|stmt| {
             declaration_led_by_rotator(stmt, array) || statement_led_by_rotator(stmt, array)
         });
@@ -748,6 +751,8 @@ impl<'a> Normalise<'_, 'a, '_> {
 }
 
 impl<'a> VisitMut<'a> for Normalise<'_, 'a, '_> {
+    loop_aware_visits!();
+
     fn visit_statements(&mut self, it: &mut AVec<'a, Statement<'a>>) {
         if let Some(array) = it.iter().find_map(minified_array_name).map(str::to_string) {
             let splits = it.iter().any(|stmt| {
@@ -776,6 +781,7 @@ pub(super) fn normalise_minified<'a>(program: &mut Program<'a>, cx: &Cx<'a, '_>)
         cx,
         changed: 0,
         dynamic: std::cell::OnceCell::new(),
+        looped: false,
     };
     normalise.visit_program(program);
     normalise.changed

@@ -1057,6 +1057,42 @@ fn a_cookie_block_in_the_obfuscator_shape_is_still_decoded_in_both_lanes() {
     }
 }
 
+const MOVED_VARS_IN_LOOPS_AND_KEPT_WRITES: &[&str] = &[
+    "ox2d4d-g1-b-d1",
+    "ox2d4d-g1-b-d2",
+    "ox2d4d-g1-b-d3",
+    "ox2d4d-g1-b-s1",
+    "ox2d4d-g1-b-s2",
+    "ox2d4d-g1-b-s3",
+    "ox2d4d-g1-b-s5",
+    "ox2d4d-g1-b-s6",
+    "ox2d4d-g1-block",
+    "ox2d4d-g1-c-l1",
+    "ox2d4d-g1-c-l3",
+    "ox2d4d-g1-called",
+    "ox2d4d-g1-function-array",
+    "ox2d4d-g1-k-a2",
+    "ox2d4d-g1-k-a4",
+    "ox2d4d-g1-k-d1",
+    "ox2d4d-g1-k-d2",
+    "ox2d4d-g1-k-d4",
+    "ox2d4d-g2-c-a2",
+    "ox2d4d-g2-c-a3",
+    "ox2d4d-g2-c-a4",
+    "ox2d4d-g2-c-a5",
+    "ox2d4d-g2-c-a6",
+    "ox2d4d-g2-c-a7",
+    "ox2d4d-g2-c-a7c",
+];
+
+#[test]
+fn a_wrap_inside_a_loop_or_over_a_binding_that_is_not_a_plain_var_prints_like_node_in_both_lanes() {
+    prints_like_node_in(
+        MOVED_VARS_IN_LOOPS_AND_KEPT_WRITES,
+        &[default_code, unsafe_lane],
+    );
+}
+
 const SHARED_CONTROLLERS_AND_LIVE_CALLBACKS: &[&str] = &[
     "d6b-f1a", "d6b-f1b", "d6b-f1c", "d6b-f1d", "d6b-f1e", "d6b-f1f", "d6b-f1g", "d6b-f1h",
     "d6b-f2a", "d6b-p1a", "d6b-p1b", "d6b-p1c", "d6b-p3",
