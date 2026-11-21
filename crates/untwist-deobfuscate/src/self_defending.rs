@@ -1743,7 +1743,15 @@ fn is_empty_shell(stmt: &Statement<'_>) -> bool {
         && function
             .body
             .as_ref()
-            .is_some_and(|body| body.directives.is_empty() && body.statements.is_empty())
+            .is_some_and(|body| body.directives.is_empty() && all_empty(&body.statements))
+}
+
+fn all_empty(statements: &[Statement<'_>]) -> bool {
+    statements.iter().all(|stmt| match stmt {
+        Statement::EmptyStatement(_) => true,
+        Statement::BlockStatement(block) => all_empty(&block.body),
+        _ => false,
+    })
 }
 
 fn remove_emptied_shells<'a>(
