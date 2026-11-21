@@ -327,7 +327,7 @@ fn decoder_targets<'a>(program: &Program<'_>, cx: &Cx<'a, '_>) -> FxHashMap<Symb
             homes.insert(symbol, decoder.statement);
         }
     }
-    for symbol in written_outside_homes(program, cx.scoping(), &homes) {
+    for symbol in written_outside_homes(program, cx, &homes) {
         targets.remove(&symbol);
     }
     targets
@@ -335,9 +335,10 @@ fn decoder_targets<'a>(program: &Program<'_>, cx: &Cx<'a, '_>) -> FxHashMap<Symb
 
 fn written_outside_homes(
     program: &Program<'_>,
-    scoping: &Scoping,
+    cx: &Cx<'_, '_>,
     homes: &FxHashMap<SymbolId, Span>,
 ) -> Vec<SymbolId> {
+    let scoping = cx.scoping();
     let written: FxHashSet<SymbolId> = homes
         .keys()
         .copied()
@@ -351,9 +352,14 @@ fn written_outside_homes(
     if written.is_empty() {
         return Vec::new();
     }
+    let speculated = match cx.opts.unsafe_transforms && crate::legacy_reach::speculates_escapes() {
+        true => branched_writes_outside(program, scoping, &written, homes),
+        false => FxHashMap::default(),
+    };
     writes_outside_homes(program, scoping, &written, homes)
         .into_iter()
         .map(|(symbol, _)| symbol)
+        .filter(|symbol| !speculated.contains_key(symbol))
         .collect()
 }
 
