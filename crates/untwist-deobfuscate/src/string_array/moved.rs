@@ -161,3 +161,64 @@ pub(super) fn never_rebound(scoping: &Scoping, symbol: SymbolId) -> bool {
             .iter()
             .all(|reference| !scoping.get_reference(*reference).is_write())
 }
+
+macro_rules! loop_aware_visits {
+    () => {
+        fn visit_function(
+            &mut self,
+            it: &mut oxc_ast::ast::Function<'a>,
+            flags: oxc_syntax::scope::ScopeFlags,
+        ) {
+            let was = std::mem::replace(&mut self.looped, false);
+            oxc_ast_visit::walk_mut::walk_function(self, it, flags);
+            self.looped = was;
+        }
+
+        fn visit_arrow_function_expression(
+            &mut self,
+            it: &mut oxc_ast::ast::ArrowFunctionExpression<'a>,
+        ) {
+            let was = std::mem::replace(&mut self.looped, false);
+            oxc_ast_visit::walk_mut::walk_arrow_function_expression(self, it);
+            self.looped = was;
+        }
+
+        fn visit_static_block(&mut self, it: &mut oxc_ast::ast::StaticBlock<'a>) {
+            let was = std::mem::replace(&mut self.looped, false);
+            oxc_ast_visit::walk_mut::walk_static_block(self, it);
+            self.looped = was;
+        }
+
+        fn visit_for_statement(&mut self, it: &mut oxc_ast::ast::ForStatement<'a>) {
+            let was = std::mem::replace(&mut self.looped, true);
+            oxc_ast_visit::walk_mut::walk_for_statement(self, it);
+            self.looped = was;
+        }
+
+        fn visit_for_in_statement(&mut self, it: &mut oxc_ast::ast::ForInStatement<'a>) {
+            let was = std::mem::replace(&mut self.looped, true);
+            oxc_ast_visit::walk_mut::walk_for_in_statement(self, it);
+            self.looped = was;
+        }
+
+        fn visit_for_of_statement(&mut self, it: &mut oxc_ast::ast::ForOfStatement<'a>) {
+            let was = std::mem::replace(&mut self.looped, true);
+            oxc_ast_visit::walk_mut::walk_for_of_statement(self, it);
+            self.looped = was;
+        }
+
+        fn visit_while_statement(&mut self, it: &mut oxc_ast::ast::WhileStatement<'a>) {
+            let was = std::mem::replace(&mut self.looped, true);
+            oxc_ast_visit::walk_mut::walk_while_statement(self, it);
+            self.looped = was;
+        }
+
+        fn visit_do_while_statement(&mut self, it: &mut oxc_ast::ast::DoWhileStatement<'a>) {
+            let was = std::mem::replace(&mut self.looped, true);
+            oxc_ast_visit::walk_mut::walk_do_while_statement(self, it);
+            self.looped = was;
+        }
+    };
+}
+
+pub(super) use loop_aware_visits;

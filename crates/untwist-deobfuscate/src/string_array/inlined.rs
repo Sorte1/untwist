@@ -15,7 +15,7 @@ use super::cookie_wrap::wrap_inlined_cookie;
 use super::for_init::hoist_decoded_arrays;
 use super::legacy::{incremented, is_countdown, literal_arithmetic, predecrements, pushes_shifted};
 use super::minified::{closed_initialisers, closed_loop};
-use super::moved::never_rebound;
+use super::moved::{loop_aware_visits, never_rebound};
 use super::single_use::declare_single_use_decoder;
 use super::{array_declaration, array_literal};
 use crate::array_rotator::is_infinite_rotator_loop;
@@ -770,12 +770,13 @@ fn function_body<'k, 'a>(
     Some(&mut function.body.as_mut()?.statements)
 }
 
-fn plan(body: &[Statement<'_>], scoping: &Scoping) -> Option<Plan> {
+fn plan(body: &[Statement<'_>], scoping: &Scoping, looped: bool) -> Option<Plan> {
     (0..body.len()).find_map(|index| {
+        let moving =
+            || checksum_plan(body, index, scoping).or_else(|| called_plan(body, index, scoping));
         assigned_plan(body, index, scoping)
             .or_else(|| loop_plan(body, index, scoping))
-            .or_else(|| checksum_plan(body, index, scoping))
-            .or_else(|| called_plan(body, index, scoping))
+            .or_else(|| (!looped).then(moving).flatten())
     })
 }
 
@@ -879,11 +880,12 @@ fn declares_only(stmt: &Statement<'_>, name: &str) -> bool {
 struct Inline<'c, 'a, 'x> {
     cx: &'c Cx<'a, 'x>,
     changed: usize,
+    looped: bool,
 }
 
 impl<'a> Inline<'_, 'a, '_> {
     fn rewrite_list(&mut self, it: &mut AVec<'a, Statement<'a>>) -> usize {
-        if let Some(plan) = plan(it, self.cx.scoping()) {
+        if let Some(plan) = plan(it, self.cx.scoping(), self.looped) {
             let rewritten = match plan.kind {
                 Kind::Assigned => rewrite(it, &plan, self.cx),
                 Kind::Loop | Kind::LoopWithArray => rewrite_loop(it, &plan, self.cx),
@@ -891,6 +893,9 @@ impl<'a> Inline<'_, 'a, '_> {
                 Kind::Called => rewrite_called(it, &plan, self.cx),
             };
             return usize::from(rewritten);
+        }
+        if self.looped {
+            return hoist_decoded_arrays(it, self.cx);
         }
         if wrap_inlined_cookie(it, self.cx) {
             return 1;
@@ -903,6 +908,8 @@ impl<'a> Inline<'_, 'a, '_> {
 }
 
 impl<'a> VisitMut<'a> for Inline<'_, 'a, '_> {
+    loop_aware_visits!();
+
     fn visit_function_body(&mut self, it: &mut FunctionBody<'a>) {
         let declared = declare_single_use_decoder(&mut it.statements, self.cx);
         if declared > 0 {
@@ -923,7 +930,11 @@ impl<'a> VisitMut<'a> for Inline<'_, 'a, '_> {
 }
 
 pub(super) fn inline_assigned_rotators<'a>(program: &mut Program<'a>, cx: &Cx<'a, '_>) -> usize {
-    let mut inline = Inline { cx, changed: 0 };
+    let mut inline = Inline {
+        cx,
+        changed: 0,
+        looped: false,
+    };
     inline.visit_program(program);
     inline.changed
 }

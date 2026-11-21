@@ -306,6 +306,26 @@ fn rotator_of(
     declared(alias + 1).or_else(|| (array + 1..alias).find_map(declared))
 }
 
+fn declared_by_var_in(body: &[Statement<'_>], scoping: &Scoping, symbol: SymbolId) -> bool {
+    let declared = scoping.symbol_span(symbol);
+    let binds = |declarator: &VariableDeclarator<'_>| {
+        matches!(&declarator.id, BindingPattern::BindingIdentifier(id)
+            if id.symbol_id.get() == Some(symbol) && id.span == declared)
+    };
+    scoping.symbol_redeclarations(symbol).is_empty()
+        && body.iter().any(|stmt| {
+            matches!(stmt, Statement::VariableDeclaration(declaration)
+                if declaration.kind == VariableDeclarationKind::Var
+                    && declaration.declarations.iter().any(binds))
+        })
+}
+
+fn declared_inside(stmt: &Statement<'_>, scoping: &Scoping, symbol: SymbolId) -> bool {
+    let declared = scoping.symbol_span(symbol);
+    let span = stmt.span();
+    span.start <= declared.start && declared.end <= span.end
+}
+
 fn plan_at(body: &[Statement<'_>], array: usize, scoping: &Scoping) -> Option<Plan> {
     let (array_name, length) = array_declaration(&body[array])?;
     let array_symbol = declaration_symbol(&body[array])?;
@@ -355,7 +375,16 @@ fn plan_at(body: &[Statement<'_>], array: usize, scoping: &Scoping) -> Option<Pl
     } else {
         in_statements(alias_symbol, &[alias, rotator.at])
     };
+    let plain = (direct || declared_by_var_in(body, scoping, alias_symbol))
+        && holder_symbols
+            .iter()
+            .all(|symbol| declared_by_var_in(body, scoping, *symbol))
+        && owned
+            .iter()
+            .skip(holder_symbols.len())
+            .all(|symbol| declared_inside(&body[cookie], scoping, *symbol));
     let sealed = passed
+        && plain
         && in_statements(rotator.symbol, &rotator_uses)
         && holder_symbols
             .iter()
