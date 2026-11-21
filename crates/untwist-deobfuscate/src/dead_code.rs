@@ -409,6 +409,24 @@ fn keep_braced<'a>(
     true
 }
 
+fn global_read_within(
+    scoping: &Scoping,
+    name: &str,
+    outer: ScopeId,
+    dropped: &FxHashSet<ReferenceId>,
+) -> bool {
+    let Some(references) = scoping.root_unresolved_references().get(name) else {
+        return false;
+    };
+    references
+        .iter()
+        .filter(|reference| !dropped.contains(*reference))
+        .any(|reference| {
+            let site = scoping.get_reference(*reference).scope_id();
+            scoping.scope_ancestors(site).any(|scope| scope == outer)
+        })
+}
+
 fn has_with(scoping: &Scoping) -> bool {
     scoping
         .scope_descendants_from_root()
@@ -454,6 +472,7 @@ pub struct DeadCode<'a> {
     callees: Vec<Span>,
     kept_vars: FxHashSet<Span>,
     fresh_vars: FxHashSet<Span>,
+    dropped: FxHashSet<ReferenceId>,
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
@@ -574,6 +593,7 @@ impl<'a> DeadCode<'a> {
         }
         let names = still_needed(hoisted.names, dropped, cx.scoping());
         let kept_span = dropped.map_or(node.span, GetSpan::span);
+        self.dropped.extend(references_in(dropped));
         let IfStatement {
             consequent,
             alternate,
@@ -621,7 +641,6 @@ impl<'a> DeadCode<'a> {
         if own.is_empty() && forwarded.is_none_or(Vec::is_empty) {
             return true;
         }
-        let unresolved = scoping.root_unresolved_references();
         if outer == scoping.root_scope_id()
             || *self.eval.get_or_insert_with(|| may_call_eval(scoping))
             || *self.with.get_or_insert_with(|| has_with(scoping))
@@ -637,7 +656,8 @@ impl<'a> DeadCode<'a> {
                     .map(|(symbol, name)| (name.as_str(), *symbol)),
             )
             .all(|(name, symbol)| {
-                !scoping.symbol_flags(symbol).is_function() && !unresolved.contains_key(name)
+                !scoping.symbol_flags(symbol).is_function()
+                    && !global_read_within(scoping, name, outer, &self.dropped)
             })
     }
 
@@ -1093,6 +1113,7 @@ impl<'a> Pass<'a> for DeadCode<'a> {
         self.strict = program_is_strict(node);
         self.unsafe_lane = cx.opts.unsafe_transforms;
         self.armed = 0;
+        self.dropped.clear();
         let fresh = std::mem::take(&mut self.fresh_vars);
         self.kept_vars.extend(fresh);
     }
