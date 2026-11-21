@@ -1,7 +1,8 @@
 use untwist::{Options, Pipeline};
 use untwist_eval::mutants::{
-    read_every_void_as_undefined_for_tests, read_nested_names_as_rebound_for_tests,
-    resolve_dead_zone_names_loosely_for_tests, resolve_reset_names_loosely_for_tests,
+    leave_memoised_calls_unrepeated_for_tests, read_every_void_as_undefined_for_tests,
+    read_nested_names_as_rebound_for_tests, resolve_dead_zone_names_loosely_for_tests,
+    resolve_reset_names_loosely_for_tests,
 };
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
@@ -54,8 +55,10 @@ fn diverged_under(node: &std::path::Path, prefix: &str, switch: Switch) -> Vec<S
     let sabotage = rows_with(prefix);
     assert!(!sabotage.is_empty(), "no {prefix} rows");
     switch(true);
+    leave_memoised_calls_unrepeated_for_tests(true);
     let modes: [Mode<'_>; 1] = [("mutant", &transformed)];
     let diverged = node_rows::mismatches(node, &sabotage, &modes);
+    leave_memoised_calls_unrepeated_for_tests(false);
     switch(false);
     let names: Vec<String> = diverged
         .iter()
