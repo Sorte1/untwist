@@ -727,6 +727,35 @@ fn an_assembled_base_read_or_an_optional_method_call_prints_like_node_in_both_la
     );
 }
 
+const ASSEMBLED_BASE_CALLS_DURING_THE_RUN: &[&str] = &[
+    "cfo-r7-h1a",
+    "cfo-r7-h1b",
+    "cfo-r7-h1c",
+    "cfo-r7-h1d",
+    "cfo-r7-h1e",
+    "cfo-r7-h1f",
+    "cfo-r7-h1g",
+    "cfo-r7-h1h",
+];
+
+#[test]
+fn a_method_call_on_an_assembled_base_prints_like_node_in_both_lanes() {
+    prints_like_node_in(
+        ASSEMBLED_BASE_CALLS_DURING_THE_RUN,
+        &[default_code, unsafe_lane],
+    );
+}
+
+#[test]
+fn a_method_call_on_an_assembled_base_keeps_the_branch_in_both_lanes() {
+    for label in ASSEMBLED_BASE_CALLS_DURING_THE_RUN {
+        let source = read(&format!("{label}.js"));
+        for output in [default_code(&source), unsafe_lane(&source)] {
+            assert!(output.contains("\"changed\""), "{label}:\n{output}");
+        }
+    }
+}
+
 const BLOCK_ROTATOR_ESCAPES: &[&str] = &[
     "block-rotator-return",
     "block-rotator-loop-var",
