@@ -40,6 +40,25 @@ const DECODED_UNDER_UNSAFE: &[&str] = &[
     "alias-dead-write",
     "cfo-forwarder-arg",
     "escape-name-reused",
+    "pw011m3-class-proxy-gate",
+    "pw011m3-class-dead-wrapper",
+    "pw011m3-closures",
+    "pw011m3-greeting",
+    "pw011m3-control",
+    "pw011m3-mixed",
+    "pw011m3-generators",
+    "pw011m3-async",
+];
+
+const PW011_M3: &[&str] = &[
+    "pw011m3-class-proxy-gate",
+    "pw011m3-class-dead-wrapper",
+    "pw011m3-closures",
+    "pw011m3-greeting",
+    "pw011m3-control",
+    "pw011m3-mixed",
+    "pw011m3-generators",
+    "pw011m3-async",
 ];
 
 const FINGERPRINTS: &[&str] = &[
@@ -136,6 +155,14 @@ fn dead_code_and_control_flow_cases_print_the_source_output_under_unsafe() {
 #[test]
 fn writes_in_branches_only_decoding_proves_dead_print_like_node_by_default() {
     for label in ["alias-dead-write", "cfo-forwarder-arg"] {
+        let source = read(&format!("{label}.js"));
+        prints_the_same(&source, &default_code(&source));
+    }
+}
+
+#[test]
+fn decoders_a_proxy_or_a_removed_wrapper_held_back_print_like_node_by_default() {
+    for label in PW011_M3 {
         let source = read(&format!("{label}.js"));
         prints_the_same(&source, &default_code(&source));
     }
