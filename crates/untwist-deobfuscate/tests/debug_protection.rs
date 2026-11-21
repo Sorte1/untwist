@@ -389,3 +389,32 @@ fn a_service_worker_interval_with_another_fallback_refuses_the_removal() {
     let out = run(&alloc, &source);
     assert!(out.contains("setInterval"), "{out}");
 }
+
+fn with_branch_vars(first: &str, second: &str) -> String {
+    let source = DPF
+        .replacen(
+            "      (function () {\n        return true;",
+            &format!("      {first}\n      (function () {{\n        return true;"),
+            1,
+        )
+        .replacen(
+            "      (function () {\n        return false;",
+            &format!("      {second}\n      (function () {{\n        return false;"),
+            1,
+        );
+    format!("{source}console.log(1);")
+}
+
+#[test]
+fn a_bare_var_redeclared_in_both_branches_is_still_the_protection() {
+    let alloc = Allocator::default();
+    let source = with_branch_vars("var s;", "var q;\n      var s;");
+    assert_eq!(run(&alloc, &source).trim(), "console.log(1);");
+}
+
+#[test]
+fn a_redeclared_var_with_an_initialiser_keeps_the_protection() {
+    let alloc = Allocator::default();
+    let source = with_branch_vars("var s;", "var s = 1;");
+    assert!(run(&alloc, &source).contains("debugger"));
+}

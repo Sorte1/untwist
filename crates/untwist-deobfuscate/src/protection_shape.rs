@@ -154,6 +154,8 @@ struct Shape<'k> {
     text: String,
     poisoned: bool,
     named_keys: FxHashSet<Span>,
+    skipped_redeclared: FxHashSet<SymbolId>,
+    bound_redeclared: FxHashSet<SymbolId>,
 }
 
 impl Shape<'_> {
@@ -202,6 +204,9 @@ impl Shape<'_> {
             .contains(SymbolFlags::ConstVariable)
             && self.scoping.symbol_is_mutated(symbol);
         self.poisoned |= reassigned_constant;
+        if !self.scoping.symbol_redeclarations(symbol).is_empty() {
+            self.bound_redeclared.insert(symbol);
+        }
         self.numbered('$', Slot::Symbol(symbol));
     }
 
@@ -336,7 +341,7 @@ impl Shape<'_> {
     }
 
     fn finish(self) -> Option<String> {
-        if self.poisoned {
+        if self.poisoned || !self.skipped_redeclared.is_disjoint(&self.bound_redeclared) {
             return None;
         }
         let written = self
@@ -369,8 +374,12 @@ impl<'a> VisitJs<'a> for Shape<'_> {
     }
 
     fn visit_statement(&mut self, it: &Statement<'a>) {
-        if !self.poisoned && !is_unread_bare_var(it, self.scoping) {
-            walk_js::walk_statement(self, it);
+        if self.poisoned {
+            return;
+        }
+        match unread_bare_var(it, self.scoping) {
+            Some(redeclared) => self.skipped_redeclared.extend(redeclared),
+            None => walk_js::walk_statement(self, it),
         }
     }
 
@@ -437,21 +446,39 @@ fn unbraced<'k, 'a>(mut statements: &'k [Statement<'a>]) -> &'k [Statement<'a>] 
     statements
 }
 
-fn is_unread_bare_var(stmt: &Statement<'_>, scoping: &Scoping) -> bool {
+fn is_plain_var_redeclared(symbol: SymbolId, scoping: &Scoping) -> bool {
+    scoping.symbol_flags(symbol) == SymbolFlags::FunctionScopedVariable
+        && scoping
+            .symbol_redeclarations(symbol)
+            .iter()
+            .all(|redeclaration| redeclaration.flags == SymbolFlags::FunctionScopedVariable)
+}
+
+fn unread_bare_var(stmt: &Statement<'_>, scoping: &Scoping) -> Option<Vec<SymbolId>> {
     let Statement::VariableDeclaration(declaration) = stmt else {
-        return false;
+        return None;
     };
-    declaration.kind == VariableDeclarationKind::Var
-        && declaration.declarations.iter().all(|declarator| {
-            let BindingPattern::BindingIdentifier(id) = &declarator.id else {
-                return false;
-            };
-            declarator.init.is_none()
-                && id.symbol_id.get().is_some_and(|symbol| {
-                    scoping.get_resolved_reference_ids(symbol).is_empty()
-                        && scoping.symbol_redeclarations(symbol).is_empty()
-                })
-        })
+    if declaration.kind != VariableDeclarationKind::Var {
+        return None;
+    }
+    let mut redeclared = Vec::new();
+    for declarator in &declaration.declarations {
+        let BindingPattern::BindingIdentifier(id) = &declarator.id else {
+            return None;
+        };
+        let symbol = id.symbol_id.get()?;
+        if declarator.init.is_some() || !scoping.get_resolved_reference_ids(symbol).is_empty() {
+            return None;
+        }
+        if scoping.symbol_redeclarations(symbol).is_empty() {
+            continue;
+        }
+        if !is_plain_var_redeclared(symbol, scoping) {
+            return None;
+        }
+        redeclared.push(symbol);
+    }
+    Some(redeclared)
 }
 
 impl<'a> Shape<'_> {
@@ -541,6 +568,8 @@ fn shape<'k>(
         text: String::new(),
         poisoned: false,
         named_keys: FxHashSet::default(),
+        skipped_redeclared: FxHashSet::default(),
+        bound_redeclared: FxHashSet::default(),
     };
     shape.visit_formal_parameters(&function.params);
     shape.visit_function_body(body);

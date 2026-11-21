@@ -34,6 +34,7 @@ const DECODED_UNDER_UNSAFE: &[&str] = &[
     "decoded-foreign-rotator",
     "runners-in-wrapper",
     "flattened-controller-rounds",
+    "dp-redeclared-var",
 ];
 
 const FINGERPRINTS: &[&str] = &[
