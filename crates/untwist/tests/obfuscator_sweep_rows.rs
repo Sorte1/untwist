@@ -59,6 +59,7 @@ const PW011_M3: &[&str] = &[
     "pw011m3-mixed",
     "pw011m3-generators",
     "pw011m3-async",
+    "decoder-call-throws",
 ];
 
 const FINGERPRINTS: &[&str] = &[

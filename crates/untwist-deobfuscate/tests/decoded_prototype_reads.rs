@@ -184,16 +184,10 @@ fn a_prototype_write_the_decode_never_reads_keeps_the_decodes() {
 }
 
 #[test]
-fn a_decoder_call_that_throws_refuses_the_unit() {
+fn a_decoder_call_that_throws_is_left_in_place() {
     let throwing =
         "function __DECODE_0__(c) { var e = __STRING_ARRAY__(); return e[c].charAt(0); }\n";
-    let (code, notes) = proto_notes(throwing, "0x9", "");
-    assert!(
-        notes
-            .iter()
-            .any(|note| note.contains("a decoder call threw")),
-        "{notes:?}"
-    );
+    let (code, _) = proto_notes(throwing, "0x9", "");
     assert!(code.contains("__DECODE_0__(9)"), "{code}");
 }
 
