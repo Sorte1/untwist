@@ -226,6 +226,7 @@ fn apply_decoded_values<'a>(
         return false;
     }
     let returned = values.len();
+    let thrown = evaluator.thrown_calls.len();
     let mut evaluated = 0;
     let mut inlined = true;
     for (call, value) in request.calls.iter().zip(values) {
@@ -246,7 +247,7 @@ fn apply_decoded_values<'a>(
             .substitutions
             .push((call.span, primitive_value(value)));
     }
-    decoded.budget_spent |= evaluated != returned || !inlined;
+    decoded.budget_spent |= evaluated + thrown != returned || !inlined;
     decoded.notes.extend(drained(evaluator));
     if returned != request.calls.len() {
         decoded.partial.push((returned, request.calls.len()));
@@ -519,7 +520,7 @@ fn run_decode_units<'a, 'r>(
                 }
             }
         }
-        heap.settle(&result);
+        heap.settle(&result, &evaluator.thrown_calls);
         runs.push(UnitRun {
             request,
             evaluator,

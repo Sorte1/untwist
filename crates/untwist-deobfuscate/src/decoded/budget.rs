@@ -184,9 +184,16 @@ impl InputHeap {
         evaluator
     }
 
-    pub(crate) fn settle(&mut self, result: &EvalResult<Vec<Option<Decoded>>>) {
+    pub(crate) fn settle(
+        &mut self,
+        result: &EvalResult<Vec<Option<Decoded>>>,
+        thrown: &FxHashSet<usize>,
+    ) {
         let ended_early = match result {
-            Ok(values) => values.iter().any(Option::is_none),
+            Ok(values) => values
+                .iter()
+                .enumerate()
+                .any(|(index, value)| value.is_none() && !thrown.contains(&index)),
             Err(bail) => *bail == Bail::Budget,
         };
         let over = self.ledger.as_ref().is_some_and(|ledger| ledger.is_over());
