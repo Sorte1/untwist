@@ -107,19 +107,19 @@ pub(crate) fn declared_by_function(scoping: &Scoping, symbol: SymbolId) -> bool 
             .is_var()
 }
 
-pub(crate) fn branched_writes_outside(
+fn writes_outside_homes(
     program: &Program<'_>,
     scoping: &Scoping,
     candidates: &FxHashSet<SymbolId>,
     homes: &FxHashMap<SymbolId, Span>,
-) -> FxHashMap<SymbolId, Vec<Span>> {
+) -> Vec<(SymbolId, Span)> {
     let mut writes = Writes {
         scoping,
         symbols: candidates,
         found: Vec::new(),
     };
     writes.visit_program(program);
-    let outside: Vec<(SymbolId, Span)> = writes
+    writes
         .found
         .into_iter()
         .filter(|(symbol, span)| {
@@ -127,7 +127,34 @@ pub(crate) fn branched_writes_outside(
                 .get(symbol)
                 .is_none_or(|home| span.start < home.start || home.end < span.end)
         })
-        .collect();
+        .collect()
+}
+
+pub(crate) fn guarded_writes_outside(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    candidates: &FxHashSet<SymbolId>,
+    homes: &FxHashMap<SymbolId, Span>,
+) -> FxHashSet<SymbolId> {
+    let outside = writes_outside_homes(program, scoping, candidates, homes);
+    let spans: FxHashSet<Span> = outside.iter().map(|(_, span)| *span).collect();
+    let guards = crate::dead_guards::enclosing_guards(program, &spans);
+    let mut held: FxHashSet<SymbolId> = outside.iter().map(|(symbol, _)| *symbol).collect();
+    for (symbol, span) in &outside {
+        if guards.get(span).is_none_or(Vec::is_empty) {
+            held.remove(symbol);
+        }
+    }
+    held
+}
+
+pub(crate) fn branched_writes_outside(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    candidates: &FxHashSet<SymbolId>,
+    homes: &FxHashMap<SymbolId, Span>,
+) -> FxHashMap<SymbolId, Vec<Span>> {
+    let outside = writes_outside_homes(program, scoping, candidates, homes);
     let spans: FxHashSet<Span> = outside.iter().map(|(_, span)| *span).collect();
     let branched = in_branches(program, scoping, &spans);
     let mut held: FxHashMap<SymbolId, Vec<Span>> = FxHashMap::default();

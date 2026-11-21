@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
@@ -144,6 +146,14 @@ impl<'p> Assembled<'p> {
         self.base
     }
 
+    pub(super) fn object(&self) -> &'p ObjectExpression<'p> {
+        self.object
+    }
+
+    pub(super) fn added_values(&self) -> impl Iterator<Item = &'p Expression<'p>> + '_ {
+        self.added.iter().map(|(_, value)| *value)
+    }
+
     pub(super) fn adds_keys(&self) -> bool {
         !self.added.is_empty()
     }
@@ -166,11 +176,14 @@ impl<'p> Assembled<'p> {
         object: &'p ObjectExpression<'p>,
         scoping: &Scoping,
     ) -> Option<Self> {
-        let declared_const = scoping
-            .symbol_flags(symbol)
-            .contains(SymbolFlags::ConstVariable);
-        let plain =
-            declared_const && is_constant_binding(scoping, symbol) && plain_literal_keys(object);
+        let flags = scoping.symbol_flags(symbol);
+        let nested = scoping.symbol_scope_id(symbol) != scoping.root_scope_id();
+        let declared = flags.contains(SymbolFlags::ConstVariable)
+            || (nested
+                && flags.intersects(
+                    SymbolFlags::FunctionScopedVariable | SymbolFlags::BlockScopedVariable,
+                ));
+        let plain = declared && is_constant_binding(scoping, symbol) && plain_literal_keys(object);
         plain.then(|| Self {
             root: None,
             base: symbol,
@@ -218,20 +231,55 @@ impl<'a> VisitJs<'a> for ThisFree {
     }
 }
 
-fn this_free_function(value: &Expression<'_>) -> bool {
+struct LiveThisFree<'d> {
+    dead: &'d FxHashSet<usize>,
+    scan: ThisFree,
+}
+
+impl<'a> VisitJs<'a> for LiveThisFree<'_> {
+    fn visit_statement(&mut self, it: &Statement<'a>) {
+        if !self.dead.contains(&(std::ptr::from_ref(it) as usize)) {
+            walk_js::walk_statement(self, it);
+        }
+    }
+
+    fn visit_expression(&mut self, it: &Expression<'a>) {
+        if !self.dead.contains(&(std::ptr::from_ref(it) as usize)) {
+            walk_js::walk_expression(self, it);
+        }
+    }
+
+    fn visit_this_expression(&mut self, it: &ThisExpression) {
+        self.scan.visit_this_expression(it);
+    }
+
+    fn visit_super(&mut self, it: &Super) {
+        self.scan.visit_super(it);
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.scan.visit_identifier_reference(it);
+    }
+}
+
+fn this_free_function(value: &Expression<'_>, dead: &FxHashSet<usize>) -> bool {
     let Expression::FunctionExpression(function) = value.without_parentheses() else {
         return false;
     };
     if function.r#async || function.generator {
         return false;
     }
-    let mut scan = ThisFree { found: false };
-    scan.visit_function(function, oxc_syntax::scope::ScopeFlags::Function);
-    !scan.found
+    let mut live = LiveThisFree {
+        dead,
+        scan: ThisFree { found: false },
+    };
+    live.visit_function(function, oxc_syntax::scope::ScopeFlags::Function);
+    !live.scan.found
 }
 
 struct AliasUses<'s, 'k, 'p> {
     scoping: &'s Scoping,
+    keys: &'k FxHashMap<usize, String>,
     objects: FxHashMap<SymbolId, &'k Assembled<'p>>,
     growing_bases: FxHashSet<SymbolId>,
     dead: &'k FxHashSet<usize>,
@@ -251,11 +299,25 @@ impl<'k, 'p> AliasUses<'_, 'k, 'p> {
         &self,
         expr: &'e Expression<'a>,
     ) -> Option<(&'e IdentifierReference<'a>, &'k Assembled<'p>)> {
-        let (object, _) = member_parts(expr)?;
+        let object = match expr {
+            Expression::StaticMemberExpression(member) if !member.optional => &member.object,
+            Expression::ComputedMemberExpression(member) if !member.optional => &member.object,
+            _ => return None,
+        };
         let Expression::Identifier(id) = object else {
             return None;
         };
         self.ours(id).map(|assembled| (&**id, assembled))
+    }
+
+    fn key<'e>(&'e self, expr: &'e Expression<'_>) -> Option<Cow<'e, str>> {
+        match member_parts(expr) {
+            Some((_, name)) => Some(name),
+            None => self
+                .keys
+                .get(&(std::ptr::from_ref(expr) as usize))
+                .map(|key| Cow::Borrowed(key.as_str())),
+        }
     }
 
     fn entering(&mut self, node: usize) -> bool {
@@ -269,6 +331,9 @@ impl<'k, 'p> AliasUses<'_, 'k, 'p> {
 
 impl<'a> VisitJs<'a> for AliasUses<'_, '_, '_> {
     fn visit_statement(&mut self, it: &Statement<'a>) {
+        if self.live {
+            return;
+        }
         let dead = self.entering(std::ptr::from_ref(it) as usize);
         walk_js::walk_statement(self, it);
         if dead {
@@ -277,9 +342,12 @@ impl<'a> VisitJs<'a> for AliasUses<'_, '_, '_> {
     }
 
     fn visit_expression(&mut self, it: &Expression<'a>) {
+        if self.live {
+            return;
+        }
         let dead = self.entering(std::ptr::from_ref(it) as usize);
         if let Some((id, assembled)) = self.receiver(it) {
-            let own = member_parts(it).is_some_and(|(_, name)| {
+            let own = self.key(it).is_some_and(|name| {
                 assembled.property(&name).is_some()
                     || (self.builtins_unpatched && !OBJECT_PROTOTYPE_KEYS.contains(&name.as_ref()))
             });
@@ -301,9 +369,10 @@ impl<'a> VisitJs<'a> for AliasUses<'_, '_, '_> {
             let growing = resolved(id, self.scoping)
                 .is_some_and(|symbol| self.growing_bases.contains(&symbol));
             let safe = !growing
-                && member_parts(callee)
-                    .and_then(|(_, name)| assembled.property(&name))
-                    .is_some_and(this_free_function);
+                && self
+                    .key(callee)
+                    .and_then(|name| assembled.property(&name))
+                    .is_some_and(|value| this_free_function(value, self.dead));
             if !safe {
                 self.risky.insert(address_of(id));
             }
@@ -348,7 +417,7 @@ pub(super) fn aliases_mutated_only_in_dead<'k, 'p>(
     program: &Program<'_>,
     (scoping, builtins_unpatched): (&Scoping, bool),
     used: impl Iterator<Item = (SymbolId, &'k Assembled<'p>)>,
-    dead: &FxHashSet<usize>,
+    (dead, keys): (&FxHashSet<usize>, &FxHashMap<usize, String>),
 ) -> bool
 where
     'p: 'k,
@@ -374,6 +443,7 @@ where
     }
     let mut uses = AliasUses {
         scoping,
+        keys,
         objects,
         growing_bases,
         dead,

@@ -248,6 +248,77 @@ fn guarded_decoder_escapes(
     by_unit
 }
 
+struct WrittenReferences<'s> {
+    scoping: &'s Scoping,
+    candidates: &'s FxHashSet<Span>,
+    found: FxHashSet<Span>,
+}
+
+impl<'a> oxc_ast_visit::VisitJs<'a> for WrittenReferences<'_> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        let written = it
+            .reference_id
+            .get()
+            .is_some_and(|reference| self.scoping.get_reference(reference).is_write());
+        if written && self.candidates.contains(&it.span) {
+            self.found.insert(it.span);
+        }
+    }
+}
+
+fn guarded_decoder_writes(
+    (program, scoping): (&Program<'_>, &Scoping),
+    collected: &mut Collected<'_>,
+    sites: &Sites,
+) -> FxHashMap<usize, EscapeGuards> {
+    let candidates: FxHashSet<Span> = collected
+        .decoder_values
+        .iter()
+        .map(|(_, span)| *span)
+        .collect();
+    let mut scan = WrittenReferences {
+        scoping,
+        candidates: &candidates,
+        found: FxHashSet::default(),
+    };
+    if !candidates.is_empty() {
+        oxc_ast_visit::VisitJs::visit_program(&mut scan, program);
+    }
+    if scan.found.is_empty() {
+        return FxHashMap::default();
+    }
+    let enclosing = enclosing_guards(program, &scan.found);
+    let mut unguarded: FxHashSet<usize> = FxHashSet::default();
+    let mut found: Vec<(usize, Span, Vec<BranchGuard>)> = Vec::new();
+    for (index, span) in &collected.decoder_values {
+        if !scan.found.contains(span) {
+            continue;
+        }
+        let Some((unit, _)) = sites.get(index).copied() else {
+            continue;
+        };
+        match enclosing.get(span).filter(|guards| !guards.is_empty()) {
+            Some(guards) => found.push((unit, *span, guards.clone())),
+            None => {
+                unguarded.insert(unit);
+            }
+        }
+    }
+    let mut by_unit: FxHashMap<usize, EscapeGuards> = FxHashMap::default();
+    let mut dropped: FxHashSet<Span> = FxHashSet::default();
+    for (unit, span, guards) in found {
+        if unguarded.contains(&unit) {
+            continue;
+        }
+        dropped.insert(span);
+        by_unit.entry(unit).or_default().values.push(guards);
+    }
+    collected
+        .decoder_values
+        .retain(|(_, span)| !dropped.contains(span));
+    by_unit
+}
+
 fn group_calls<'p>(calls: Vec<Call<'p>>, sites: &Sites) -> FxHashMap<usize, Vec<Call<'p>>> {
     let mut by_unit: FxHashMap<usize, Vec<Call<'p>>> = FxHashMap::default();
     for call in calls {
@@ -677,7 +748,7 @@ pub fn build_requests_in_lane<'p>(
             (decoder_spans, array_span),
         )
     } else {
-        FxHashMap::default()
+        guarded_decoder_writes((program, scoping), &mut collected, &sites)
     };
     if !collected.decoder_values.is_empty() {
         let dead = crate::removal::dead_alias_values(program, Some(scoping));
