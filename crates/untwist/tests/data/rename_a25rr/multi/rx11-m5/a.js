@@ -1,0 +1,1 @@
+var k9 = ["__pro", "to__"].join(""); Object.defineProperty("x"[k9], "trim", { value: function () { return "PATCHED"; } }); Object.defineProperty([][k9], "join", { value: function () { return "PATCHED"; } });

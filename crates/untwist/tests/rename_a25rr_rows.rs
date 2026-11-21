@@ -37,6 +37,12 @@ const UNSAFE_PREMISE_MULTI: &[(&str, RenameMode)] = &[
     ("rx9-m21", RenameMode::Smart),
 ];
 
+const UNSAFE_PREMISE_MULTI_EVERY_MODE: &[&str] = &[
+    "rx11-m1", "rx11-m2", "rx11-m3", "rx11-m4", "rx11-m5", "rx11-m6", "rx11-m7", "rx11-m8",
+    "rx11-f1a", "rx11-f1b", "rx11-f1c", "rx11-f1d", "rx11-f1e", "rx11-f1f", "rx11-f1g", "rx11-f1h",
+    "rx11-f1i", "rx11-f1j", "rx11-f1k", "rx11-f1l", "rx11-f1m", "rx11-f1x", "rx11-f1y",
+];
+
 const OBSERVED_INPUT: &str = "a.js";
 
 fn data() -> PathBuf {
@@ -210,7 +216,8 @@ fn multi_rows(unsafe_transforms: bool) -> Vec<String> {
         for (mode, rename) in RENAMES {
             let premise = UNSAFE_PREMISE_MULTI
                 .iter()
-                .any(|(label, mode)| *label == case.label && *mode == rename);
+                .any(|(label, mode)| *label == case.label && *mode == rename)
+                || UNSAFE_PREMISE_MULTI_EVERY_MODE.contains(&case.label.as_str());
             if unsafe_transforms && premise {
                 continue;
             }

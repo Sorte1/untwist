@@ -1,12 +1,21 @@
 use oxc_ast::ast::*;
 use oxc_ast::AstKind;
-use oxc_syntax::operator::BinaryOperator;
+use oxc_syntax::operator::{AssignmentOperator, BinaryOperator};
 use oxc_syntax::symbol::SymbolFlags;
 use std::borrow::Cow;
 use untwist_core::ast_util::js_text::js_text;
 use untwist_core::semantic::{is_foreign_global, observers, Observers};
 
+use super::keys::KeyProof;
 use super::{member_address, same, str_const, Walker, KIND_DEPTH};
+
+pub(super) const CHAIN_KEYS: [&str; 3] = ["__proto__", "prototype", "constructor"];
+
+pub(super) struct OpenRead<'a> {
+    object: Option<&'a Expression<'a>>,
+    key: &'a Expression<'a>,
+    rewritten: Option<(oxc_syntax::symbol::SymbolId, oxc_allocator::Address)>,
+}
 
 const PROTOTYPE_READERS: [&str; 5] = [
     "__proto__",
@@ -39,9 +48,19 @@ impl<'s, 'a> Walker<'s, 'a> {
             AstKind::ComputedMemberExpression(member) => {
                 match str_const(&member.expression, self.resolve, KIND_DEPTH) {
                     Some(key) => self.member_obtains(&key, &member.object),
-                    None => self.constructor_name(&member.object),
+                    None => {
+                        self.note_open_read(Some(&member.object), &member.expression);
+                        self.constructor_name(&member.object)
+                    }
                 }
             }
+            AstKind::BindingProperty(property) if property.computed => {
+                self.note_open_key(&property.key)
+            }
+            AstKind::AssignmentTargetPropertyProperty(property) if property.computed => {
+                self.note_open_key(&property.name)
+            }
+            AstKind::CallExpression(call) => self.keyed_get(call),
             AstKind::StringLiteral(text) => {
                 !self.member_key_position()
                     && !self.decoded_array_text(text.span)
@@ -57,6 +76,91 @@ impl<'s, 'a> Walker<'s, 'a> {
             _ => false,
         };
         self.chains_open |= obtained;
+    }
+
+    fn note_open_read(&mut self, object: Option<&'a Expression<'a>>, key: &'a Expression<'a>) {
+        if !self.plain_store_target() && !self.discarded_read() {
+            let read = self.open_read(object, key);
+            self.open_reads.push(read);
+        }
+    }
+
+    fn note_open_key(&mut self, key: &'a PropertyKey<'a>) -> bool {
+        if let Some(key) = key.as_expression() {
+            let read = self.open_read(None, key);
+            self.open_reads.push(read);
+        }
+        false
+    }
+
+    fn keyed_get(&mut self, call: &'a CallExpression<'a>) -> bool {
+        let Some(member) = call.callee.without_parentheses().as_member_expression() else {
+            return false;
+        };
+        if super::member_key(member, self.resolve).as_deref() != Some("get") {
+            return false;
+        }
+        let spread = call.arguments.iter().take(2).any(Argument::is_spread);
+        match call.arguments.get(1).and_then(Argument::as_expression) {
+            _ if spread => true,
+            Some(_) if self.discarded_read() => false,
+            Some(key) => {
+                let object = call.arguments.first().and_then(Argument::as_expression);
+                let read = self.open_read(object, key);
+                self.open_reads.push(read);
+                false
+            }
+            None => false,
+        }
+    }
+
+    fn open_read(
+        &self,
+        object: Option<&'a Expression<'a>>,
+        key: &'a Expression<'a>,
+    ) -> OpenRead<'a> {
+        OpenRead {
+            object,
+            key,
+            rewritten: self.rewritten_before_here(key),
+        }
+    }
+
+    fn plain_store_target(&self) -> bool {
+        let at = self.stack.len() - 1;
+        let Some((up, child)) = self.parent(at) else {
+            return false;
+        };
+        matches!(self.stack[up], AstKind::AssignmentExpression(assign)
+            if assign.operator == AssignmentOperator::Assign
+                && assign.left.as_member_expression().is_some_and(|target| member_address(target) == child))
+    }
+
+    fn settle_open_reads(&mut self) {
+        let reads = std::mem::take(&mut self.open_reads);
+        let trust_symbol = std::mem::replace(&mut self.trust_symbol, false);
+        self.chains_open |= reads.iter().any(|read| self.open_read_obtains(read));
+        self.trust_symbol = trust_symbol;
+    }
+
+    fn open_read_obtains(&self, read: &OpenRead<'a>) -> bool {
+        if let Some(text) = self.key_text(read.key, KIND_DEPTH) {
+            return CHAIN_KEYS.contains(&text.as_str());
+        }
+        if self.numeric_key(read.key, KIND_DEPTH) {
+            return false;
+        }
+        if read
+            .rewritten
+            .is_some_and(|(symbol, function)| self.numeric_rewrite(symbol, function))
+        {
+            return false;
+        }
+        if self.safe_key_param(read.key) {
+            return false;
+        }
+        read.object
+            .is_none_or(|object| matches!(self.key_proof(object, read.key), KeyProof::Open))
     }
 
     fn member_obtains(&self, key: &str, object: &Expression<'a>) -> bool {
@@ -193,6 +297,9 @@ impl<'s, 'a> Walker<'s, 'a> {
     }
 
     pub(super) fn settle_chains(&mut self, texts_run: bool) {
+        if !self.chains_open {
+            self.settle_open_reads();
+        }
         self.chains_open |= CONSTRUCTORS.iter().any(|root| is_foreign_global(root));
         self.builtins_trusted = observers() == Observers::None || !(self.chains_open || texts_run);
         self.settle_proto_stores();
