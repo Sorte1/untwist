@@ -19,6 +19,7 @@ mod modules;
 mod numeric;
 mod parts;
 mod reach;
+mod statics;
 mod targets;
 mod windows;
 
@@ -200,6 +201,7 @@ struct Scan<'s> {
     writes_only: bool,
     unknown_keys_plain: bool,
     first_only: bool,
+    statics: bool,
     skipped: Option<&'s FxHashSet<Span>>,
     module: bool,
     frames: Vec<Frame>,
@@ -285,8 +287,30 @@ pub fn scan_outside(
     reliance: &Reliance,
     skipped: &FxHashSet<Span>,
 ) -> Builtins {
+    outside(program, scoping, module, reliance, skipped, false)
+}
+
+pub fn scan_outside_with_regexp_statics(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    module: bool,
+    reliance: &Reliance,
+    skipped: &FxHashSet<Span>,
+) -> Builtins {
+    outside(program, scoping, module, reliance, skipped, true)
+}
+
+fn outside(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    module: bool,
+    reliance: &Reliance,
+    skipped: &FxHashSet<Span>,
+    statics: bool,
+) -> Builtins {
     let mut scan = Scan::new(program, scoping, module, reliance);
     scan.skipped = Some(skipped);
+    scan.statics = statics;
     scan.visit_program(program);
     scan.settle_window_flows();
     scan.verdict
@@ -320,6 +344,7 @@ impl<'s> Scan<'s> {
             writes_only: false,
             unknown_keys_plain: false,
             first_only: false,
+            statics: false,
             skipped: None,
             module,
             frames: vec![Frame::of_program(program, module)],
@@ -938,6 +963,7 @@ impl<'a> VisitJs<'a> for Scan<'_> {
 
     fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
         let key = Key::Name(it.property.name.as_str());
+        self.judge_statics(&it.object, key);
         if self.names_a_loader(key) {
             self.not_allowed();
         }
@@ -948,6 +974,7 @@ impl<'a> VisitJs<'a> for Scan<'_> {
 
     fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
         let key = self.sharpen(key_of(&it.expression));
+        self.judge_statics(&it.object, key);
         if self.names_a_loader(key) {
             self.not_allowed();
         }

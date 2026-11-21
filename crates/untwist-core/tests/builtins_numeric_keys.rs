@@ -22,6 +22,7 @@ fn a_key_proven_numeric_reaches_no_prototype() {
         "function f(a) { for (let i = 0; i < a.length; i++) g(a[i]); }",
         "function f(a, n) { let i = n - 1; i *= 2; g(a[i]); }",
         "function f(a, n) { let i = 0; i += 1; g(a[i + 1]); }",
+        "function f(a) { var k; g(a[k]); }",
         "function f(a, n) { g(a[n | 0], a[-n], a[~n], a[!n], a[n++]); }",
         "function f(p, q) { p = p - 277; var c = d(); return c[p]; }",
         "function f(a, c) { g(a[c -= 0], a[c = +c]); }",
@@ -50,6 +51,19 @@ fn a_key_that_may_be_a_string_still_counts() {
         "function f(a, s, n) { g(a[s + (n | 0)]); }",
         "var a = [1]; var i = 0; window.i = k; g(a[i]);",
         "var a = [1]; var i = 0; this[k] = 1; g(a[i]);",
+        "function f(a) { var arguments; g(a[arguments]); }",
+        "function f(a) { { var arguments; } g(a[arguments]); }",
+        "function f(a) { for (var arguments; ;) return a[arguments]; }",
+        "function f(a) { g(a[arguments]); var arguments = 0; }",
+        "var exports; g(a[exports]);",
+        "var module; g(a[module]);",
+        "g(a[require]); var require = 0;",
+        "function f(a) { var k; { function k() {} } g(a[k]); }",
+        "function f(a) { var k = 0; if (1) function k() {} g(a[k]); }",
+        "function f(a) { var k = 0; switch (1) { case 1: function k() {} } g(a[k]); }",
+        "function f(a) { var k; { { function k() {} } } g(a[k + ''] ); }",
+        "function f(a) { var k; try {} catch (e) { function k() {} } g(a[k]); }",
+        "var f = (a) => { var k; { function k() {} } g(a[k]); };",
     ] {
         assert_ne!(verdict(source), Builtins::Intact, "{source}");
     }

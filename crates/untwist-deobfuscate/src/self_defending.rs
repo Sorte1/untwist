@@ -17,7 +17,7 @@ use untwist_core::ast_util::matcher::{anonymous_function, call_parts, iife};
 use untwist_core::ast_util::naming_slot::without_unnamed;
 use untwist_core::ast_util::prop::{identifier_name, member_parts};
 use untwist_core::pass::{Cx, Interest, Pass};
-use untwist_core::semantic::builtins::{scan_outside, Builtins, Reliance};
+use untwist_core::semantic::builtins::{scan_outside_with_regexp_statics, Builtins, Reliance};
 use untwist_core::semantic::{has_module_syntax, AnnexBWrites};
 
 use crate::bindings::{
@@ -1620,7 +1620,8 @@ fn callback_built_ins_intact<'a>(program: &Program<'a>, spans: &[Span], cx: &Cx<
     let module = has_module_syntax(program);
     let mut skipped: FxHashSet<Span> = spans.iter().copied().collect();
     skipped.extend(crate::debug_protection::planned_removal(program, spans, cx));
-    scan_outside(program, cx.scoping(), module, &CALLBACK_RELIES_ON, &skipped) == Builtins::Intact
+    scan_outside_with_regexp_statics(program, cx.scoping(), module, &CALLBACK_RELIES_ON, &skipped)
+        == Builtins::Intact
 }
 
 #[derive(Default)]

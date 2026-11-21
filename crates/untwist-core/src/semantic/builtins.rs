@@ -5,7 +5,9 @@ use crate::semantic::has_module_syntax;
 
 mod scan;
 
-pub use scan::{intact, scan, scan_outside, scan_with_unknown_keys_plain};
+pub use scan::{
+    intact, scan, scan_outside, scan_outside_with_regexp_statics, scan_with_unknown_keys_plain,
+};
 
 use oxc_semantic::Scoping;
 
