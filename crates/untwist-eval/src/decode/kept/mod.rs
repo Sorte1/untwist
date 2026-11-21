@@ -164,7 +164,7 @@ fn tail<T: Clone>(all: &[T], from: usize) -> Vec<T> {
 
 fn settled(evaluator: &InterpEvaluator, result: &UnitResult) -> Option<KeptValues> {
     let ledger = evaluator.heap.as_ref();
-    if ledger.is_some_and(|ledger| ledger.is_over()) {
+    if !evaluator.thrown_calls.is_empty() || ledger.is_some_and(|ledger| ledger.is_over()) {
         return None;
     }
     KeptValues::of(result.as_ref().ok()?, ledger)

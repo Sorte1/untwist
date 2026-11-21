@@ -184,9 +184,16 @@ impl InputHeap {
         evaluator
     }
 
-    pub(crate) fn settle(&mut self, result: &EvalResult<Vec<Option<Decoded>>>) {
+    pub(crate) fn settle(
+        &mut self,
+        result: &EvalResult<Vec<Option<Decoded>>>,
+        thrown: &FxHashSet<usize>,
+    ) {
         let ended_early = match result {
-            Ok(values) => values.iter().any(Option::is_none),
+            Ok(values) => values
+                .iter()
+                .enumerate()
+                .any(|(index, value)| value.is_none() && !thrown.contains(&index)),
             Err(bail) => *bail == Bail::Budget,
         };
         let over = self.ledger.as_ref().is_some_and(|ledger| ledger.is_over());
@@ -206,6 +213,7 @@ impl InputHeap {
 #[cfg(test)]
 mod tests {
     use super::InputHeap;
+    use rustc_hash::FxHashSet;
     use untwist_core::pass::InputRoom;
     use untwist_eval::bail::Bail;
     use untwist_eval::heap::reserve;
@@ -230,7 +238,10 @@ mod tests {
         heap.start(0, None, Some(&room));
         let text = untwist_eval::decode::Decoded::Str("ab".into());
         assert_eq!(super::printed_bytes(&text), 2 * 6 + 2);
-        heap.settle(&Err(untwist_eval::bail::Bail::Budget));
+        heap.settle(
+            &Err(untwist_eval::bail::Bail::Budget),
+            &FxHashSet::default(),
+        );
         assert!(heap.inline(&text));
         assert_eq!(room.print(), 6);
         assert!(!heap.inline(&text));
@@ -243,9 +254,22 @@ mod tests {
     #[test]
     fn a_unit_that_ends_on_the_budget_spends_the_input() {
         let mut heap = InputHeap::default();
-        heap.settle(&Ok(vec![Some(untwist_eval::decode::Decoded::Null)]));
+        heap.settle(
+            &Ok(vec![Some(untwist_eval::decode::Decoded::Null)]),
+            &FxHashSet::default(),
+        );
         assert!(!heap.is_spent());
-        heap.settle(&Err(Bail::Budget));
+        heap.settle(&Err(Bail::Budget), &FxHashSet::default());
+        assert!(heap.is_spent());
+    }
+
+    #[test]
+    fn a_call_left_undecoded_because_it_threw_does_not_spend_the_input() {
+        let mut heap = InputHeap::default();
+        let values = Ok(vec![Some(untwist_eval::decode::Decoded::Null), None]);
+        heap.settle(&values, &FxHashSet::from_iter([1]));
+        assert!(!heap.is_spent());
+        heap.settle(&values, &FxHashSet::default());
         assert!(heap.is_spent());
     }
 }

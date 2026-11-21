@@ -1,9 +1,11 @@
 mod common;
 
+use rustc_hash::FxHashSet;
 use untwist_eval::budget::Budget;
 use untwist_eval::decode::{
     all_decoded, decoded_to_expression, Decoded, Evaluator, InterpEvaluator,
 };
+use untwist_eval::rotation::RotationMemo;
 use untwist_eval::value::JsString;
 
 const PROGRAM: &str = "\
@@ -79,8 +81,34 @@ fn a_lone_surrogate_result_writes_back_as_an_escaped_literal() {
     assert_eq!(codegen.into_source_text(), "\"\\ud800a\"");
 }
 
+fn partial(source: &str) -> Vec<Option<String>> {
+    let mut found = Vec::new();
+    common::with_program(source, |program| {
+        let decoder_program = common::decoder_program(program, "a", &["b"], None);
+        let calls = common::calls_for(program, 0);
+        let mut evaluator = InterpEvaluator::default();
+        let values = evaluator
+            .decode_partial_with_memo(
+                &decoder_program,
+                &calls,
+                &mut RotationMemo::default(),
+                &FxHashSet::default(),
+            )
+            .expect("decode");
+        found = values
+            .iter()
+            .map(|value| match value {
+                Some(Decoded::Str(text)) => Some(text.to_lossy_string()),
+                Some(_) => Some("<other>".to_string()),
+                None => None,
+            })
+            .collect();
+    });
+    found
+}
+
 #[test]
-fn a_call_that_throws_bails_the_whole_decode() {
+fn a_call_that_throws_is_left_undecoded_and_the_others_decode() {
     let source = "\
 function a() { var h = ['log', 'Hello World!', 'oops']; a = function () { return h; }; return a(); }
 function b(c, d) {
@@ -93,21 +121,16 @@ function b(c, d) {
   }), b(c, d);
 }
 b(0x0);
-b(0x1);
-b(0x2);";
-    common::with_program(source, |program| {
-        let decoder_program = common::decoder_program(program, "a", &["b"], None);
-        let calls = common::calls_for(program, 0);
-        let mut evaluator = InterpEvaluator::default();
-        let err = evaluator
-            .decode(&decoder_program, &calls)
-            .err()
-            .map(|bail| bail.to_string());
-        assert_eq!(
-            err,
-            Some("unsupported construct: a decoder call threw".to_string())
-        );
-    });
+b(0x2);
+b(0x1);";
+    assert_eq!(
+        partial(source),
+        vec![
+            Some("log".to_string()),
+            None,
+            Some("Hello World!".to_string())
+        ]
+    );
 }
 
 fn printed(alloc: &oxc_allocator::Allocator, value: &Decoded) -> Option<String> {

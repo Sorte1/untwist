@@ -117,6 +117,7 @@ pub struct InterpEvaluator {
     pub notes: Vec<String>,
     pub proto_reads: Vec<ProtoRead>,
     pub builtin_roots: Vec<&'static str>,
+    pub thrown_calls: FxHashSet<usize>,
 }
 
 impl InterpEvaluator {
@@ -127,6 +128,7 @@ impl InterpEvaluator {
             notes: Vec::new(),
             proto_reads: Vec::new(),
             builtin_roots: Vec::new(),
+            thrown_calls: FxHashSet::default(),
         }
     }
 }
@@ -519,6 +521,8 @@ impl<'a> Session<'a> {
     }
 }
 
+const CALL_THREW: &str = "a decoder call threw";
+
 impl<'a> Session<'a> {
     fn dispatch_decoder_call(
         &mut self,
@@ -529,7 +533,7 @@ impl<'a> Session<'a> {
             Ok(value) => Ok(value),
             Err(abrupt) => match abrupt.into_kind() {
                 AbruptKind::Bail(bail) => Err(bail),
-                AbruptKind::Throw(_) => Err(Bail::Unsupported(&"a decoder call threw")),
+                AbruptKind::Throw(_) => Err(Bail::Unsupported(&CALL_THREW)),
             },
         }
     }
@@ -609,6 +613,7 @@ impl InterpEvaluator {
         memo: &mut RotationMemo,
         escaped_decoders: &FxHashSet<usize>,
     ) -> EvalResult<Vec<Option<Decoded>>> {
+        self.thrown_calls.clear();
         let start = kept::Start::of(self);
         let unit = (program, calls, escaped_decoders);
         let early = memo.units.early_key(&start, unit);
@@ -639,9 +644,25 @@ impl InterpEvaluator {
     ) -> EvalResult<Vec<Option<Value<'a>>>> {
         crate::heap::spent_run_budget()?;
         let shape = candidate_shape(program, escaped_decoders)?;
-        let result = match &shape {
-            Some(shape) => self.decode_with_memo_monitored(program, calls, memo, shape),
-            None => self.decode_with_memo_traced(program, calls, memo, DeadTerms::Skip),
+        let mut skipped: FxHashSet<usize> = FxHashSet::default();
+        let result = loop {
+            let pass = match &shape {
+                Some(shape) => {
+                    self.decode_with_memo_monitored(program, calls, memo, shape, &skipped)
+                }
+                None => {
+                    self.decode_with_memo_traced(program, calls, memo, DeadTerms::Skip, &skipped)
+                }
+            };
+            match pass {
+                Ok((values, thrown)) if thrown.is_empty() => {
+                    self.thrown_calls = skipped;
+                    break Ok(values);
+                }
+                Ok((_, thrown)) if skipped.is_empty() => skipped = thrown,
+                Ok(_) => break Err(Bail::Unsupported(&CALL_THREW)),
+                Err(bail) => break Err(bail),
+            }
         };
         self.proto_reads.extend(object::take_trace());
         self.builtin_roots.extend(object::take_builtin_roots());
@@ -655,7 +676,8 @@ impl InterpEvaluator {
         calls: &[Call<'a>],
         memo: &mut RotationMemo,
         shape: &crate::state::Shape,
-    ) -> EvalResult<Vec<Option<Value<'a>>>> {
+        skipped: &FxHashSet<usize>,
+    ) -> EvalResult<Evaluated<'a>> {
         let _guard = crate::state::set_state_tracing(Some(shape));
         let dead_terms = if shape.memos.is_empty() && !shape.captured_memo {
             DeadTerms::Skip
@@ -664,9 +686,10 @@ impl InterpEvaluator {
                 miss_paths_proven: shape.miss_paths_proven,
             }
         };
-        let result = self.decode_with_memo_traced(program, calls, memo, dead_terms);
+        let result = self.decode_with_memo_traced(program, calls, memo, dead_terms, skipped);
         match (result, crate::state::take_violation()) {
-            (Ok(values), None) => Ok(values),
+            (Ok((values, thrown)), _) if !thrown.is_empty() => Ok((values, thrown)),
+            (Ok(evaluated), None) => Ok(evaluated),
             (_, Some(reason)) => Err(Bail::Unsupported(reason)),
             (Err(bail), None) => Err(bail),
         }
@@ -678,7 +701,8 @@ impl InterpEvaluator {
         calls: &[Call<'a>],
         memo: &mut RotationMemo,
         dead_terms: DeadTerms,
-    ) -> EvalResult<Vec<Option<Value<'a>>>> {
+        skipped: &FxHashSet<usize>,
+    ) -> EvalResult<Evaluated<'a>> {
         let mut session = self.instantiate(program)?;
         session.dead_terms = dead_terms;
         let rotated = session.apply_rotation_with(program, memo);
@@ -691,29 +715,43 @@ impl InterpEvaluator {
             return Err(bail);
         }
         object::set_tracing(true);
-        let values = eval_calls_until_spent(&mut session, calls);
+        let values = eval_calls_until_spent(&mut session, calls, skipped);
         self.budget = session.interp.budget;
-        let values = values?;
-        self.notes.extend(session.drain_notes());
-        Ok(values)
+        let evaluated = values?;
+        if evaluated.1.is_empty() {
+            self.notes.extend(session.drain_notes());
+        }
+        Ok(evaluated)
     }
 }
+
+type Evaluated<'a> = (Vec<Option<Value<'a>>>, FxHashSet<usize>);
 
 fn eval_calls_until_spent<'a>(
     session: &mut Session<'a>,
     calls: &[Call<'a>],
-) -> EvalResult<Vec<Option<Value<'a>>>> {
+    skipped: &FxHashSet<usize>,
+) -> EvalResult<Evaluated<'a>> {
     let mut values = Vec::with_capacity(calls.len());
-    for call in calls {
+    let mut thrown = FxHashSet::default();
+    for (index, call) in calls.iter().enumerate() {
         crate::heap::spent_run_budget()?;
+        if skipped.contains(&index) {
+            values.push(None);
+            continue;
+        }
         match session.eval_call(call) {
             Ok(value) => values.push(Some(value)),
             Err(Bail::Budget) => break,
+            Err(Bail::Unsupported(reason)) if *reason == CALL_THREW => {
+                thrown.insert(index);
+                values.push(None);
+            }
             Err(bail) => return Err(bail),
         }
     }
     values.resize(calls.len(), None);
-    Ok(values)
+    Ok((values, thrown))
 }
 
 impl<'a> Evaluator<'a> for InterpEvaluator {

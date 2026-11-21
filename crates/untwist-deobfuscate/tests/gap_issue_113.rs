@@ -18,22 +18,15 @@ console.log(w(0x0));";
 
 #[test]
 fn issue_113_no_variant_panics_and_the_good_site_still_decodes() {
-    let (code, notes) = common::run_passes(OUT_OF_RANGE);
+    let (code, _notes) = common::run_passes(OUT_OF_RANGE);
     assert!(!code.contains("__DECODE_0__"), "{code}");
     assert!(code.contains("function b("), "{code}");
-    assert!(!code.contains("\"a\""), "{code}");
-    assert!(
-        notes.iter().any(|note| note.contains("decoding bailed")),
-        "{notes:?}"
-    );
+    assert!(code.contains("console.log(\"a\", b(5))"), "{code}");
 
-    let (code, notes) = common::run_passes(VOID_SLOT);
+    let (code, _notes) = common::run_passes(VOID_SLOT);
     assert!(!code.contains("__DECODE_0__"), "{code}");
     assert!(code.contains("function b("), "{code}");
-    assert!(
-        notes.iter().any(|note| note.contains("decoding bailed")),
-        "{notes:?}"
-    );
+    assert!(code.contains("console.log(\"a\", b(1))"), "{code}");
 
     let (code, _notes) = common::run_passes(SHORT_WRAPPER);
     assert!(!code.contains("function w(x)"), "{code}");
