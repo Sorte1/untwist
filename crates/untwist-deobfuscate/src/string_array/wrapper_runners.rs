@@ -1,13 +1,18 @@
+use std::cell::Cell;
+
+use oxc_allocator::{GetAllocator, Vec as AVec};
 use oxc_ast::ast::*;
+use oxc_ast::builder::AstBuilder;
 use oxc_ast_visit::{walk_js, walk_mut, VisitJs, VisitMut};
 use oxc_semantic::Scoping;
-use oxc_span::{GetSpan, Span};
+use oxc_span::{GetSpan, Span, SPAN};
 use oxc_syntax::operator::{AssignmentOperator, BinaryOperator};
-use oxc_syntax::scope::ScopeFlags;
+use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::literal::is_true_literal;
 use untwist_core::ast_util::matcher::{call_parts, iife};
+use untwist_core::ast_util::respan::fresh_span;
 use untwist_core::pass::Cx;
 
 use crate::bindings::{reference_symbol, resolved_symbol};
@@ -17,19 +22,43 @@ fn is_controller_init(init: Option<&Expression<'_>>) -> bool {
     init.is_some_and(|init| is_loose_call_controller(init.without_parentheses()))
 }
 
+const ALIAS_DEPTH: usize = 8;
+
 struct Controllers<'s> {
     scoping: &'s Scoping,
     found: FxHashSet<SymbolId>,
+    aliases: FxHashMap<SymbolId, SymbolId>,
+}
+
+impl Controllers<'_> {
+    fn note_alias(&mut self, symbol: SymbolId, init: Option<&Expression<'_>>) {
+        let target =
+            init.and_then(|init| reference_symbol(init.without_parentheses(), self.scoping));
+        if let Some(target) = target {
+            self.aliases.insert(symbol, target);
+        }
+    }
+
+    fn aliased(&self, mut symbol: SymbolId) -> SymbolId {
+        for _ in 0..ALIAS_DEPTH {
+            match self.aliases.get(&symbol) {
+                Some(&target) if target != symbol => symbol = target,
+                _ => break,
+            }
+        }
+        symbol
+    }
 }
 
 impl<'a> VisitJs<'a> for Controllers<'_> {
     fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
-        if let (BindingPattern::BindingIdentifier(id), true) =
-            (&it.id, is_controller_init(it.init.as_ref()))
-        {
+        if let BindingPattern::BindingIdentifier(id) = &it.id {
             if let Some(symbol) = id.symbol_id.get() {
                 if !self.scoping.symbol_is_mutated(symbol) {
-                    self.found.insert(symbol);
+                    if is_controller_init(it.init.as_ref()) {
+                        self.found.insert(symbol);
+                    }
+                    self.note_alias(symbol, it.init.as_ref());
                 }
             }
         }
@@ -84,7 +113,7 @@ impl Head<'_> {
         arguments.is_empty() && self.controller_call(callee)
     }
 
-    fn runner_shell(&self, expr: &Expression<'_>) -> bool {
+    fn runner_shell(&mut self, expr: &Expression<'_>) -> bool {
         let Some((function, arguments)) = iife(expr.without_parentheses()) else {
             return false;
         };
@@ -99,10 +128,9 @@ impl Head<'_> {
         let Some(body) = function.body.as_ref() else {
             return false;
         };
-        let [Statement::ExpressionStatement(only)] = body.statements.as_slice() else {
-            return false;
-        };
-        body.directives.is_empty() && self.immediate_run(&only.expression)
+        body.directives.is_empty()
+            && !body.statements.is_empty()
+            && body.statements.iter().all(|stmt| self.statement(stmt))
     }
 
     fn bare_runner_call(&mut self, expr: &Expression<'_>) -> bool {
@@ -121,6 +149,11 @@ impl Head<'_> {
 
     fn statement(&mut self, stmt: &Statement<'_>) -> bool {
         match stmt {
+            Statement::ExpressionStatement(node)
+                if crate::legacy_reach::is_runner_container(node.span) =>
+            {
+                true
+            }
             Statement::ExpressionStatement(node) => self.expression(&node.expression),
             Statement::VariableDeclaration(declaration) => declaration
                 .declarations
@@ -181,8 +214,11 @@ fn forwarded_call(expr: &Expression<'_>) -> bool {
 
 struct Candidate {
     function: Span,
-    watched: Option<Span>,
+    lists: Vec<ScopeId>,
+    home: ScopeId,
+    watched: Vec<Span>,
     removed: Vec<Span>,
+    outside: FxHashSet<SymbolId>,
     statements: usize,
     sequence: bool,
     tracked: Vec<SymbolId>,
@@ -206,7 +242,7 @@ fn returned_prefix<'k, 'a>(statements: &'k [Statement<'a>]) -> Vec<&'k Expressio
     }
 }
 
-fn forwarded_target(statements: &[Statement<'_>], scoping: &Scoping) -> Option<SymbolId> {
+fn forwarded_target(statements: &[Statement<'_>], controllers: &Controllers) -> Option<SymbolId> {
     let [Statement::ReturnStatement(returned)] = statements else {
         return None;
     };
@@ -218,7 +254,8 @@ fn forwarded_target(statements: &[Statement<'_>], scoping: &Scoping) -> Option<S
         return None;
     }
     let (callee, _) = call_parts(call.without_parentheses())?;
-    reference_symbol(callee.without_parentheses(), scoping)
+    reference_symbol(callee.without_parentheses(), controllers.scoping)
+        .map(|symbol| controllers.aliased(symbol))
 }
 
 fn builds_a_controller(statements: &[Statement<'_>]) -> bool {
@@ -257,16 +294,40 @@ fn shifts_its_index(statements: &[Statement<'_>], params: &[SymbolId], scoping: 
         && matches!(&shifted.right, Expression::NumericLiteral(_))
 }
 
+struct ControllerCalls<'s> {
+    scoping: &'s Scoping,
+    controllers: &'s FxHashSet<SymbolId>,
+    local: &'s FxHashSet<SymbolId>,
+    calls: Vec<Span>,
+    outside: FxHashSet<SymbolId>,
+}
+
+impl<'a> VisitJs<'a> for ControllerCalls<'_> {
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if let Some(symbol) = reference_symbol(it.callee.without_parentheses(), self.scoping) {
+            if self.local.contains(&symbol) {
+                self.calls.push(it.span);
+            } else if self.controllers.contains(&symbol) {
+                self.calls.push(it.span);
+                self.outside.insert(symbol);
+            }
+        }
+        walk_js::walk_call_expression(self, it);
+    }
+}
+
 fn candidate(
     function: &Function<'_>,
-    scoping: &Scoping,
-    controllers: &FxHashSet<SymbolId>,
+    lists: Vec<ScopeId>,
+    controllers: &Controllers,
 ) -> Option<Candidate> {
+    let home = *lists.first()?;
+    let scoping = controllers.scoping;
     let params = simple_params(function)?;
     let body = function.body.as_ref()?;
     let mut scan = Head {
         scoping,
-        controllers,
+        controllers: &controllers.found,
         local: FxHashSet::default(),
         runners: Vec::new(),
         called: FxHashSet::default(),
@@ -277,10 +338,12 @@ fn candidate(
         .take_while(|stmt| scan.statement(stmt))
         .count();
     let rest = &body.statements[head..];
-    let watched = match forwarded_target(rest, scoping) {
-        Some(target) => Some(scoping.symbol_span(target)),
-        None if shifts_its_index(rest, &params, scoping) => function.id.as_ref().map(|id| id.span),
-        None if builds_a_controller(rest) => None,
+    let mut watched = match forwarded_target(rest, controllers) {
+        Some(target) => vec![scoping.symbol_span(target)],
+        None if shifts_its_index(rest, &params, scoping) => {
+            vec![function.id.as_ref().map(|id| id.span)?]
+        }
+        None if builds_a_controller(rest) => Vec::new(),
         None => return None,
     };
     let prefix = returned_prefix(rest);
@@ -288,30 +351,70 @@ fn candidate(
     if rest.is_empty() || !fits || (head == 0 && prefix.is_empty()) || !scan.complete() {
         return None;
     }
+    let mut calls = ControllerCalls {
+        scoping,
+        controllers: &controllers.found,
+        local: &scan.local,
+        calls: Vec::new(),
+        outside: FxHashSet::default(),
+    };
+    for stmt in &body.statements[..head] {
+        calls.visit_statement(stmt);
+    }
+    for expr in &prefix {
+        calls.visit_expression(expr);
+    }
+    let ControllerCalls {
+        calls: found_calls,
+        outside,
+        ..
+    } = calls;
+    watched.extend(found_calls);
     let mut removed: Vec<Span> = body.statements[..head].iter().map(GetSpan::span).collect();
     removed.extend(prefix.iter().map(|expr| expr.span()));
     let mut tracked: Vec<SymbolId> = scan.local.into_iter().collect();
     tracked.extend(scan.runners);
     Some(Candidate {
         function: function.span,
+        lists,
+        home,
         watched,
         removed,
         statements: head,
         sequence: !prefix.is_empty(),
         tracked,
         params,
+        outside,
     })
 }
 
 struct Find<'s> {
-    scoping: &'s Scoping,
-    controllers: &'s FxHashSet<SymbolId>,
+    controllers: &'s Controllers<'s>,
+    scopes: Vec<ScopeId>,
+    lists: Vec<Option<ScopeId>>,
     found: Vec<Candidate>,
 }
 
 impl<'a> VisitJs<'a> for Find<'_> {
+    fn enter_scope(&mut self, _flags: ScopeFlags, scope_id: &Cell<Option<ScopeId>>) {
+        if let Some(scope) = scope_id.get() {
+            self.scopes.push(scope);
+        }
+    }
+
+    fn leave_scope(&mut self) {
+        self.scopes.pop();
+    }
+
+    fn visit_statements(&mut self, it: &AVec<'a, Statement<'a>>) {
+        self.lists.push(self.scopes.last().copied());
+        walk_js::walk_statements(self, it);
+        self.lists.pop();
+    }
+
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
-        if let Some(found) = candidate(it, self.scoping, self.controllers) {
+        let lists: Option<Vec<ScopeId>> = self.lists.iter().copied().collect();
+        if let Some(found) = lists.and_then(|lists| candidate(it, lists, self.controllers)) {
             self.found.push(found);
         }
         walk_js::walk_function(self, it, flags);
@@ -323,7 +426,38 @@ struct Escapes<'s> {
     owner: FxHashMap<SymbolId, usize>,
     params: FxHashSet<SymbolId>,
     candidates: &'s [Candidate],
+    reachable: Vec<FxHashSet<ScopeId>>,
+    needed: Vec<FxHashSet<ScopeId>>,
+    uses: Vec<Vec<Span>>,
     spoiled: FxHashSet<usize>,
+}
+
+fn holds(spans: &[Span], inner: Span) -> bool {
+    spans
+        .iter()
+        .any(|span| span.start <= inner.start && inner.end <= span.end)
+}
+
+impl Escapes<'_> {
+    fn moves_intact(&mut self, index: usize, symbol: SymbolId) -> bool {
+        if holds(
+            &self.candidates[index].removed,
+            self.scoping.symbol_span(symbol),
+        ) {
+            return true;
+        }
+        let scope = self.scoping.symbol_scope_id(symbol);
+        self.needed[index].insert(scope);
+        self.reachable[index].contains(&scope)
+    }
+
+    fn home(&self, index: usize) -> Option<ScopeId> {
+        let needed = &self.needed[index];
+        self.candidates[index].lists.iter().copied().find(|&list| {
+            let visible: FxHashSet<ScopeId> = self.scoping.scope_ancestors(list).collect();
+            needed.is_subset(&visible)
+        })
+    }
 }
 
 impl<'a> VisitJs<'a> for Escapes<'_> {
@@ -331,25 +465,103 @@ impl<'a> VisitJs<'a> for Escapes<'_> {
         let Some(symbol) = resolved_symbol(it, self.scoping) else {
             return;
         };
+        for index in 0..self.candidates.len() {
+            let inside = holds(&self.candidates[index].removed, it.span);
+            if inside && !self.moves_intact(index, symbol) {
+                self.spoiled.insert(index);
+            }
+            if !inside && self.candidates[index].outside.contains(&symbol) {
+                self.uses[index].push(it.span);
+            }
+        }
         let Some(&index) = self.owner.get(&symbol) else {
             return;
         };
-        let inside = self.candidates[index]
-            .removed
-            .iter()
-            .any(|span| span.start <= it.span.start && it.span.end <= span.end);
+        let inside = holds(&self.candidates[index].removed, it.span);
         if inside == self.params.contains(&symbol) {
             self.spoiled.insert(index);
         }
     }
 }
 
-struct Strip<'s> {
+struct Strip<'s, 'a> {
+    builder: AstBuilder<'a>,
     candidates: &'s [Candidate],
+    scopes: Vec<ScopeId>,
+    taken: Vec<(Span, ScopeId, Vec<Statement<'a>>)>,
+    placed: Vec<Span>,
     stripped: usize,
 }
 
-impl<'a> VisitMut<'a> for Strip<'_> {
+impl<'a> Strip<'_, 'a> {
+    fn container(&self, statements: Vec<Statement<'a>>) -> Statement<'a> {
+        let builder = &self.builder;
+        let span = fresh_span().unwrap_or(SPAN);
+        let params = FormalParameters::boxed(
+            SPAN,
+            FormalParameterKind::FormalParameter,
+            AVec::new_in(builder),
+            None,
+            builder,
+        );
+        let body = FunctionBody::boxed(
+            SPAN,
+            AVec::new_in(builder),
+            AVec::from_iter_in(statements, builder),
+            builder,
+        );
+        let function = Expression::new_function_expression(
+            SPAN,
+            FunctionType::FunctionExpression,
+            None,
+            false,
+            false,
+            false,
+            None,
+            None,
+            params,
+            None,
+            Some(body),
+            builder,
+        );
+        let held = Expression::new_parenthesized_expression(SPAN, function, builder);
+        Statement::new_expression_statement(span, held, builder)
+    }
+
+    fn take_head(&mut self, found: &Candidate, body: &mut FunctionBody<'a>) {
+        let mut moved: Vec<Statement<'a>> = body.statements.drain(..found.statements).collect();
+        if found.sequence {
+            if let Some(Statement::ReturnStatement(returned)) = body.statements.last_mut() {
+                if let Some(Expression::SequenceExpression(sequence)) = returned.argument.as_mut() {
+                    if let Some(call) = sequence.expressions.pop() {
+                        let span = sequence.span;
+                        let prefix = std::mem::replace(
+                            &mut sequence.expressions,
+                            AVec::new_in(&self.builder),
+                        );
+                        moved.extend(prefix.into_iter().map(|expr| {
+                            Statement::new_expression_statement(span, expr, &self.builder)
+                        }));
+                        returned.argument = Some(call);
+                    }
+                }
+            }
+        }
+        self.taken.push((found.function, found.home, moved));
+    }
+}
+
+impl<'a> VisitMut<'a> for Strip<'_, 'a> {
+    fn enter_scope(&mut self, _flags: ScopeFlags, scope_id: &Cell<Option<ScopeId>>) {
+        if let Some(scope) = scope_id.get() {
+            self.scopes.push(scope);
+        }
+    }
+
+    fn leave_scope(&mut self) {
+        self.scopes.pop();
+    }
+
     fn visit_function(&mut self, it: &mut Function<'a>, flags: ScopeFlags) {
         walk_mut::walk_function(self, it, flags);
         let Some(found) = self
@@ -362,17 +574,41 @@ impl<'a> VisitMut<'a> for Strip<'_> {
         let Some(body) = it.body.as_mut() else {
             return;
         };
-        body.statements.drain(..found.statements);
-        if found.sequence {
-            if let Some(Statement::ReturnStatement(returned)) = body.statements.last_mut() {
-                if let Some(Expression::SequenceExpression(sequence)) = returned.argument.as_mut() {
-                    if let Some(call) = sequence.expressions.pop() {
-                        returned.argument = Some(call);
-                    }
-                }
+        self.take_head(found, body);
+        self.stripped += 1;
+    }
+
+    fn visit_statements(&mut self, it: &mut AVec<'a, Statement<'a>>) {
+        walk_mut::walk_statements(self, it);
+        if self.taken.is_empty() {
+            return;
+        }
+        let Some(&scope) = self.scopes.last() else {
+            return;
+        };
+        let mut placed: Vec<(usize, Vec<Statement<'a>>)> = Vec::new();
+        let mut index = 0;
+        while index < self.taken.len() {
+            let (function, home) = (self.taken[index].0, self.taken[index].1);
+            let at = (home == scope)
+                .then(|| {
+                    it.iter().position(|stmt| {
+                        let span = stmt.span();
+                        span.start <= function.start && function.end <= span.end
+                    })
+                })
+                .flatten();
+            match at {
+                Some(at) => placed.push((at, self.taken.swap_remove(index).2)),
+                None => index += 1,
             }
         }
-        self.stripped += 1;
+        placed.sort_by_key(|(at, _)| std::cmp::Reverse(*at));
+        for (at, statements) in placed {
+            let container = self.container(statements);
+            self.placed.push(container.span());
+            it.insert(at + 1, container);
+        }
     }
 }
 
@@ -384,11 +620,13 @@ pub(super) fn strip_wrapper_runners<'a>(program: &mut Program<'a>, cx: &Cx<'a, '
     let mut controllers = Controllers {
         scoping,
         found: FxHashSet::default(),
+        aliases: FxHashMap::default(),
     };
     controllers.visit_program(program);
     let mut find = Find {
-        scoping,
-        controllers: &controllers.found,
+        controllers: &controllers,
+        scopes: Vec::new(),
+        lists: Vec::new(),
         found: Vec::new(),
     };
     find.visit_program(program);
@@ -403,31 +641,60 @@ pub(super) fn strip_wrapper_runners<'a>(program: &mut Program<'a>, cx: &Cx<'a, '
         }
         params.extend(found.params.iter().copied());
     }
+    let reachable = find
+        .found
+        .iter()
+        .map(|found| {
+            found
+                .lists
+                .last()
+                .map(|&list| scoping.scope_ancestors(list).collect())
+                .unwrap_or_default()
+        })
+        .collect();
     let mut escapes = Escapes {
         scoping,
         owner,
         params,
         candidates: &find.found,
+        reachable,
+        needed: vec![FxHashSet::default(); find.found.len()],
+        uses: vec![Vec::new(); find.found.len()],
         spoiled: FxHashSet::default(),
     };
     escapes.visit_program(program);
-    let spoiled = escapes.spoiled;
+    let homes: Vec<Option<ScopeId>> = (0..find.found.len())
+        .map(|index| escapes.home(index))
+        .collect();
+    let Escapes { spoiled, uses, .. } = escapes;
     let kept: Vec<Candidate> = find
         .found
         .into_iter()
+        .zip(homes.into_iter().zip(uses))
         .enumerate()
         .filter(|(index, _)| !spoiled.contains(index))
-        .map(|(_, found)| found)
+        .filter_map(|(_, (mut found, (home, uses)))| {
+            found.watched.extend(uses);
+            home.map(|home| Candidate { home, ..found })
+        })
         .collect();
     if kept.is_empty() {
         return 0;
     }
     let mut strip = Strip {
+        builder: AstBuilder::new(cx.allocator()),
         candidates: &kept,
+        scopes: Vec::new(),
+        taken: Vec::new(),
+        placed: Vec::new(),
         stripped: 0,
     };
     strip.visit_program(program);
-    let watched: Vec<Span> = kept.iter().filter_map(|found| found.watched).collect();
+    crate::legacy_reach::note_runner_containers(&strip.placed);
+    let watched: Vec<Span> = kept
+        .iter()
+        .flat_map(|found| found.watched.iter().copied())
+        .collect();
     crate::legacy_reach::watch_strips(&watched);
     strip.stripped
 }

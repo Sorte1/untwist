@@ -6,6 +6,18 @@ use untwist_core::print::{print, PrintStyle};
 
 const CONTROLLER: &str = "var e = (function () {\n  var f = !![];\n  return function (g, h) {\n    var i = f ? function () {\n      if (h) {\n        var j = h['apply'](g, arguments);\n        h = null;\n        return j;\n      }\n    } : function () {};\n    f = ![];\n    return i;\n  };\n})();\n";
 
+fn source_check(own: &str) -> String {
+    format!(
+        "function () {{ return {own}.toString().search('(((.+)+)+)+$').toString().constructor({own}).search('(((.+)+)+)+$'); }}"
+    )
+}
+
+fn console_disable(controller: &str) -> String {
+    format!(
+        "function () {{ var that; try {{ var global = Function('return (function() {{}}.constructor(\"return this\")( ));'); that = global(); }} catch (e) {{ that = window; }} var object = that.console = that.console || {{}}; var methods = ['log', 'warn', 'info', 'error', 'exception', 'table', 'trace']; for (var at = 0; at < methods.length; at++) {{ var bound = {controller}.constructor.prototype.bind({controller}); var name = methods[at]; var original = object[name] || bound; bound.__proto__ = {controller}.bind({controller}); bound.toString = original.toString.bind(original); object[name] = bound; }} }}"
+    )
+}
+
 fn run<'a>(alloc: &'a Allocator, source: &'a str) -> String {
     common::run_ctors(alloc, source, &untwist_deobfuscate::protections_ctors()).0
 }
@@ -23,8 +35,9 @@ fn printed(source: &str) -> String {
 #[test]
 fn the_controller_and_its_immediate_call_are_removed() {
     let alloc = Allocator::default();
+    let callback = console_disable("e");
     let source = format!(
-        "function hi() {{\n{CONTROLLER}  (function () {{\n    e(this, function () {{ return 1; }})();\n  }})();\n  console.log('x');\n}}"
+        "function hi() {{\n{CONTROLLER}  (function () {{\n    e(this, {callback})();\n  }})();\n  console.log('x');\n}}"
     );
     let out = run(&alloc, &source);
     assert_eq!(out.trim(), "function hi() {\n  console.log(\"x\");\n}");
@@ -33,8 +46,9 @@ fn the_controller_and_its_immediate_call_are_removed() {
 #[test]
 fn the_variable_form_is_removed_with_its_calls() {
     let alloc = Allocator::default();
+    let callback = source_check("sd");
     let source = format!(
-        "function hi() {{\n{CONTROLLER}  var sd = e(this, function () {{ return 1; }});\n  sd();\n  console.log('x');\n}}"
+        "function hi() {{\n{CONTROLLER}  var sd = e(this, {callback});\n  sd();\n  console.log('x');\n}}"
     );
     let out = run(&alloc, &source);
     assert_eq!(out.trim(), "function hi() {\n  console.log(\"x\");\n}");
@@ -77,8 +91,9 @@ fn an_empty_iife_beside_a_controller_is_swept_with_it() {
 #[test]
 fn a_shell_that_carries_other_work_keeps_the_shell() {
     let alloc = Allocator::default();
+    let callback = console_disable("e");
     let source = format!(
-        "{CONTROLLER}(function () {{\n  e(this, function () {{ return 1; }})();\n  console.log(2);\n}})();\nconsole.log(1);"
+        "{CONTROLLER}(function () {{\n  e(this, {callback})();\n  console.log(2);\n}})();\nconsole.log(1);"
     );
     let out = run(&alloc, &source);
     assert!(out.contains("console.log(2)"), "{out}");
@@ -177,8 +192,9 @@ fn a_controller_reference_the_template_cannot_account_for_refuses_the_removal() 
 #[test]
 fn a_block_a_control_flow_fold_respanned_is_still_removed() {
     let alloc = Allocator::default();
+    let callback = source_check("sd");
     let source = format!(
-        "function hi() {{\n{CONTROLLER}  var cff = {{ HLAuI: function (a, b, c) {{ return a(b, c); }} }};\n  var sd = cff.HLAuI(e, this, function () {{ return sd; }});\n  sd();\n  console.log('x');\n}}"
+        "function hi() {{\n{CONTROLLER}  var cff = {{ HLAuI: function (a, b, c) {{ return a(b, c); }} }};\n  var sd = cff.HLAuI(e, this, {callback});\n  sd();\n  console.log('x');\n}}"
     );
     let groups = vec![
         vec![untwist_deobfuscate::control_flow_object::boxed as untwist_core::pass::PassCtor],
@@ -238,8 +254,9 @@ fn bare_var_declarations_left_inside_the_controller_do_not_hide_it() {
             "if (h) {\n        var k;\n        var l, m;\n",
         )
         .replace("    f = ![];\n", "    var n;\n    f = ![];\n");
+    let callback = source_check("sd");
     let source = format!(
-        "function hi() {{\n{controller}  var sd = e(this, function () {{ return sd.toString().search('(((.+)+)+)+$'); }});\n  sd();\n  console.log('x');\n}}"
+        "function hi() {{\n{controller}  var sd = e(this, {callback});\n  sd();\n  console.log('x');\n}}"
     );
     let out = run(&alloc, &source);
     assert_eq!(out.trim(), "function hi() {\n  console.log(\"x\");\n}");
@@ -274,8 +291,9 @@ const FLAGGED_RETURNER: &str = "var r = (n, t) => {\n    const e = o ? function 
 #[test]
 fn an_arrow_controller_called_where_it_is_built_is_removed_with_its_call() {
     let alloc = Allocator::default();
+    let callback = source_check("t");
     let source = format!(
-        "function hi() {{\n  const t = {ARROW_CONTROLLER}(this, () => 1);\n  t();\n  console.log('x');\n}}"
+        "function hi() {{\n  const t = {ARROW_CONTROLLER}(this, {callback});\n  t();\n  console.log('x');\n}}"
     );
     let out = run(&alloc, &source);
     assert_eq!(out.trim(), "function hi() {\n  console.log(\"x\");\n}");
@@ -284,8 +302,9 @@ fn an_arrow_controller_called_where_it_is_built_is_removed_with_its_call() {
 #[test]
 fn a_returner_whose_flag_is_set_beside_it_is_removed_with_its_calls() {
     let alloc = Allocator::default();
+    let callback = source_check("s");
     let source = format!(
-        "function hi() {{\n  o = true;\n  var o;\n  {FLAGGED_RETURNER}  var s = r(this, () => 1);\n  s();\n  console.log('x');\n}}"
+        "function hi() {{\n  o = true;\n  var o;\n  {FLAGGED_RETURNER}  var s = r(this, {callback});\n  s();\n  console.log('x');\n}}"
     );
     let out = run(&alloc, &source);
     assert!(!out.contains("apply"), "{out}");

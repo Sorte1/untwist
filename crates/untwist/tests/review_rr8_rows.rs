@@ -14,9 +14,8 @@ const MODES: [(&str, Lane); 6] = [
     ("rename unique", Lane::Rename(RenameMode::Unique)),
 ];
 
-const UNSAFE_PLACEMENT: [&str; 14] = [
-    "705a", "705b", "705e", "725", "726", "728", "745", "746", "748", "775", "783", "786", "788",
-    "791",
+const UNSAFE_PLACEMENT: [&str; 13] = [
+    "705a", "705b", "705e", "725", "726", "728", "745", "748", "775", "783", "786", "788", "791",
 ];
 
 type Run = Box<dyn Fn(&str) -> String>;

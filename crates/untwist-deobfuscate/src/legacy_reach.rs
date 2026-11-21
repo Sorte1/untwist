@@ -42,6 +42,7 @@ struct Deferral {
     strips: Vec<Span>,
     strips_failed: bool,
     strips_forbidden: bool,
+    containers: Vec<Span>,
     reached: bool,
 }
 
@@ -363,13 +364,14 @@ fn spans_survive(program: &Program<'_>, spans: &[Span]) -> bool {
     surviving.unnamed || !surviving.found.is_empty()
 }
 
-pub fn settle_late_escapes(program: &Program<'_>) {
+pub fn settle_late_escapes(program: &Program<'_>, protections_ran: bool) {
     let (names, strips) = DEFERRAL.with(|deferral| {
         let mut deferral = deferral.borrow_mut();
-        (
-            std::mem::take(&mut deferral.escape_names),
-            std::mem::take(&mut deferral.strips),
-        )
+        let strips = match protections_ran {
+            true => std::mem::take(&mut deferral.strips),
+            false => Vec::new(),
+        };
+        (std::mem::take(&mut deferral.escape_names), strips)
     });
     if !names.is_empty() {
         let mut present = Names::default();
@@ -404,6 +406,18 @@ pub(crate) fn strips_allowed() -> bool {
 
 pub(crate) fn watch_strips(spans: &[Span]) {
     DEFERRAL.with(|deferral| deferral.borrow_mut().strips.extend_from_slice(spans));
+}
+
+pub(crate) fn note_runner_containers(spans: &[Span]) {
+    DEFERRAL.with(|deferral| deferral.borrow_mut().containers.extend_from_slice(spans));
+}
+
+pub(crate) fn has_runner_containers() -> bool {
+    DEFERRAL.with(|deferral| !deferral.borrow().containers.is_empty())
+}
+
+pub(crate) fn is_runner_container(span: Span) -> bool {
+    DEFERRAL.with(|deferral| deferral.borrow().containers.contains(&span))
 }
 
 pub fn strips_failed() -> bool {
@@ -666,6 +680,7 @@ pub(crate) fn forget() {
         deferral.escape_names_opened.clear();
         deferral.strips.clear();
         deferral.strips_failed = false;
+        deferral.containers.clear();
     });
 }
 

@@ -34,6 +34,7 @@ pub mod object_props;
 mod primitive_names;
 pub mod probe;
 pub mod proof;
+mod protection_proxies;
 mod protection_shape;
 pub mod pure_calls;
 #[cfg(feature = "refusal-spans")]
