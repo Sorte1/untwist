@@ -949,6 +949,7 @@ const RESPANNED_ESCAPES: &[&str] = &[
 #[test]
 fn an_escape_an_inlined_control_flow_call_respans_prints_like_node_in_both_lanes() {
     prints_like_node_in(RESPANNED_ESCAPES, &[default_code, unsafe_lane]);
+}
 
 const CONTROL_FLOW_CYCLES: &[(&str, &str)] = &[
     ("cfo-assembled-cycle", "yPxtr"),
@@ -967,7 +968,10 @@ fn control_flow_objects_whose_escapes_other_objects_decide_dead_are_inlined_in_b
 
 #[test]
 fn control_flow_objects_whose_escapes_other_objects_decide_dead_print_like_node_in_both_lanes() {
-    let labels: Vec<&str> = CONTROL_FLOW_CYCLES.iter().map(|(label, _)| *label).collect();
+    let labels: Vec<&str> = CONTROL_FLOW_CYCLES
+        .iter()
+        .map(|(label, _)| *label)
+        .collect();
     prints_like_node_in(&labels, &[default_code, unsafe_lane]);
 }
 
@@ -985,5 +989,8 @@ fn a_decoder_written_in_a_live_branch_is_kept_in_both_lanes() {
     for output in [default_code(&source), unsafe_lane(&source)] {
         assert!(output.contains("\"replaced\""), "{output}");
     }
-    prints_like_node_in(&["decoder-guarded-write-live"], &[default_code, unsafe_lane]);
+    prints_like_node_in(
+        &["decoder-guarded-write-live"],
+        &[default_code, unsafe_lane],
+    );
 }
