@@ -128,6 +128,61 @@ fn is_convertible(function: &Function<'_>, scoping: &Scoping) -> bool {
         && !is_text_read(function)
 }
 
+fn sole_param<'k>(function: &'k Function<'_>) -> Option<&'k str> {
+    let [param] = function.params.items.as_slice() else {
+        return None;
+    };
+    match (&param.pattern, &param.initializer, &function.params.rest) {
+        (BindingPattern::BindingIdentifier(id), None, None) => Some(id.name.as_str()),
+        _ => None,
+    }
+}
+
+fn hands_out_its_checker(block: &BlockStatement<'_>, param: &str, checker: &str) -> bool {
+    let [Statement::IfStatement(choice)] = block.body.as_slice() else {
+        return false;
+    };
+    let Expression::Identifier(test) = &choice.test else {
+        return false;
+    };
+    let returned = match &choice.consequent {
+        Statement::BlockStatement(block) => match block.body.as_slice() {
+            [Statement::ReturnStatement(returned)] => Some(returned),
+            _ => None,
+        },
+        Statement::ReturnStatement(returned) => Some(returned),
+        _ => None,
+    };
+    test.name == param
+        && returned.is_some_and(|returned| {
+            matches!(&returned.argument, Some(Expression::Identifier(id)) if id.name == checker)
+        })
+}
+
+fn checks_its_own_text(function: &Function<'_>) -> bool {
+    let Some(param) = sole_param(function) else {
+        return false;
+    };
+    let Some(body) = &function.body else {
+        return false;
+    };
+    let [Statement::FunctionDeclaration(checker), Statement::TryStatement(guarded)] =
+        body.statements.as_slice()
+    else {
+        return false;
+    };
+    let Some(name) = checker.id.as_ref().map(|id| id.name.as_str()) else {
+        return false;
+    };
+    sole_param(checker).is_some()
+        && guarded.handler.is_some()
+        && hands_out_its_checker(&guarded.block, param, name)
+}
+
+fn freezes(function: &Function<'_>) -> bool {
+    is_text_read(function) || checks_its_own_text(function)
+}
+
 fn arrow_scope(scoping: &mut Scoping, scope: ScopeId, id: Option<&BindingIdentifier<'_>>) {
     *scoping.scope_flags_mut(scope) |= ScopeFlags::Arrow;
     if let Some(id) = id {
@@ -401,13 +456,13 @@ impl<'a> Pass<'a> for FunctionToArrow<'a> {
 
     fn enter_statement(&mut self, node: &mut Statement<'a>, _cx: &mut Cx<'a, '_>) {
         if let Statement::FunctionDeclaration(function) = node {
-            self.frozen.enter(function);
+            self.frozen.enter_when(function, freezes(function));
         }
     }
 
     fn enter_expression(&mut self, node: &mut Expression<'a>, _cx: &mut Cx<'a, '_>) {
         if let Expression::FunctionExpression(function) = node {
-            self.frozen.enter(function);
+            self.frozen.enter_when(function, freezes(function));
         }
     }
 

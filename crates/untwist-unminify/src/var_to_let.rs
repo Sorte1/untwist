@@ -59,7 +59,11 @@ impl Frozen {
     }
 
     pub(crate) fn enter(&mut self, function: &Function<'_>) {
-        if let (Some(scope), true) = (function.scope_id.get(), is_text_read(function)) {
+        self.enter_when(function, is_text_read(function));
+    }
+
+    pub(crate) fn enter_when(&mut self, function: &Function<'_>, read: bool) {
+        if let (Some(scope), true) = (function.scope_id.get(), read) {
             self.open.push(scope);
         }
     }
