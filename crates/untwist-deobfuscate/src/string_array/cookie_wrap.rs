@@ -323,9 +323,7 @@ fn declared_by_var_in(body: &[Statement<'_>], scoping: &Scoping, symbol: SymbolI
 fn declared_inside(stmt: &Statement<'_>, scoping: &Scoping, symbol: SymbolId) -> bool {
     let declared = scoping.symbol_span(symbol);
     let span = stmt.span();
-    scoping.symbol_redeclarations(symbol).is_empty()
-        && span.start <= declared.start
-        && declared.end <= span.end
+    span.start <= declared.start && declared.end <= span.end
 }
 
 fn plan_at(body: &[Statement<'_>], array: usize, scoping: &Scoping) -> Option<Plan> {
