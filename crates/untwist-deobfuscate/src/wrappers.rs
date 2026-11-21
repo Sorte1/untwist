@@ -356,10 +356,28 @@ fn written_outside_homes(
         true => branched_writes_outside(program, scoping, &written, homes),
         false => FxHashMap::default(),
     };
-    writes_outside_homes(program, scoping, &written, homes)
+    let outside = writes_outside_homes(program, scoping, &written, homes);
+    if outside.is_empty() {
+        return Vec::new();
+    }
+    let mut search = SelfAssignments {
+        scoping,
+        decoders: &written,
+        statement: Span::empty(0),
+        found: Vec::new(),
+    };
+    search.visit_program(program);
+    let unchanged: FxHashSet<u32> = search
+        .found
+        .iter()
+        .map(|(_, expression)| expression.start)
+        .collect();
+    outside
         .into_iter()
+        .filter(|(symbol, span)| {
+            !unchanged.contains(&span.start) && !speculated.contains_key(symbol)
+        })
         .map(|(symbol, _)| symbol)
-        .filter(|symbol| !speculated.contains_key(symbol))
         .collect()
 }
 
