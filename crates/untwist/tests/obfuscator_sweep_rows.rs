@@ -859,3 +859,19 @@ fn protection_runners_at_the_head_of_a_decoder_are_dropped_under_unsafe() {
     let kept = default_code(&read("runner-in-decoder.js"));
     assert!(kept.contains("_0x2a2695()"), "{kept}");
 }
+
+const CONSOLE_KEPT_BY_DEAD_CODE: &[&str] = &[
+    "console-braced-controller",
+    "console-alias-foreign-key",
+    "console-dropped-global",
+];
+
+#[test]
+fn console_disabling_behind_dead_code_copies_is_removed_in_the_default_lane() {
+    for label in CONSOLE_KEPT_BY_DEAD_CODE {
+        let source = read(&format!("{label}.js"));
+        let output = default_code(&source);
+        assert!(!output.contains("\"exception\""), "{label}:\n{output}");
+        prints_the_same(&read(&format!("{label}.source.js")), &output);
+    }
+}
