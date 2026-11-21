@@ -98,7 +98,9 @@ impl Pipeline {
         let mut carried: Vec<Note> = Vec::new();
         let mut taps = Taps::now();
         for _ in 1..LAYER_ROUNDS {
-            let due = worth_another(site, round) || cleanup_due(site, round);
+            let due = worth_another(site, round)
+                || cleanup_due(site, round)
+                || controller_due(site, round);
             if !due || untwist_core::budget::check().is_err() {
                 break;
             }
@@ -325,6 +327,33 @@ fn cleanup_due(site: &StageCx<'_, '_>, round: Round) -> bool {
         return false;
     }
     let mut scan = EmptiedDispatch { found: false };
+    scan.visit_program(site.program);
+    scan.found
+}
+
+struct SurvivingController {
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for SurvivingController {
+    fn visit_expression(&mut self, it: &Expression<'a>) {
+        if self.found {
+            return;
+        }
+        if untwist_deobfuscate::self_defending::is_call_controller(it) {
+            self.found = true;
+            return;
+        }
+        walk_js::walk_expression(self, it);
+    }
+}
+
+fn controller_due(site: &StageCx<'_, '_>, round: Round) -> bool {
+    let stages = &site.stages[round.stages..];
+    if removals(stages, &LAYER_PASSES) == 0 || settled_rewrites(stages) == 0 {
+        return false;
+    }
+    let mut scan = SurvivingController { found: false };
     scan.visit_program(site.program);
     scan.found
 }
