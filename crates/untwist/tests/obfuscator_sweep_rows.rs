@@ -1054,3 +1054,16 @@ fn a_cookie_block_in_the_obfuscator_shape_is_still_decoded_in_both_lanes() {
         }
     }
 }
+
+const SHARED_CONTROLLERS_AND_LIVE_CALLBACKS: &[&str] = &[
+    "d6b-f1a", "d6b-f1b", "d6b-f1c", "d6b-f1d", "d6b-f1e", "d6b-f1f", "d6b-f1g", "d6b-f1h",
+    "d6b-f2a", "d6b-p1a", "d6b-p1b", "d6b-p1c", "d6b-p3",
+];
+
+#[test]
+fn a_shared_call_controller_or_a_live_callback_prints_like_node_in_both_lanes() {
+    prints_like_node_in(
+        SHARED_CONTROLLERS_AND_LIVE_CALLBACKS,
+        &[default_code, unsafe_lane],
+    );
+}
