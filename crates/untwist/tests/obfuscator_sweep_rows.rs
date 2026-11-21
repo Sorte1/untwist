@@ -994,3 +994,62 @@ fn a_decoder_written_in_a_live_branch_is_kept_in_both_lanes() {
         &[default_code, unsafe_lane],
     );
 }
+
+const COOKIE_BLOCK_MOVES: &[&str] = &[
+    "cookie-block-k1",
+    "cookie-block-k2",
+    "cookie-block-k3",
+    "cookie-block-k4",
+    "cookie-block-k5",
+    "cookie-block-k6",
+    "cookie-block-k7",
+    "cookie-block-k8",
+    "cookie-block-k9",
+    "cookie-block-k10",
+    "cookie-block-k11",
+    "cookie-block-k12",
+    "cookie-block-k13",
+    "cookie-block-k14",
+    "cookie-block-k15",
+    "cookie-block-k28",
+    "cookie-block-k29",
+    "cookie-block-k30",
+    "cookie-block-k31",
+    "cookie-block-k32",
+    "cookie-block-k33",
+    "cookie-block-k34",
+    "cookie-block-k35",
+    "cookie-block-k36",
+    "cookie-block-k37",
+    "cookie-block-k38",
+    "cookie-block-k39",
+    "cookie-block-k40",
+    "cookie-block-k41",
+    "cookie-block-k42",
+    "cookie-block-shaped",
+    "cookie-block-shaped-direct",
+    "cookie-block-shaped-closure",
+    "cookie-block-shaped-array-write",
+    "checksum-direct-write",
+    "checksum-for-await",
+    "checksum-alias-write",
+];
+
+#[test]
+fn statements_moved_into_a_new_function_keep_their_meaning_in_both_lanes() {
+    prints_like_node_in(COOKIE_BLOCK_MOVES, &[default_code, unsafe_lane]);
+}
+
+#[test]
+fn a_cookie_block_in_the_obfuscator_shape_is_still_decoded_in_both_lanes() {
+    for label in ["cookie-block-shaped", "cookie-block-shaped-direct"] {
+        let source = read(&format!("{label}.js"));
+        for output in [default_code(&source), unsafe_lane(&source)] {
+            assert!(
+                output.contains("\"one\", \"two\", \"three\""),
+                "{label}:\n{output}"
+            );
+            assert!(!output.contains("arr0"), "{label}:\n{output}");
+        }
+    }
+}
