@@ -492,11 +492,12 @@ fn a_rotator_holding_a_call_controller_is_kept_with_a_premise_note_in_the_defaul
 }
 
 #[test]
-fn a_call_of_a_key_no_object_has_still_decides_the_branch_under_unsafe() {
+fn a_call_of_a_key_no_object_has_in_a_dead_branch_still_decides_it_in_both_lanes() {
     let source = read("nested-absent-key-call.js");
-    let output = unsafe_lane(&source);
-    assert!(!output.contains("missing"), "{output}");
-    assert!(default_code(&source).contains("missing"));
+    for output in [unsafe_lane(&source), default_code(&source)] {
+        assert!(!output.contains("missing"), "{output}");
+        prints_the_same(&source, &output);
+    }
 }
 
 const NESTED_HAZARDS_BOTH_LANES: &[&str] = &[
@@ -860,11 +861,8 @@ fn protection_runners_at_the_head_of_a_decoder_are_dropped_under_unsafe() {
     assert!(kept.contains("_0x2a2695()"), "{kept}");
 }
 
-const CONSOLE_KEPT_BY_DEAD_CODE: &[&str] = &[
-    "console-braced-controller",
-    "console-alias-foreign-key",
-    "console-dropped-global",
-];
+const CONSOLE_KEPT_BY_DEAD_CODE: &[&str] =
+    &["console-braced-controller", "console-alias-foreign-key"];
 
 #[test]
 fn console_disabling_behind_dead_code_copies_is_removed_in_the_default_lane() {
@@ -874,4 +872,11 @@ fn console_disabling_behind_dead_code_copies_is_removed_in_the_default_lane() {
         assert!(!output.contains("\"exception\""), "{label}:\n{output}");
         prints_the_same(&read(&format!("{label}.source.js")), &output);
     }
+}
+
+#[test]
+fn a_controller_block_whose_name_only_a_discarded_copy_reads_is_merged_in_the_default_lane() {
+    let output = Pipeline::new(Options::default()).run(&read("console-dropped-global.js"));
+    assert!(!output.code().contains("{{const"), "{}", output.code());
+    assert!(keeps_unproven_built_ins(&output), "{:?}", output.notes);
 }
