@@ -36,6 +36,7 @@ const DECODED_UNDER_UNSAFE: &[&str] = &[
     "flattened-controller-rounds",
     "dp-redeclared-var",
     "dp-key-object-assigned",
+    "wrapper-emptied-shell",
 ];
 
 const FINGERPRINTS: &[&str] = &[
