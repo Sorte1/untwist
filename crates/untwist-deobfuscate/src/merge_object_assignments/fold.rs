@@ -6,6 +6,7 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 use std::borrow::Cow;
 use untwist_core::ast_util::js_text::js_text;
+use untwist_core::ast_util::prop::prop_name;
 use untwist_core::ast_util::respan::{fresh_spans, synthetic_spans_exhausted};
 use untwist_core::pass::Cx;
 use untwist_core::semantic::{is_constant_binding, write_reference_count};
@@ -28,6 +29,36 @@ pub(super) fn empty_object_binding(
         return None;
     };
     if !object.properties.is_empty() {
+        return None;
+    }
+    let symbol = id.symbol_id.get()?;
+    Some((symbol, is_constant_binding(scoping, symbol)))
+}
+
+fn is_plain_head(object: &ObjectExpression<'_>) -> bool {
+    object.properties.iter().all(|property| {
+        let ObjectPropertyKind::ObjectProperty(property) = property else {
+            return false;
+        };
+        property.kind == PropertyKind::Init
+            && !property.computed
+            && prop_name(&property.key).is_some_and(|name| name != PROTO_KEY)
+    })
+}
+
+fn headed_object_binding(
+    stmt: &Statement<'_>,
+    scoping: &Scoping,
+    literal_heads: bool,
+) -> Option<(SymbolId, bool)> {
+    if !literal_heads {
+        return empty_object_binding(stmt, scoping);
+    }
+    let (id, init) = single_declarator(stmt)?;
+    let Expression::ObjectExpression(object) = init? else {
+        return None;
+    };
+    if !is_plain_head(object) {
         return None;
     }
     let symbol = id.symbol_id.get()?;
@@ -113,6 +144,7 @@ fn is_unsafe_value(expr: &Expression<'_>, symbol: SymbolId, scoping: &Scoping) -
 
 pub(crate) struct KeyRule<'k> {
     pub(crate) conservative: bool,
+    pub(crate) literal_heads: bool,
     pub(crate) resolved: &'k FxHashSet<SymbolId>,
 }
 
@@ -237,7 +269,7 @@ fn plan_at(
     rule: &KeyRule<'_>,
     memo: &mut Memo,
 ) -> Option<Fold> {
-    let (symbol, constant) = empty_object_binding(stmts.get(index)?, scoping)?;
+    let (symbol, constant) = headed_object_binding(stmts.get(index)?, scoping, rule.literal_heads)?;
     let mut count = 0usize;
     let mut adopted = false;
     let mut inert = Inert {
@@ -413,11 +445,12 @@ fn commit_fold<'a>(stmts: &mut AVec<'a, Statement<'a>>, plan: &Fold, cx: &Cx<'a,
 pub(super) fn fold_assignments<'a>(
     stmts: &mut AVec<'a, Statement<'a>>,
     folded: &mut FxHashSet<Span>,
-    resolved: &FxHashSet<SymbolId>,
+    (resolved, literal_heads): (&FxHashSet<SymbolId>, bool),
     cx: &mut Cx<'a, '_>,
 ) -> usize {
     let rule = KeyRule {
         conservative: !cx.opts.extended,
+        literal_heads,
         resolved,
     };
     let mut from = 0usize;
