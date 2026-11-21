@@ -36,6 +36,7 @@ use crate::stamp::{find_stamped_named, is_unedited};
 use crate::units::MachineryDepth;
 use crate::wrapper_calls::inline_function_wrappers;
 use crate::wrapper_immediate::inline_immediate_wrappers;
+use crate::wrapper_speculation::branched_writes_outside;
 
 pub const ALIAS_FORM_CHECKS: &str = "inline-decoder-wrappers/alias-form-checks";
 
@@ -345,6 +346,7 @@ struct AliasFacts {
     declarations: DeclarationSearch,
     self_writes: FxHashMap<SymbolId, Vec<Span>>,
     order: LentOrder,
+    branched: FxHashMap<SymbolId, Vec<Span>>,
 }
 
 #[cfg(debug_assertions)]
@@ -472,14 +474,16 @@ fn rejection(site: &AliasSite, facts: &AliasFacts, scoping: &Scoping) -> Option<
         if *declaration != site.statement {
             return Some(notes::WRAPPER_ALIAS_NOT_REMOVABLE);
         }
-        return (!is_constant_binding(scoping, site.symbol))
+        let speculated = facts.branched.contains_key(&site.symbol);
+        return (!speculated && !is_constant_binding(scoping, site.symbol))
             .then_some(notes::WRAPPER_ALIAS_NOT_CONSTANT);
     }
     if declarations.initialised.contains(&site.symbol) {
         return Some(notes::WRAPPER_ALIAS_ALREADY_INITIALISED);
     }
     let self_writes = facts.self_writes.get(&site.symbol).map_or(0, Vec::len);
-    (write_reference_count(scoping, site.symbol) != self_writes + 1)
+    let branched = facts.branched.get(&site.symbol).map_or(0, Vec::len);
+    (write_reference_count(scoping, site.symbol) != self_writes + branched + 1)
         .then_some(notes::WRAPPER_ALIAS_EXTRA_WRITES)
 }
 
@@ -600,10 +604,12 @@ fn variable_alias_plan<'a>(
         let scoping = cx.scoping();
         sites.retain(|site| in_target_scope(scoping, site, &targets));
     }
+    let branched = branched_alias_writes(program, cx, &sites);
     let facts = AliasFacts {
         declarations,
         self_writes: self_write_counts(program, &sites),
         order,
+        branched,
     };
     #[cfg(debug_assertions)]
     record_alias_facts(&sites, &facts);
@@ -622,8 +628,48 @@ fn variable_alias_plan<'a>(
         plan.objects = object_rewrites(program, &forms.objects, &targets, &facts, cx, &mut plan);
     }
     plan.collapses = sequence_collapses(&forms, &targets, &plan, cx.scoping(), checked);
+    defer_branched_writes(&plan, &facts.branched);
     plan.declarations = facts.declarations.found;
     plan
+}
+
+fn branched_alias_writes(
+    program: &Program<'_>,
+    cx: &Cx<'_, '_>,
+    sites: &[AliasSite],
+) -> FxHashMap<SymbolId, Vec<Span>> {
+    if !cx.opts.unsafe_transforms || !crate::legacy_reach::speculates_escapes() {
+        return FxHashMap::default();
+    }
+    let scoping = cx.scoping();
+    let mut homes: FxHashMap<SymbolId, Span> = FxHashMap::default();
+    let mut candidates: FxHashSet<SymbolId> = FxHashSet::default();
+    for site in sites.iter().filter(|site| site.symbol != site.source) {
+        if is_constant_binding(scoping, site.symbol) {
+            continue;
+        }
+        candidates.insert(site.symbol);
+        if let Some(expression) = site.expression {
+            homes.entry(site.symbol).or_insert(expression);
+        }
+    }
+    if candidates.is_empty() {
+        return FxHashMap::default();
+    }
+    branched_writes_outside(program, scoping, &candidates, &homes)
+}
+
+fn defer_branched_writes(plan: &VariablePlan<'_>, branched: &FxHashMap<SymbolId, Vec<Span>>) {
+    let spans: Vec<Span> = plan
+        .chosen
+        .iter()
+        .filter_map(|(symbol, _, _)| branched.get(symbol))
+        .flatten()
+        .copied()
+        .collect();
+    if !spans.is_empty() {
+        crate::legacy_reach::defer_escapes(&spans);
+    }
 }
 
 fn choose_aliases<'a>(

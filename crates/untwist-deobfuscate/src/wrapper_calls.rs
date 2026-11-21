@@ -6,7 +6,7 @@ use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::UnaryOperator;
 use oxc_syntax::symbol::SymbolId;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::edit::{ExprEdits, StmtEdits};
 use untwist_core::ast_util::inline::{inline_function_call, param_names, returned_expression};
 use untwist_core::ast_util::literal::is_undefined_like;
@@ -395,6 +395,7 @@ struct Round<'r, 'p, 'a, 'x> {
     chain: &'r Chain<'p>,
     view: SiteView<'r>,
     checked: bool,
+    speculated: &'r FxHashMap<SymbolId, Vec<Span>>,
     cx: &'r Cx<'a, 'x>,
 }
 
@@ -514,7 +515,9 @@ impl<'p, 'a> Round<'_, 'p, 'a, '_> {
             .scoping()
             .get_resolved_reference_ids(shape.symbol)
             .len();
-        settle_wrapper(shape, counts.rewritten, references, plan, poisoned);
+        let speculated = self.speculated.get(&shape.symbol).map_or(0, Vec::len);
+        let proven = references.saturating_sub(speculated);
+        settle_wrapper(shape, counts.rewritten, proven, plan, poisoned);
     }
 }
 
@@ -575,7 +578,7 @@ fn refuse_var_wrappers_read_early(
 
 fn refuse_annex_b_wrappers(
     (program, scoping): (&Program<'_>, &Scoping),
-    admitted: &FxHashSet<SymbolId>,
+    admitted: &FxHashMap<SymbolId, Vec<Span>>,
     found: &mut Vec<WrapperShape>,
     rejected: &mut Rejected,
 ) {
@@ -588,7 +591,7 @@ fn refuse_annex_b_wrappers(
     }
     let functions = block_function_symbols(scoping);
     let (written, kept): (Vec<_>, Vec<_>) = std::mem::take(found).into_iter().partition(|shape| {
-        let speculated = admitted.contains(&shape.symbol);
+        let speculated = admitted.contains_key(&shape.symbol);
         writes.may_write(shape.symbol)
             && !is_own_block_function(&writes, &functions, scoping, (shape.symbol, speculated))
     });
@@ -643,10 +646,14 @@ fn refuse_globally_reached_wrappers(
     );
 }
 
-fn find_wrappers(
-    program: &Program<'_>,
-    cx: &mut Cx<'_, '_>,
-) -> Option<(Vec<WrapperShape>, Rejected, FxHashSet<SymbolId>)> {
+struct FoundWrappers {
+    found: Vec<WrapperShape>,
+    rejected: Rejected,
+    inside: FxHashSet<SymbolId>,
+    speculated: FxHashMap<SymbolId, Vec<Span>>,
+}
+
+fn find_wrappers(program: &Program<'_>, cx: &mut Cx<'_, '_>) -> Option<FoundWrappers> {
     let checked = call_checks_apply(cx.opts);
     let mut search = WrapperSearch {
         scoping: cx.scoping(),
@@ -675,6 +682,7 @@ fn find_wrappers(
         mut rejected,
         unstable,
         inside,
+        speculating,
         ..
     } = search;
     let admitted =
@@ -696,8 +704,14 @@ fn find_wrappers(
         refuse_annex_b_bindings(&mut found, site, program, cx);
         drop_broken_chains(&mut found);
     }
-    wrapper_speculation::defer(cx.scoping(), &found, &admitted);
-    Some((found, rejected, inside))
+    let speculated =
+        wrapper_speculation::defer((program, cx.scoping()), &found, &admitted, speculating);
+    Some(FoundWrappers {
+        found,
+        rejected,
+        inside,
+        speculated,
+    })
 }
 
 fn plan_round<'p, 'a>(
@@ -705,7 +719,12 @@ fn plan_round<'p, 'a>(
     cx: &mut Cx<'a, '_>,
     poisoned: &mut FxHashSet<SymbolId>,
 ) -> Option<RoundPlan<'a>> {
-    let (found, rejected, inside) = find_wrappers(program, cx)?;
+    let FoundWrappers {
+        found,
+        rejected,
+        inside,
+        speculated,
+    } = find_wrappers(program, cx)?;
     let cx = &*cx;
     let checked = call_checks_apply(cx.opts);
     let sites = collect_sites(program, cx.scoping(), &found, &inside);
@@ -726,6 +745,7 @@ fn plan_round<'p, 'a>(
         chain: &chain,
         view: SiteView::new(cx.scoping(), &primitives),
         checked,
+        speculated: &speculated,
         cx,
     };
     let mut plan = RoundPlan {
