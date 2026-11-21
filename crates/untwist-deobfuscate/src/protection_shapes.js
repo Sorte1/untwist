@@ -44,6 +44,14 @@ function callback_format_check_compiled() {
   return e();
 }
 
+function callback_format_check_compiled_declared() {
+  const v1 = function () {
+    const v2 = v1.constructor("return /\" + this + \"/")().compile("^([^ ]+( +[^ ]+)+)+[^ ]}");
+    return !v2.test(SELF);
+  };
+  return v1();
+}
+
 function callback_source_probe() {
   var v1 = function () {
     return "dev";
