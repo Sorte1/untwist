@@ -1088,7 +1088,7 @@ fn object_rewrites<'a>(
     let mut rewrites = Vec::new();
     for (object, name) in candidates {
         match reads.get(&object.symbol) {
-            Some(members) if facts.lazy.blocks_members(object.source, members) => plan
+            Some(members) if checked && facts.lazy.blocks_members(object.source, members) => plan
                 .rejected
                 .push((object.statement, notes::WRAPPER_ALIAS_LAZY_DECODER)),
             Some(members) => rewrites.push((object.statement, members.clone(), name)),

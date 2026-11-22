@@ -9,6 +9,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::matcher::call_parts;
 use untwist_core::ast_util::prop::identifier_name;
 
+use crate::alias_forms::literal_headed_identifier;
 use crate::bindings::{reference_symbol, resolved_symbol};
 use untwist_core::machinery_name::string_array_unit;
 
@@ -272,9 +273,26 @@ pub(crate) fn callee_uses(
     scoping: &Scoping,
     candidates: &FxHashSet<SymbolId>,
 ) -> CalleeUses {
+    let mut copies = CopyScan {
+        scoping,
+        found: Vec::new(),
+        members: Vec::new(),
+    };
+    copies.visit_program(program);
+    let mut reached = candidates.clone();
+    reached.extend(copies.members.iter().map(|(_, to)| *to));
+    let mut grew = true;
+    while grew {
+        grew = false;
+        for (from, to) in &copies.found {
+            if reached.contains(from) && reached.insert(*to) {
+                grew = true;
+            }
+        }
+    }
     let mut scan = CalleeScan {
         scoping,
-        candidates,
+        candidates: &reached,
         callees: FxHashSet::default(),
         member_callees: FxHashSet::default(),
         copies: FxHashMap::default(),
@@ -287,7 +305,7 @@ pub(crate) fn callee_uses(
     while changed {
         changed = false;
         for (from, to) in &scan.copied {
-            if !observed.contains(from) && (observed.contains(to) || !candidates.contains(to)) {
+            if !observed.contains(from) && (observed.contains(to) || !reached.contains(to)) {
                 observed.insert(*from);
                 changed = true;
             }
@@ -298,9 +316,57 @@ pub(crate) fn callee_uses(
         .copied()
         .filter(|symbol| !observed.contains(symbol))
         .collect();
+    let mut member_callees = scan.member_callees;
+    member_callees.extend(
+        copies
+            .members
+            .iter()
+            .filter(|(_, to)| !observed.contains(to))
+            .map(|(member, _)| *member),
+    );
     CalleeUses {
         callee_only,
-        member_callees: scan.member_callees,
+        member_callees,
+    }
+}
+
+struct CopyScan<'s> {
+    scoping: &'s Scoping,
+    found: Vec<(SymbolId, SymbolId)>,
+    members: Vec<(Span, SymbolId)>,
+}
+
+impl<'a> VisitJs<'a> for CopyScan<'_> {
+    fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        if let (BindingPattern::BindingIdentifier(id), Some(init)) = (&it.id, &it.init) {
+            match (plain_identifier(init), init, id.symbol_id.get()) {
+                (Some(init), _, Some(to)) => {
+                    if let Some(from) = resolved_symbol(init, self.scoping) {
+                        self.found.push((from, to));
+                    }
+                }
+                (None, Expression::StaticMemberExpression(member), Some(to)) => {
+                    self.members.push((member.span, to));
+                }
+                _ => {}
+            }
+        }
+        walk_js::walk_variable_declarator(self, it);
+    }
+
+    fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
+        if let (
+            AssignmentOperator::Assign,
+            AssignmentTarget::AssignmentTargetIdentifier(target),
+            Some(right),
+        ) = (it.operator, &it.left, plain_identifier(&it.right))
+        {
+            let from = resolved_symbol(right, self.scoping);
+            if let (Some(from), Some(to)) = (from, resolved_symbol(target, self.scoping)) {
+                self.found.push((from, to));
+            }
+        }
+        walk_js::walk_assignment_expression(self, it);
     }
 }
 
@@ -317,24 +383,24 @@ struct CalleeScan<'s> {
 impl<'a> VisitJs<'a> for CalleeScan<'_> {
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
         if !it.optional {
-            match &it.callee {
-                Expression::Identifier(id) => {
+            match plain_identifier(&it.callee) {
+                Some(id) => {
                     self.callees.insert(id.span);
                 }
-                callee if callee.is_member_expression() => {
-                    self.member_callees.insert(callee.span());
+                None if it.callee.is_member_expression() => {
+                    self.member_callees.insert(it.callee.span());
                 }
-                _ => {}
+                None => {}
             }
         }
         walk_js::walk_call_expression(self, it);
     }
 
     fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
-        if let (BindingPattern::BindingIdentifier(id), Some(Expression::Identifier(init))) =
-            (&it.id, &it.init)
-        {
-            self.copies.insert(init.span, id.symbol_id.get());
+        if let (BindingPattern::BindingIdentifier(id), Some(init)) = (&it.id, &it.init) {
+            if let Some(init) = plain_identifier(init) {
+                self.copies.insert(init.span, id.symbol_id.get());
+            }
         }
         walk_js::walk_variable_declarator(self, it);
     }
@@ -343,8 +409,8 @@ impl<'a> VisitJs<'a> for CalleeScan<'_> {
         if let (
             AssignmentOperator::Assign,
             AssignmentTarget::AssignmentTargetIdentifier(target),
-            Expression::Identifier(right),
-        ) = (it.operator, &it.left, &it.right)
+            Some(right),
+        ) = (it.operator, &it.left, plain_identifier(&it.right))
         {
             self.copies
                 .insert(right.span, resolved_symbol(target, self.scoping));
@@ -372,5 +438,12 @@ impl<'a> VisitJs<'a> for CalleeScan<'_> {
                 self.observed.insert(symbol);
             }
         }
+    }
+}
+
+fn plain_identifier<'e, 'a>(expr: &'e Expression<'a>) -> Option<&'e IdentifierReference<'a>> {
+    match expr.without_parentheses() {
+        Expression::Identifier(id) => Some(id),
+        _ => literal_headed_identifier(expr),
     }
 }
