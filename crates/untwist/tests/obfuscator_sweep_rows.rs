@@ -1242,3 +1242,19 @@ fn an_alias_of_a_lazy_decoder_used_only_as_a_callee_still_decodes() {
         }
     }
 }
+
+const MISS_THROWS_WITH_A_SHARED_ENTRY: &[&str] = &[
+    "c5-miss-throw-shared-key",
+    "c5-miss-throw-mod-key",
+    "c5-base64-uri-error-mod-key",
+    "c5-base64-uri-error-and-key",
+    "c5-base64-loop-miss-throw",
+];
+
+#[test]
+fn a_stateful_decoder_call_that_throws_on_a_shared_miss_prints_like_node_in_both_lanes() {
+    prints_like_node_in(
+        MISS_THROWS_WITH_A_SHARED_ENTRY,
+        &[default_code, unsafe_lane],
+    );
+}
