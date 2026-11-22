@@ -25,6 +25,7 @@ pub mod fused;
 mod inert_vars;
 pub mod init_order;
 pub mod layers;
+mod lazy_decoder;
 pub mod legacy_reach;
 pub mod merge_object_assignments;
 pub mod mutants;
