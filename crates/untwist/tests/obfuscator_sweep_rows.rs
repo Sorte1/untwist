@@ -1213,6 +1213,10 @@ const DECODER_SELF_WRITES_AND_LAZY_ALIASES: &[&str] = &[
     "a4-lazy-alias-name",
     "a4-lazy-alias-compared",
     "a4-lazy-alias-call-only",
+    "a4-lazy-alias-chain",
+    "a4-lazy-alias-chain-compared",
+    "a4-lazy-alias-keyed-memo",
+    "a4-lazy-alias-arguments-memo",
 ];
 
 #[test]
@@ -1224,10 +1228,17 @@ fn an_alias_of_a_decoder_that_rewrites_itself_prints_like_node_in_both_lanes() {
 }
 
 #[test]
-fn an_alias_of_a_stateless_lazy_decoder_used_only_as_a_callee_still_decodes() {
-    let source = read("a4-lazy-alias-call-only.js");
-    for lane in [default_code, unsafe_lane] {
-        let output = lane(&source);
-        assert!(!output.contains("function d("), "{output}");
+fn an_alias_of_a_lazy_decoder_used_only_as_a_callee_still_decodes() {
+    let decoded = [
+        ("a4-lazy-alias-call-only", "function d("),
+        ("a4-lazy-alias-chain", "function d("),
+        ("a4-lazy-alias-arguments-memo", "function bQ("),
+    ];
+    for (label, decoder) in decoded {
+        let source = read(&format!("{label}.js"));
+        for lane in [default_code, unsafe_lane] {
+            let output = lane(&source);
+            assert!(!output.contains(decoder), "{label}: {output}");
+        }
     }
 }
