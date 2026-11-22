@@ -104,3 +104,8 @@ switch!(
     trust_rotator_wrappers_by_declaration_for_tests,
     rotator_wrappers_trusted
 );
+switch!(
+    CALLS_UNREPEATED,
+    leave_memoised_calls_unrepeated_for_tests,
+    calls_unrepeated
+);

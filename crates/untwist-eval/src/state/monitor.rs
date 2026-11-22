@@ -294,6 +294,9 @@ fn pop_frame(result: Option<&Value<'_>>) {
         return;
     };
     let Some(result) = result else {
+        if frame.last_read.is_some() {
+            breach();
+        }
         return;
     };
     if !frame.missed.is_empty() {

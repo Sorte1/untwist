@@ -2,7 +2,7 @@ use untwist::{Options, Pipeline};
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
 const ROWS: &str = include_str!("data/decoder_template_rows.txt");
-const PREFIXES: [&str; 7] = [
+const PREFIXES: [&str; 8] = [
     "dec-",
     "ref-param-",
     "ref-arity-",
@@ -10,6 +10,7 @@ const PREFIXES: [&str; 7] = [
     "ref-value-gate-",
     "ref-miss-result-",
     "ref-gate-state-",
+    "ref-repeat-",
 ];
 
 fn rows() -> Vec<(String, String)> {

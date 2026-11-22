@@ -1162,3 +1162,18 @@ const MERGED_BLOCK_GLOBAL_READS: &[&str] = &[
 fn a_block_kept_from_a_string_comparison_does_not_capture_a_global_read_in_either_lane() {
     prints_like_node_in(MERGED_BLOCK_GLOBAL_READS, &[default_code, unsafe_lane]);
 }
+
+const MEMO_HITS_AND_THROWS: &[&str] = &[
+    "c4-throw-on-hit",
+    "c4-write-then-throw",
+    "c4-loop-throw-on-hit",
+    "c4-loop-hit-differs",
+    "c4-base64-throw-on-hit",
+    "c4-base64-write-then-throw",
+    "c4-base64-loop-hit-not-fn",
+];
+
+#[test]
+fn a_stateful_decoder_whose_hit_path_or_thrown_call_differs_prints_like_node_in_both_lanes() {
+    prints_like_node_in(MEMO_HITS_AND_THROWS, &[default_code, unsafe_lane]);
+}

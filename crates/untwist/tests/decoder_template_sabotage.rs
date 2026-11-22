@@ -1,9 +1,9 @@
 use untwist::{Options, Pipeline};
 use untwist_eval::mutants::{
-    leave_memo_miss_results_unchecked_for_tests, recognize_gates_in_value_position_for_tests,
-    trust_rotator_wrappers_by_declaration_for_tests, trust_state_left_by_gates_for_tests,
-    trust_template_arity_for_tests, trust_template_parameters_for_tests,
-    trust_template_prefix_for_tests,
+    leave_memo_miss_results_unchecked_for_tests, leave_memoised_calls_unrepeated_for_tests,
+    recognize_gates_in_value_position_for_tests, trust_rotator_wrappers_by_declaration_for_tests,
+    trust_state_left_by_gates_for_tests, trust_template_arity_for_tests,
+    trust_template_parameters_for_tests, trust_template_prefix_for_tests,
 };
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
@@ -11,18 +11,28 @@ const ROWS: &str = include_str!("data/decoder_template_rows.txt");
 
 type Switch = fn(bool);
 
-const MUTANTS: [(&str, &[Switch]); 7] = [
+const MUTANTS: [(&str, &[Switch]); 8] = [
     ("ref-param-", &[trust_template_parameters_for_tests]),
     ("ref-arity-", &[trust_template_arity_for_tests]),
-    ("ref-prefix-", &[trust_template_prefix_for_tests]),
+    (
+        "ref-prefix-",
+        &[
+            trust_template_prefix_for_tests,
+            leave_memoised_calls_unrepeated_for_tests,
+        ],
+    ),
     (
         "ref-value-gate-",
         &[recognize_gates_in_value_position_for_tests],
     ),
     (
         "ref-miss-result-",
-        &[leave_memo_miss_results_unchecked_for_tests],
+        &[
+            leave_memo_miss_results_unchecked_for_tests,
+            leave_memoised_calls_unrepeated_for_tests,
+        ],
     ),
+    ("ref-repeat-", &[leave_memoised_calls_unrepeated_for_tests]),
     ("ref-gate-state-", &[trust_state_left_by_gates_for_tests]),
     (
         "dec-wrapper-",
