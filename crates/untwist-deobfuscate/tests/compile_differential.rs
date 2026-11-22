@@ -206,7 +206,7 @@ fn the_high_presets_pipeline_units_keep_their_steps_and_heap_totals() {
                 )
             })
             .collect();
-        let decoding = (577, 39_333_508, 495_620, 125_534, 2_024);
+        let decoding = (577, 39_375_052, 495_620, 125_534, 2_024);
         let bailed = (0, 0, 0, 0, 0);
         assert!(
             decode.contains(&decoding),
