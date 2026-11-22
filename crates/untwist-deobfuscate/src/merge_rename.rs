@@ -3,11 +3,12 @@ use std::cell::OnceCell;
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk, Visit};
 use oxc_semantic::Scoping;
+use oxc_span::{GetSpan, Span};
 use oxc_str::Ident;
 use oxc_syntax::operator::AssignmentOperator;
 use oxc_syntax::reference::ReferenceId;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
-use oxc_syntax::symbol::SymbolId;
+use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::FxHashSet;
 use untwist_core::pass::Cx;
 
@@ -31,42 +32,79 @@ pub(crate) fn hoist_needs_braces(
     finder.found
 }
 
-pub(crate) fn unread_var(
-    name: &str,
-    outer: ScopeId,
-    dropped: &FxHashSet<ReferenceId>,
-    scoping: &Scoping,
-) -> Option<SymbolId> {
-    let symbol = scoping.get_binding(outer, Ident::from(name))?;
-    let flags = scoping.symbol_flags(symbol);
-    let plain_var = flags.is_function_scoped_declaration() && !flags.is_function();
-    let unread = scoping
-        .get_resolved_reference_ids(symbol)
-        .iter()
-        .all(|reference| dropped.contains(reference));
-    (plain_var && !flags.is_class() && unread).then_some(symbol)
+pub(crate) struct DroppedBranch {
+    span: Span,
+    references: FxHashSet<ReferenceId>,
 }
 
-pub(crate) fn shadows_unread(
+impl DroppedBranch {
+    pub(crate) fn of(statement: Option<&Statement<'_>>) -> Option<Self> {
+        let statement = statement?;
+        let mut references = ReferencesIn::default();
+        references.visit_statement(statement);
+        Some(Self {
+            span: statement.span(),
+            references: references.ids,
+        })
+    }
+
+    fn holds(&self, span: Span) -> bool {
+        !span.is_empty() && self.span.start <= span.start && span.end <= self.span.end
+    }
+}
+
+#[derive(Default)]
+struct ReferencesIn {
+    ids: FxHashSet<ReferenceId>,
+}
+
+impl<'a> Visit<'a> for ReferencesIn {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        if let Some(id) = it.reference_id.get() {
+            self.ids.insert(id);
+        }
+    }
+}
+
+pub(crate) fn shadows_dropped(
     name: &str,
     outer: ScopeId,
-    dropped: &FxHashSet<ReferenceId>,
+    (dropped, branch): (&FxHashSet<ReferenceId>, Option<&DroppedBranch>),
     scoping: &Scoping,
 ) -> bool {
     let ident = Ident::from(name);
-    if scoping.get_binding(outer, ident).is_some() {
+    let Some((scope, symbol)) = scoping.scope_ancestors(outer).find_map(|scope| {
+        scoping
+            .get_binding(scope, ident)
+            .map(|symbol| (scope, symbol))
+    }) else {
         return false;
-    }
-    scoping
-        .scope_ancestors(outer)
-        .skip(1)
-        .find_map(|ancestor| scoping.get_binding(ancestor, ident))
-        .is_some_and(|symbol| {
-            scoping
-                .get_resolved_reference_ids(symbol)
+    };
+    let flags = scoping.symbol_flags(symbol);
+    let references = scoping.get_resolved_reference_ids(symbol);
+    if flags.contains(SymbolFlags::BlockScopedVariable) && !flags.is_function() && !flags.is_class()
+    {
+        return scope != outer
+            && references
                 .iter()
-                .all(|reference| dropped.contains(reference))
-        })
+                .all(|reference| dropped.contains(reference));
+    }
+    let plain_var = flags.is_function_scoped_declaration()
+        && !flags.is_function()
+        && !flags.is_class()
+        && !flags.is_catch_variable();
+    let Some(branch) = branch.filter(|_| plain_var) else {
+        return false;
+    };
+    let declared_there = branch.holds(scoping.symbol_span(symbol))
+        && scoping
+            .symbol_redeclarations(symbol)
+            .iter()
+            .all(|redeclaration| branch.holds(redeclaration.span));
+    declared_there
+        && references
+            .iter()
+            .all(|reference| branch.references.contains(reference))
 }
 
 pub(crate) struct Givers<'b, 'a> {

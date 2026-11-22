@@ -18,7 +18,7 @@ use untwist_core::semantic::{may_call_eval, misbound_catch_vars, program_is_stri
 use untwist_eval::fold::{fold_to_const, Const, FoldOptions};
 
 use crate::constant_test::literal_truthiness;
-use crate::merge_rename::{hoist_needs_braces, shadows_unread, unread_var, Givers};
+use crate::merge_rename::{hoist_needs_braces, shadows_dropped, DroppedBranch, Givers};
 use crate::notes;
 
 pub const PASS: &str = "dead-code";
@@ -108,6 +108,7 @@ struct Planner<'p, 'b, 'a> {
     staged: Vec<(SymbolId, Ident<'a>)>,
     givers: Givers<'b, 'a>,
     dropped: &'p FxHashSet<ReferenceId>,
+    drop: Option<&'p DroppedBranch>,
 }
 
 impl<'a> Planner<'_, '_, 'a> {
@@ -128,12 +129,8 @@ impl<'a> Planner<'_, '_, 'a> {
         if taken {
             return None;
         }
-        if shadows_unread(name, self.outer, self.dropped, cx.scoping()) {
-            return Some(name.to_string());
-        }
-        let unread = unread_var(name, self.outer, self.dropped, cx.scoping())?;
-        self.rename(unread, name, cx)?;
-        Some(name.to_string())
+        shadows_dropped(name, self.outer, (self.dropped, self.drop), cx.scoping())
+            .then(|| name.to_string())
     }
 
     fn rename(&mut self, symbol: SymbolId, name: &str, cx: &Cx<'a, '_>) -> Option<String> {
@@ -491,6 +488,7 @@ pub struct DeadCode<'a> {
     kept_vars: FxHashSet<Span>,
     fresh_vars: FxHashSet<Span>,
     dropped: FxHashSet<ReferenceId>,
+    drop: Option<DroppedBranch>,
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
@@ -618,7 +616,12 @@ impl<'a> DeadCode<'a> {
             ..
         } = node.unbox();
         self.push_kept_vars(&names, kept_span, stmts, cx);
-        match if value { Some(consequent) } else { alternate } {
+        let (kept, dropped) = match value {
+            true => (Some(consequent), alternate.as_ref()),
+            false => (alternate, Some(&consequent)),
+        };
+        self.drop = DroppedBranch::of(dropped);
+        match kept {
             None => {}
             Some(block @ Statement::BlockStatement(_)) => self.keep_block(block, outer, stmts, cx),
             Some(function @ Statement::FunctionDeclaration(_)) => {
@@ -694,11 +697,13 @@ impl<'a> DeadCode<'a> {
             alternate,
             ..
         } = node;
-        let dropped = references_in(if value {
+        let dropped_branch = if value {
             alternate.as_ref()
         } else {
             Some(&consequent)
-        });
+        };
+        let dropped = references_in(dropped_branch);
+        self.drop = DroppedBranch::of(dropped_branch);
         self.dropped.extend(dropped.iter().copied());
         if value {
             match self.merge_or_keep(consequent, outer, stmts, cx) {
@@ -759,6 +764,7 @@ impl<'a> DeadCode<'a> {
             staged: Vec::new(),
             givers: Givers::new(&branch, cx),
             dropped: &self.dropped,
+            drop: self.drop.as_ref(),
         };
         let planned = planner.plan(&branch, cx);
         let staged = planner.staged;

@@ -1271,6 +1271,7 @@ const MERGED_BLOCK_NAMES: &[&str] = &[
     "dc2-a1-closure",
     "dc2-a1-dropped-var",
     "dc2-a1-live-var",
+    "dc2-a1-var-in-outer",
 ];
 
 #[test]
