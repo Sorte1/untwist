@@ -1258,3 +1258,35 @@ fn a_stateful_decoder_call_that_throws_on_a_shared_miss_prints_like_node_in_both
         &[default_code, unsafe_lane],
     );
 }
+
+const MERGED_BLOCK_NAMES: &[&str] = &[
+    "dc2-a1-class-name",
+    "dc2-a1-fn-name",
+    "dc2-a1-string-test",
+    "dc2-a1-two-names",
+    "dc2-a1-assigned",
+    "dc2-a1-logical",
+    "dc2-a1-pattern",
+    "dc2-a1-target-default",
+    "dc2-a1-closure",
+];
+
+#[test]
+fn a_block_binding_renamed_on_a_merge_keeps_its_function_or_class_name_in_the_default_lane() {
+    prints_like_node_in(MERGED_BLOCK_NAMES, &[default_code]);
+}
+
+const MERGED_BLOCK_ANNEX_B_SHADOWS: &[&str] = &[
+    "dc2-a2-annexb",
+    "dc2-a2-annexb-switch",
+    "dc2-a2-annexb-class",
+    "dc2-a2-deep",
+    "dc2-a2-forwarded",
+    "dc2-a2-sibling",
+    "dc2-arguments",
+];
+
+#[test]
+fn a_block_binding_renamed_on_a_merge_still_shadows_a_nested_block_function_in_both_lanes() {
+    prints_like_node_in(MERGED_BLOCK_ANNEX_B_SHADOWS, &[default_code, unsafe_lane]);
+}

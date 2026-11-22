@@ -28,6 +28,7 @@ pub mod layers;
 mod lazy_decoder;
 pub mod legacy_reach;
 pub mod merge_object_assignments;
+mod merge_rename;
 pub mod mutants;
 mod note_set;
 pub mod notes;

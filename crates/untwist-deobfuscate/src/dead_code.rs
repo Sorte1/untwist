@@ -18,6 +18,7 @@ use untwist_core::semantic::{may_call_eval, misbound_catch_vars, program_is_stri
 use untwist_eval::fold::{fold_to_const, Const, FoldOptions};
 
 use crate::constant_test::literal_truthiness;
+use crate::merge_rename::rename_is_observable;
 use crate::notes;
 
 pub const PASS: &str = "dead-code";
@@ -743,7 +744,9 @@ impl<'a> DeadCode<'a> {
             &mut staged,
             cx,
         );
+        let renamed: Vec<SymbolId> = staged.iter().map(|(symbol, _)| *symbol).collect();
         match planned {
+            Some(_) if rename_is_observable(&branch, &renamed, cx) => Err(branch),
             Some(introduced) => {
                 self.moved.entry(outer).or_default().extend(introduced);
                 for (symbol, name) in staged {
