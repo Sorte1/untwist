@@ -685,7 +685,7 @@ impl InterpEvaluator {
                     self.thrown_calls = skipped;
                     break Ok(values);
                 }
-                Ok((_, thrown)) if skipped.is_empty() => skipped = thrown,
+                Ok((_, thrown)) if skipped.is_empty() && shape.is_none() => skipped = thrown,
                 Ok(_) => break Err(Bail::Unsupported(&CALL_THREW)),
                 Err(bail) => break Err(bail),
             }
