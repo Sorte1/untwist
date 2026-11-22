@@ -1177,3 +1177,23 @@ const MEMO_HITS_AND_THROWS: &[&str] = &[
 fn a_stateful_decoder_whose_hit_path_or_thrown_call_differs_prints_like_node_in_both_lanes() {
     prints_like_node_in(MEMO_HITS_AND_THROWS, &[default_code, unsafe_lane]);
 }
+
+const COOKIE_VARS_WRITTEN_AFTER_THE_MOVE: &[&str] = &[
+    "ox2d4e-g3-write",
+    "ox2d4e-g3-read",
+    "ox2d4e-g3-strict",
+    "ox2d4e-g3-static",
+    "ox2d4e-g3-break",
+    "ox2d4e-g3-eval",
+    "ox2d4e-g3-block-after",
+    "ox2d4e-g3-closure-after",
+    "ox2d4e-g3-var-after-strict",
+];
+
+#[test]
+fn a_cookie_var_written_after_the_cookie_moves_keeps_an_outer_declaration_in_both_lanes() {
+    prints_like_node_in(
+        COOKIE_VARS_WRITTEN_AFTER_THE_MOVE,
+        &[default_code, unsafe_lane],
+    );
+}

@@ -2,9 +2,9 @@ use oxc_allocator::{TakeIn, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast_visit::VisitJs;
 use oxc_semantic::Scoping;
-use oxc_span::GetSpan;
+use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::AssignmentOperator;
-use oxc_syntax::symbol::SymbolId;
+use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use untwist_core::ast_util::prop::{identifier_name, member_parts};
 use untwist_core::ast_util::respan::SYNTHETIC_BASE;
 use untwist_core::pass::Cx;
@@ -15,7 +15,7 @@ use super::cookie_minified::{countdown_declaration, is_cookie_block};
 use super::inlined::{copied_out_of_block, used_only_in};
 use super::legacy::is_countdown;
 use super::moved::{moved_vars, never_rebound, read_by_closure};
-use crate::stamp::declaration_symbol;
+use crate::stamp::{declaration_symbol, DynamicScopes};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Form {
@@ -37,6 +37,7 @@ struct Plan {
     holder: Option<String>,
     dropped: Vec<SymbolId>,
     direct: bool,
+    kept: Vec<String>,
 }
 
 fn resolved(scoping: &Scoping, reference: &IdentifierReference<'_>) -> Option<SymbolId> {
@@ -179,37 +180,84 @@ fn cookie_form<'k, 'a>(
 struct Mentions<'s> {
     scoping: &'s Scoping,
     symbol: SymbolId,
-    found: bool,
+    references: usize,
+    bound: bool,
+}
+
+impl<'s> Mentions<'s> {
+    fn of(scoping: &'s Scoping, symbol: SymbolId) -> Self {
+        Self {
+            scoping,
+            symbol,
+            references: 0,
+            bound: false,
+        }
+    }
+
+    fn found(&self) -> bool {
+        self.references > 0 || self.bound
+    }
 }
 
 impl<'a> VisitJs<'a> for Mentions<'_> {
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        self.found |= resolved(self.scoping, it) == Some(self.symbol);
+        self.references += usize::from(resolved(self.scoping, it) == Some(self.symbol));
     }
 
     fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
-        self.found |= it.symbol_id.get() == Some(self.symbol);
+        self.bound |= it.symbol_id.get() == Some(self.symbol);
     }
 }
 
 fn mentions(stmt: &Statement<'_>, scoping: &Scoping, symbol: SymbolId) -> bool {
-    let mut seen = Mentions {
-        scoping,
-        symbol,
-        found: false,
-    };
+    let mut seen = Mentions::of(scoping, symbol);
     seen.visit_statement(stmt);
-    seen.found
+    seen.found()
 }
 
 fn mentions_expr(expr: &Expression<'_>, scoping: &Scoping, symbol: SymbolId) -> bool {
-    let mut seen = Mentions {
-        scoping,
-        symbol,
-        found: false,
-    };
+    let mut seen = Mentions::of(scoping, symbol);
     seen.visit_expression(expr);
-    seen.found
+    seen.found()
+}
+
+fn within(span: Span, outer: Span) -> bool {
+    outer.start <= span.start && span.end <= outer.end
+}
+
+fn list_span(body: &[Statement<'_>]) -> Span {
+    match (body.first(), body.last()) {
+        (Some(first), Some(last)) => Span::new(first.span().start, last.span().end),
+        _ => Span::default(),
+    }
+}
+
+fn local_to(body: &[Statement<'_>], scoping: &Scoping, symbol: SymbolId) -> bool {
+    let mut seen = Mentions::of(scoping, symbol);
+    for stmt in body {
+        seen.visit_statement(stmt);
+    }
+    let list = list_span(body);
+    seen.references == scoping.get_resolved_reference_ids(symbol).len()
+        && DynamicScopes::of(scoping)
+            .refusal(scoping, symbol)
+            .is_none()
+        && scoping
+            .symbol_redeclarations(symbol)
+            .iter()
+            .all(|declaration| within(declaration.span, list))
+}
+
+fn declared_outside(cookie: &Statement<'_>, scoping: &Scoping, symbol: SymbolId) -> bool {
+    scoping
+        .symbol_redeclarations(symbol)
+        .iter()
+        .any(|declaration| {
+            declaration
+                .flags
+                .contains(SymbolFlags::FunctionScopedVariable)
+                && !within(declaration.span, cookie.span())
+        })
 }
 
 fn overwrites(stmt: &Statement<'_>, scoping: &Scoping, symbol: SymbolId) -> bool {
@@ -258,6 +306,7 @@ fn overwritten_after(
     };
 
     first > cookie
+        && local_to(body, scoping, symbol)
         && overwrites(&body[first], scoping, symbol)
         && !read_by_closure(&body[cookie], scoping, symbol)
         && outside
@@ -321,9 +370,28 @@ fn declared_by_var_in(body: &[Statement<'_>], scoping: &Scoping, symbol: SymbolI
 }
 
 fn declared_inside(stmt: &Statement<'_>, scoping: &Scoping, symbol: SymbolId) -> bool {
-    let declared = scoping.symbol_span(symbol);
-    let span = stmt.span();
-    span.start <= declared.start && declared.end <= span.end
+    within(scoping.symbol_span(symbol), stmt.span())
+}
+
+fn kept_outside(
+    body: &[Statement<'_>],
+    cookie: usize,
+    scoping: &Scoping,
+    moved: &[SymbolId],
+) -> Option<Vec<String>> {
+    let mut kept = Vec::new();
+    for symbol in moved {
+        if used_only_in(scoping, *symbol, std::iter::once(&body[cookie])) {
+            continue;
+        }
+        if !overwritten_after(body, cookie, scoping, *symbol) {
+            return None;
+        }
+        if !declared_outside(&body[cookie], scoping, *symbol) {
+            kept.push(scoping.symbol_name(*symbol).to_string());
+        }
+    }
+    Some(kept)
 }
 
 fn plan_at(body: &[Statement<'_>], array: usize, scoping: &Scoping) -> Option<Plan> {
@@ -389,13 +457,11 @@ fn plan_at(body: &[Statement<'_>], array: usize, scoping: &Scoping) -> Option<Pl
         && holder_symbols
             .iter()
             .all(|symbol| in_statements(*symbol, &[cookie]))
-        && owned.iter().skip(holder_symbols.len()).all(|symbol| {
-            in_statements(*symbol, &[cookie]) || overwritten_after(body, cookie, scoping, *symbol)
-        })
         && holder_symbols
             .iter()
             .skip(1)
             .all(|flag| scoping.get_resolved_reference_ids(*flag).len() == 2);
+    let kept = kept_outside(body, cookie, scoping, &owned[holder_symbols.len()..]);
     let original = [array, alias, rotator.at, cookie]
         .iter()
         .all(|index| body[*index].span().start < SYNTHETIC_BASE);
@@ -408,7 +474,8 @@ fn plan_at(body: &[Statement<'_>], array: usize, scoping: &Scoping) -> Option<Pl
     if rotator.assigned {
         dropped.push(rotator.symbol);
     }
-    (sealed && original).then(|| Plan {
+    let kept = kept.filter(|_| sealed && original)?;
+    Some(Plan {
         array,
         alias,
         rotator: rotator.at,
@@ -421,6 +488,7 @@ fn plan_at(body: &[Statement<'_>], array: usize, scoping: &Scoping) -> Option<Pl
         holder: holders.first().map(|holder| holder.name.to_string()),
         dropped,
         direct,
+        kept,
     })
 }
 
@@ -522,6 +590,14 @@ fn rewrite<'a>(it: &mut AVec<'a, Statement<'a>>, plan: &Plan, cx: &Cx<'a, '_>) -
         "!function ({}) {{ 0; }}({});",
         plan.alias_name, plan.array_name
     );
+    let kept: Option<Vec<Statement<'a>>> = plan
+        .kept
+        .iter()
+        .map(|name| parsed_statement(&format!("var {name};"), cx))
+        .collect();
+    let Some(kept) = kept else {
+        return false;
+    };
     let holder = match (&plan.holder, plan.form) {
         (Some(holder), Form::Assigned | Form::Flagged) => {
             parsed_statement(&format!("var {holder};"), cx).map(Some)
@@ -556,6 +632,9 @@ fn rewrite<'a>(it: &mut AVec<'a, Statement<'a>>, plan: &Plan, cx: &Cx<'a, '_>) -
         it.remove(*index);
     }
     it.insert(plan.array + 1, wrapped);
+    for (offset, declaration) in kept.into_iter().enumerate() {
+        it.insert(plan.array + 2 + offset, declaration);
+    }
     without_bare(it, &plan.dropped);
     true
 }
