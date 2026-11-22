@@ -36,7 +36,7 @@ use crate::stamp::{find_stamped_named, is_unedited};
 use crate::units::MachineryDepth;
 use crate::wrapper_calls::inline_function_wrappers;
 use crate::wrapper_immediate::inline_immediate_wrappers;
-use crate::wrapper_speculation::branched_writes_outside;
+use crate::wrapper_speculation::{branched_writes_outside, writes_outside_homes};
 
 pub const ALIAS_FORM_CHECKS: &str = "inline-decoder-wrappers/alias-form-checks";
 
@@ -320,12 +320,65 @@ struct VariablePlan<'a> {
 fn decoder_targets<'a>(program: &Program<'_>, cx: &Cx<'a, '_>) -> FxHashMap<SymbolId, Ident<'a>> {
     let stamped = find_stamped_named(program, cx.scoping(), is_unedited(cx));
     let mut targets: FxHashMap<SymbolId, Ident<'a>> = FxHashMap::default();
+    let mut homes: FxHashMap<SymbolId, Span> = FxHashMap::default();
     for decoder in &stamped.decoders {
         if let Some(symbol) = decoder.symbol {
             targets.insert(symbol, Ident::from_str_in(decoder.name, cx));
+            homes.insert(symbol, decoder.statement);
         }
     }
+    for symbol in written_outside_homes(program, cx, &homes) {
+        targets.remove(&symbol);
+    }
     targets
+}
+
+fn written_outside_homes(
+    program: &Program<'_>,
+    cx: &Cx<'_, '_>,
+    homes: &FxHashMap<SymbolId, Span>,
+) -> Vec<SymbolId> {
+    let scoping = cx.scoping();
+    let written: FxHashSet<SymbolId> = homes
+        .keys()
+        .copied()
+        .filter(|symbol| {
+            scoping
+                .get_resolved_reference_ids(*symbol)
+                .iter()
+                .any(|reference| scoping.get_reference(*reference).is_write())
+        })
+        .collect();
+    if written.is_empty() {
+        return Vec::new();
+    }
+    let speculated = match cx.opts.unsafe_transforms && crate::legacy_reach::speculates_escapes() {
+        true => branched_writes_outside(program, scoping, &written, homes),
+        false => FxHashMap::default(),
+    };
+    let outside = writes_outside_homes(program, scoping, &written, homes);
+    if outside.is_empty() {
+        return Vec::new();
+    }
+    let mut search = SelfAssignments {
+        scoping,
+        decoders: &written,
+        statement: Span::empty(0),
+        found: Vec::new(),
+    };
+    search.visit_program(program);
+    let unchanged: FxHashSet<u32> = search
+        .found
+        .iter()
+        .map(|(_, expression)| expression.start)
+        .collect();
+    outside
+        .into_iter()
+        .filter(|(symbol, span)| {
+            !unchanged.contains(&span.start) && !speculated.contains_key(symbol)
+        })
+        .map(|(symbol, _)| symbol)
+        .collect()
 }
 
 fn alias_target<'a>(

@@ -998,6 +998,33 @@ fn a_decoder_written_in_a_live_branch_is_kept_in_both_lanes() {
     );
 }
 
+const GUARDED_DECODER_ALIASES: &[&str] = &[
+    "guarded-alias-plain",
+    "guarded-alias-hook",
+    "guarded-alias-lazy",
+    "guarded-alias-in-function",
+    "guarded-alias-in-iife",
+    "guarded-alias-chain",
+    "guarded-alias-assigned",
+    "guarded-alias-conditional",
+    "guarded-alias-object",
+    "guarded-alias-wrapper",
+    "guarded-alias-wrapper-offset",
+    "guarded-alias-else",
+    "guarded-alias-ternary",
+    "guarded-alias-after-rotator",
+    "guarded-alias-fn-scope",
+    "guarded-alias-dead-guard",
+    "guarded-alias-taken-after",
+    "guarded-alias-called-before",
+    "guarded-alias-named-wrapper",
+];
+
+#[test]
+fn an_alias_of_a_decoder_written_under_a_guard_prints_like_node_in_both_lanes() {
+    prints_like_node_in(GUARDED_DECODER_ALIASES, &[default_code, unsafe_lane]);
+}
+
 const COOKIE_BLOCK_MOVES: &[&str] = &[
     "cookie-block-k1",
     "cookie-block-k2",
