@@ -1,0 +1,17 @@
+function c() {
+  var o = ['TyxkK', 'hello', 'log', 'world'];
+  c = function () { return o; };
+  return c();
+}
+function d(a, b) {
+  var e = c();
+  return (d = function (f, g) {
+    f = f - 0x10;
+    var h = e[f];
+    return h;
+  }), d(a, b);
+}
+var z = d;
+d(0x10);
+z.tag = 1;
+console.log(d.tag, z(0x11));

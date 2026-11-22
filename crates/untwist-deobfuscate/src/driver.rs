@@ -995,6 +995,9 @@ fn deobfuscate_with<'a>(
         .rule_disabled(unstamp::UNSTAMP_REMAINING_PASS)
         .then(|| program.clone_in(&snapshot));
     let sem = run_undoable_rounds(alloc, program, sem, (opts, &shared), &mut aggregate);
+    if !opts.nested_root {
+        crate::legacy_reach::settle_lazy_aliases(program);
+    }
     clear_kept_order();
     if opts.round_cap_undo.get() == RoundCapUndo::Requested {
         return (sem, aggregate.finish());

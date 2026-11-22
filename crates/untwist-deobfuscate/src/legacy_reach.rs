@@ -44,6 +44,7 @@ struct Deferral {
     strips_forbidden: bool,
     containers: Vec<Span>,
     reached: bool,
+    lazy_aliases: Vec<String>,
 }
 
 thread_local! {
@@ -108,6 +109,30 @@ impl Drop for EscapeStage {
         });
         take_followed_spans();
         follow_spans(&self.followed);
+    }
+}
+
+pub(crate) fn speculates_lazy_aliases() -> bool {
+    DEFERRAL.with(|deferral| {
+        let deferral = deferral.borrow();
+        deferral.rerunnable && !deferral.forbidden
+    })
+}
+
+pub(crate) fn defer_lazy_aliases(decoders: Vec<String>) {
+    DEFERRAL.with(|deferral| deferral.borrow_mut().lazy_aliases.extend(decoders));
+}
+
+pub(crate) fn settle_lazy_aliases(program: &Program<'_>) {
+    let decoders =
+        DEFERRAL.with(|deferral| std::mem::take(&mut deferral.borrow_mut().lazy_aliases));
+    if decoders.is_empty() {
+        return;
+    }
+    let mut names = Names::default();
+    names.visit_program(program);
+    if decoders.iter().any(|name| names.present.contains(name)) {
+        DEFERRAL.with(|deferral| deferral.borrow_mut().unverified = true);
     }
 }
 
@@ -681,6 +706,7 @@ pub(crate) fn forget() {
         deferral.strips.clear();
         deferral.strips_failed = false;
         deferral.containers.clear();
+        deferral.lazy_aliases.clear();
     });
 }
 

@@ -28,6 +28,7 @@ use crate::bindings::{reference_symbol, resolved_symbol};
 use crate::call_checks::call_checks_apply;
 use crate::fused::{Fused, Member, Walk};
 use crate::init_order::{lend_order_with, note_overflow, sharing_mark, DeclarationSlot, LentOrder};
+use crate::lazy_decoder::{callee_uses, lazy_shape};
 use crate::mutants::wrapper_guards_dropped;
 use crate::notes;
 use crate::proof::{has_with_statement, refuse_annex_b_bindings};
@@ -36,7 +37,7 @@ use crate::stamp::{find_stamped_named, is_unedited};
 use crate::units::MachineryDepth;
 use crate::wrapper_calls::inline_function_wrappers;
 use crate::wrapper_immediate::inline_immediate_wrappers;
-use crate::wrapper_speculation::{branched_writes_outside, writes_outside_homes};
+use crate::wrapper_speculation::{branched_writes_outside, outside_home, writes_of};
 
 pub const ALIAS_FORM_CHECKS: &str = "inline-decoder-wrappers/alias-form-checks";
 
@@ -317,27 +318,67 @@ struct VariablePlan<'a> {
     globally_reached: FxHashSet<SymbolId>,
 }
 
-fn decoder_targets<'a>(program: &Program<'_>, cx: &Cx<'a, '_>) -> FxHashMap<SymbolId, Ident<'a>> {
+struct DecoderTargets<'a> {
+    names: FxHashMap<SymbolId, Ident<'a>>,
+    lazy: FxHashMap<SymbolId, bool>,
+    speculated: Vec<Ident<'a>>,
+}
+
+fn decoder_targets<'a>(program: &Program<'_>, cx: &Cx<'a, '_>) -> DecoderTargets<'a> {
     let stamped = find_stamped_named(program, cx.scoping(), is_unedited(cx));
     let mut targets: FxHashMap<SymbolId, Ident<'a>> = FxHashMap::default();
     let mut homes: FxHashMap<SymbolId, Span> = FxHashMap::default();
+    let mut functions: FxHashMap<SymbolId, &Function<'_>> = FxHashMap::default();
     for decoder in &stamped.decoders {
         if let Some(symbol) = decoder.symbol {
             targets.insert(symbol, Ident::from_str_in(decoder.name, cx));
             homes.insert(symbol, decoder.statement);
+            functions.insert(symbol, decoder.function);
         }
     }
-    for symbol in written_outside_homes(program, cx, &homes) {
+    let writes = home_writes(program, cx, &homes);
+    for symbol in writes.outside {
         targets.remove(&symbol);
     }
-    targets
+    let speculating = !cx.opts.nested_root && crate::legacy_reach::speculates_lazy_aliases();
+    let mut lazy = FxHashMap::default();
+    let mut speculated = Vec::new();
+    for (symbol, inside) in writes.inside {
+        let shape = functions
+            .get(&symbol)
+            .and_then(|function| lazy_shape(function, symbol, cx.scoping()));
+        match shape {
+            Some(shape) if inside == [shape.self_write] => {
+                let guessed = speculating && !shape.stateless;
+                if let (true, Some(name)) = (guessed, targets.get(&symbol)) {
+                    speculated.push(*name);
+                }
+                lazy.insert(symbol, shape.stateless || guessed);
+            }
+            _ => {
+                targets.remove(&symbol);
+            }
+        }
+    }
+    lazy.retain(|symbol, _| targets.contains_key(symbol));
+    DecoderTargets {
+        names: targets,
+        lazy,
+        speculated,
+    }
 }
 
-fn written_outside_homes(
+#[derive(Default)]
+struct HomeWrites {
+    outside: Vec<SymbolId>,
+    inside: FxHashMap<SymbolId, Vec<Span>>,
+}
+
+fn home_writes(
     program: &Program<'_>,
     cx: &Cx<'_, '_>,
     homes: &FxHashMap<SymbolId, Span>,
-) -> Vec<SymbolId> {
+) -> HomeWrites {
     let scoping = cx.scoping();
     let written: FxHashSet<SymbolId> = homes
         .keys()
@@ -350,16 +391,23 @@ fn written_outside_homes(
         })
         .collect();
     if written.is_empty() {
-        return Vec::new();
+        return HomeWrites::default();
+    }
+    let mut found = HomeWrites::default();
+    let mut outside: Vec<(SymbolId, Span)> = Vec::new();
+    for (symbol, span) in writes_of(program, scoping, &written) {
+        match outside_home(homes, symbol, span) {
+            true => outside.push((symbol, span)),
+            false => found.inside.entry(symbol).or_default().push(span),
+        }
+    }
+    if outside.is_empty() {
+        return found;
     }
     let speculated = match cx.opts.unsafe_transforms && crate::legacy_reach::speculates_escapes() {
         true => branched_writes_outside(program, scoping, &written, homes),
         false => FxHashMap::default(),
     };
-    let outside = writes_outside_homes(program, scoping, &written, homes);
-    if outside.is_empty() {
-        return Vec::new();
-    }
     let mut search = SelfAssignments {
         scoping,
         decoders: &written,
@@ -372,13 +420,14 @@ fn written_outside_homes(
         .iter()
         .map(|(_, expression)| expression.start)
         .collect();
-    outside
+    found.outside = outside
         .into_iter()
         .filter(|(symbol, span)| {
             !unchanged.contains(&span.start) && !speculated.contains_key(symbol)
         })
         .map(|(symbol, _)| symbol)
-        .collect()
+        .collect();
+    found
 }
 
 fn alias_target<'a>(
@@ -400,6 +449,66 @@ struct AliasFacts {
     self_writes: FxHashMap<SymbolId, Vec<Span>>,
     order: LentOrder,
     branched: FxHashMap<SymbolId, Vec<Span>>,
+    lazy: LazyFacts,
+}
+
+#[derive(Default)]
+struct LazyFacts {
+    decoders: FxHashMap<SymbolId, bool>,
+    blocked: FxHashSet<SymbolId>,
+    member_callees: FxHashSet<Span>,
+}
+
+impl LazyFacts {
+    fn of(
+        program: &Program<'_>,
+        scoping: &Scoping,
+        decoders: FxHashMap<SymbolId, bool>,
+        (sites, objects): (&[AliasSite], &[ObjectAlias]),
+    ) -> Self {
+        let held: Vec<(SymbolId, SymbolId)> = sites
+            .iter()
+            .filter(|site| site.symbol != site.source)
+            .map(|site| (site.symbol, site.source))
+            .chain(objects.iter().map(|object| (object.symbol, object.source)))
+            .filter(|(_, source)| decoders.contains_key(source))
+            .collect();
+        if held.is_empty() {
+            return Self {
+                decoders,
+                ..Self::default()
+            };
+        }
+        let candidates: FxHashSet<SymbolId> = sites
+            .iter()
+            .filter(|site| site.symbol != site.source)
+            .map(|site| site.symbol)
+            .chain(objects.iter().map(|object| object.symbol))
+            .collect();
+        let uses = callee_uses(program, scoping, &candidates);
+        let blocked = held
+            .iter()
+            .filter(|(symbol, source)| {
+                decoders.get(source) == Some(&false) || !uses.callee_only.contains(symbol)
+            })
+            .map(|(symbol, _)| *symbol)
+            .collect();
+        Self {
+            decoders,
+            blocked,
+            member_callees: uses.member_callees,
+        }
+    }
+
+    fn blocks_members(&self, source: SymbolId, members: &[Span]) -> bool {
+        match self.decoders.get(&source) {
+            None => false,
+            Some(false) => true,
+            Some(true) => members
+                .iter()
+                .any(|member| !self.member_callees.contains(member)),
+        }
+    }
 }
 
 #[cfg(debug_assertions)]
@@ -561,7 +670,12 @@ fn collect_leftovers<'a>(
             continue;
         }
         let mark = facts.order.budget_exhausted();
-        if let Some(reason) = rejection(site, facts, scoping) {
+        let lazy = facts
+            .lazy
+            .blocked
+            .contains(&site.symbol)
+            .then_some(notes::WRAPPER_ALIAS_LAZY_DECODER);
+        if let Some(reason) = rejection(site, facts, scoping).or(lazy) {
             if noted.insert(site.symbol) {
                 let span = site.expression.unwrap_or(site.statement);
                 plan.rejected.push((span, reason));
@@ -636,9 +750,15 @@ fn variable_alias_plan<'a>(
     wanted: AliasTargets<'_>,
 ) -> VariablePlan<'a> {
     let mut plan = VariablePlan::default();
-    let (mut targets, keeps_machinery) = match wanted {
-        AliasTargets::Decoders => (decoder_targets(program, cx), false),
-        AliasTargets::Wrappers(kept) => (wrapper_targets(cx, kept), true),
+    let (mut targets, lazy, speculated, keeps_machinery) = match wanted {
+        AliasTargets::Decoders => {
+            let found = decoder_targets(program, cx);
+            (found.names, found.lazy, found.speculated, false)
+        }
+        AliasTargets::Wrappers(kept) => {
+            let targets = wrapper_targets(cx, kept);
+            (targets, FxHashMap::default(), Vec::new(), true)
+        }
     };
     if targets.is_empty() {
         return plan;
@@ -658,11 +778,16 @@ fn variable_alias_plan<'a>(
         sites.retain(|site| in_target_scope(scoping, site, &targets));
     }
     let branched = branched_alias_writes(program, cx, &sites);
+    let lazy = match lazy.is_empty() {
+        true => LazyFacts::default(),
+        false => LazyFacts::of(program, cx.scoping(), lazy, (&sites, &forms.objects)),
+    };
     let facts = AliasFacts {
         declarations,
         self_writes: self_write_counts(program, &sites),
         order,
         branched,
+        lazy,
     };
     #[cfg(debug_assertions)]
     record_alias_facts(&sites, &facts);
@@ -682,8 +807,23 @@ fn variable_alias_plan<'a>(
     }
     plan.collapses = sequence_collapses(&forms, &targets, &plan, cx.scoping(), checked);
     defer_branched_writes(&plan, &facts.branched);
+    defer_speculated_lazy_decoders(&plan, &speculated);
     plan.declarations = facts.declarations.found;
     plan
+}
+
+fn defer_speculated_lazy_decoders(plan: &VariablePlan<'_>, speculated: &[Ident<'_>]) {
+    let used: Vec<String> = speculated
+        .iter()
+        .filter(|name| {
+            plan.aliases.values().any(|target| target == *name)
+                || plan.objects.iter().any(|(_, _, target)| target == *name)
+        })
+        .map(|name| name.to_string())
+        .collect();
+    if !used.is_empty() {
+        crate::legacy_reach::defer_lazy_aliases(used);
+    }
 }
 
 fn branched_alias_writes(
@@ -740,7 +880,9 @@ fn choose_aliases<'a>(
             let Some(name) = alias_target(site, targets, plan) else {
                 continue;
             };
-            if rejection(site, facts, scoping).is_some() {
+            if facts.lazy.blocked.contains(&site.symbol)
+                || rejection(site, facts, scoping).is_some()
+            {
                 continue;
             }
             if plan.globally_reached.contains(&site.symbol) {
@@ -946,6 +1088,9 @@ fn object_rewrites<'a>(
     let mut rewrites = Vec::new();
     for (object, name) in candidates {
         match reads.get(&object.symbol) {
+            Some(members) if checked && facts.lazy.blocks_members(object.source, members) => plan
+                .rejected
+                .push((object.statement, notes::WRAPPER_ALIAS_LAZY_DECODER)),
             Some(members) => rewrites.push((object.statement, members.clone(), name)),
             None => plan
                 .rejected

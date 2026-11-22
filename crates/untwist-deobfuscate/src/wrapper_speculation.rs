@@ -107,11 +107,10 @@ pub(crate) fn declared_by_function(scoping: &Scoping, symbol: SymbolId) -> bool 
             .is_var()
 }
 
-pub(crate) fn writes_outside_homes(
+pub(crate) fn writes_of(
     program: &Program<'_>,
     scoping: &Scoping,
     candidates: &FxHashSet<SymbolId>,
-    homes: &FxHashMap<SymbolId, Span>,
 ) -> Vec<(SymbolId, Span)> {
     let mut writes = Writes {
         scoping,
@@ -119,14 +118,28 @@ pub(crate) fn writes_outside_homes(
         found: Vec::new(),
     };
     writes.visit_program(program);
-    writes
-        .found
+    writes.found
+}
+
+pub(crate) fn outside_home(
+    homes: &FxHashMap<SymbolId, Span>,
+    symbol: SymbolId,
+    span: Span,
+) -> bool {
+    homes
+        .get(&symbol)
+        .is_none_or(|home| span.start < home.start || home.end < span.end)
+}
+
+pub(crate) fn writes_outside_homes(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    candidates: &FxHashSet<SymbolId>,
+    homes: &FxHashMap<SymbolId, Span>,
+) -> Vec<(SymbolId, Span)> {
+    writes_of(program, scoping, candidates)
         .into_iter()
-        .filter(|(symbol, span)| {
-            homes
-                .get(symbol)
-                .is_none_or(|home| span.start < home.start || home.end < span.end)
-        })
+        .filter(|(symbol, span)| outside_home(homes, *symbol, *span))
         .collect()
 }
 

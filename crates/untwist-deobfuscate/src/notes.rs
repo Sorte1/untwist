@@ -50,6 +50,10 @@ pub const WRAPPER_ALIAS_READ_BEFORE_THE_ALIAS: &str =
 pub const WRAPPER_ALIAS_GLOBAL_REACH: &str =
     "code that may hold the global object, or code from text, may read or write this top-level \
      alias or the function it names by its name, so it was left in place";
+pub const WRAPPER_ALIAS_LAZY_DECODER: &str =
+    "the decoder replaces itself on its first call, so an alias read before that call holds \
+     another function; the alias is used other than as a callee or the decoder keeps state, so it \
+     was left in place";
 pub const WRAPPER_ALIAS_SELF_ASSIGNMENT: &str =
     "a self-assignment of the decoder was left in place";
 pub const WRAPPER_OBJECT_ALIAS_THIS: &str =
@@ -663,6 +667,7 @@ catalogue!(
     WRAPPER_ALIAS_EXTRA_WRITES,
     WRAPPER_ALIAS_READ_BEFORE_THE_ALIAS,
     WRAPPER_ALIAS_SELF_ASSIGNMENT,
+    WRAPPER_ALIAS_LAZY_DECODER,
     WRAPPER_ALIAS_GLOBAL_REACH,
     WRAPPER_OBJECT_ALIAS_THIS,
     WRAPPER_OBJECT_ALIAS_OTHER_USE,

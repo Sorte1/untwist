@@ -1197,3 +1197,48 @@ fn a_cookie_var_written_after_the_cookie_moves_keeps_an_outer_declaration_in_bot
         &[default_code, unsafe_lane],
     );
 }
+
+const DECODER_SELF_WRITES_AND_LAZY_ALIASES: &[&str] = &[
+    "a4-body-write-reset",
+    "a4-body-write-hook",
+    "a4-lazy-inner-write",
+    "a4-lazy-inner-replaces",
+    "a4-lazy-alias-captured-hit",
+    "a4-lazy-alias-throw-on-hit",
+    "a4-lazy-alias-prop-memo",
+    "a4-lazy-alias-identity",
+    "a4-lazy-alias-property",
+    "a4-lazy-alias-passed",
+    "a4-lazy-alias-stored",
+    "a4-lazy-alias-name",
+    "a4-lazy-alias-compared",
+    "a4-lazy-alias-call-only",
+    "a4-lazy-alias-chain",
+    "a4-lazy-alias-chain-compared",
+    "a4-lazy-alias-keyed-memo",
+    "a4-lazy-alias-arguments-memo",
+];
+
+#[test]
+fn an_alias_of_a_decoder_that_rewrites_itself_prints_like_node_in_both_lanes() {
+    prints_like_node_in(
+        DECODER_SELF_WRITES_AND_LAZY_ALIASES,
+        &[default_code, unsafe_lane],
+    );
+}
+
+#[test]
+fn an_alias_of_a_lazy_decoder_used_only_as_a_callee_still_decodes() {
+    let decoded = [
+        ("a4-lazy-alias-call-only", "function d("),
+        ("a4-lazy-alias-chain", "function d("),
+        ("a4-lazy-alias-arguments-memo", "function bQ("),
+    ];
+    for (label, decoder) in decoded {
+        let source = read(&format!("{label}.js"));
+        for lane in [default_code, unsafe_lane] {
+            let output = lane(&source);
+            assert!(!output.contains(decoder), "{label}: {output}");
+        }
+    }
+}
