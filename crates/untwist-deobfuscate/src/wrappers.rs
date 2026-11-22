@@ -321,6 +321,7 @@ struct VariablePlan<'a> {
 struct DecoderTargets<'a> {
     names: FxHashMap<SymbolId, Ident<'a>>,
     lazy: FxHashMap<SymbolId, bool>,
+    speculated: Vec<Ident<'a>>,
 }
 
 fn decoder_targets<'a>(program: &Program<'_>, cx: &Cx<'a, '_>) -> DecoderTargets<'a> {
@@ -339,14 +340,20 @@ fn decoder_targets<'a>(program: &Program<'_>, cx: &Cx<'a, '_>) -> DecoderTargets
     for symbol in writes.outside {
         targets.remove(&symbol);
     }
+    let speculating = !cx.opts.nested_root && crate::legacy_reach::speculates_lazy_aliases();
     let mut lazy = FxHashMap::default();
+    let mut speculated = Vec::new();
     for (symbol, inside) in writes.inside {
         let shape = functions
             .get(&symbol)
             .and_then(|function| lazy_shape(function, symbol, cx.scoping()));
         match shape {
             Some(shape) if inside == [shape.self_write] => {
-                lazy.insert(symbol, shape.stateless);
+                let guessed = speculating && !shape.stateless;
+                if let (true, Some(name)) = (guessed, targets.get(&symbol)) {
+                    speculated.push(*name);
+                }
+                lazy.insert(symbol, shape.stateless || guessed);
             }
             _ => {
                 targets.remove(&symbol);
@@ -357,6 +364,7 @@ fn decoder_targets<'a>(program: &Program<'_>, cx: &Cx<'a, '_>) -> DecoderTargets
     DecoderTargets {
         names: targets,
         lazy,
+        speculated,
     }
 }
 
@@ -471,7 +479,12 @@ impl LazyFacts {
                 ..Self::default()
             };
         }
-        let candidates: FxHashSet<SymbolId> = held.iter().map(|(symbol, _)| *symbol).collect();
+        let candidates: FxHashSet<SymbolId> = sites
+            .iter()
+            .filter(|site| site.symbol != site.source)
+            .map(|site| site.symbol)
+            .chain(objects.iter().map(|object| object.symbol))
+            .collect();
         let uses = callee_uses(program, scoping, &candidates);
         let blocked = held
             .iter()
@@ -737,12 +750,15 @@ fn variable_alias_plan<'a>(
     wanted: AliasTargets<'_>,
 ) -> VariablePlan<'a> {
     let mut plan = VariablePlan::default();
-    let (mut targets, lazy, keeps_machinery) = match wanted {
+    let (mut targets, lazy, speculated, keeps_machinery) = match wanted {
         AliasTargets::Decoders => {
             let found = decoder_targets(program, cx);
-            (found.names, found.lazy, false)
+            (found.names, found.lazy, found.speculated, false)
         }
-        AliasTargets::Wrappers(kept) => (wrapper_targets(cx, kept), FxHashMap::default(), true),
+        AliasTargets::Wrappers(kept) => {
+            let targets = wrapper_targets(cx, kept);
+            (targets, FxHashMap::default(), Vec::new(), true)
+        }
     };
     if targets.is_empty() {
         return plan;
@@ -791,8 +807,23 @@ fn variable_alias_plan<'a>(
     }
     plan.collapses = sequence_collapses(&forms, &targets, &plan, cx.scoping(), checked);
     defer_branched_writes(&plan, &facts.branched);
+    defer_speculated_lazy_decoders(&plan, &speculated);
     plan.declarations = facts.declarations.found;
     plan
+}
+
+fn defer_speculated_lazy_decoders(plan: &VariablePlan<'_>, speculated: &[Ident<'_>]) {
+    let used: Vec<String> = speculated
+        .iter()
+        .filter(|name| {
+            plan.aliases.values().any(|target| target == *name)
+                || plan.objects.iter().any(|(_, _, target)| target == *name)
+        })
+        .map(|name| name.to_string())
+        .collect();
+    if !used.is_empty() {
+        crate::legacy_reach::defer_lazy_aliases(used);
+    }
 }
 
 fn branched_alias_writes(

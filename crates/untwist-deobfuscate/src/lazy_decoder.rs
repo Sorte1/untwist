@@ -5,7 +5,7 @@ use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::{AssignmentOperator, UnaryOperator};
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::matcher::call_parts;
 use untwist_core::ast_util::prop::identifier_name;
 
@@ -23,8 +23,8 @@ pub(crate) fn lazy_shape(
     scoping: &Scoping,
 ) -> Option<LazyShape> {
     let body = outer.body.as_ref()?;
-    let (redefinition, prelude) = redefinition(&body.statements)?;
-    let (first, second) = redefinition;
+    let (redefinition, prelude) = redefinition(&body.statements, symbol, scoping)?;
+    let (first, arguments) = redefinition;
     let Expression::AssignmentExpression(assignment) = first.without_parentheses() else {
         return None;
     };
@@ -39,10 +39,6 @@ pub(crate) fn lazy_shape(
     let Expression::FunctionExpression(inner) = assignment.right.without_parentheses() else {
         return None;
     };
-    let (callee, arguments) = call_parts(second.without_parentheses())?;
-    if reference_symbol(callee, scoping) != Some(symbol) {
-        return None;
-    }
     let stateless = forwards_parameters(outer, arguments, scoping)
         .and_then(|params| array_prelude(prelude, &params))
         .is_some_and(|arrays| inner_is_stateless(outer, inner, symbol, &arrays, scoping));
@@ -52,25 +48,36 @@ pub(crate) fn lazy_shape(
     })
 }
 
-type Redefinition<'k, 'a> = (&'k Expression<'a>, &'k Expression<'a>);
+type Redefinition<'k, 'a> = (&'k Expression<'a>, &'k [Argument<'a>]);
 
 fn redefinition<'k, 'a>(
     statements: &'k [Statement<'a>],
+    symbol: SymbolId,
+    scoping: &Scoping,
 ) -> Option<(Redefinition<'k, 'a>, &'k [Statement<'a>])> {
     let (Statement::ReturnStatement(ret), rest) = statements.split_last()? else {
         return None;
     };
     let returned = ret.argument.as_ref()?.without_parentheses();
+    let calls_decoder = |expr: &'k Expression<'a>| {
+        let (callee, arguments) = call_parts(expr.without_parentheses())?;
+        (reference_symbol(callee, scoping) == Some(symbol)).then_some(arguments.as_slice())
+    };
+    if let Some((callee, arguments)) = call_parts(returned) {
+        if let Expression::AssignmentExpression(_) = callee.without_parentheses() {
+            return Some(((callee, arguments.as_slice()), rest));
+        }
+    }
     if let Expression::SequenceExpression(sequence) = returned {
         let [first, second] = sequence.expressions.as_slice() else {
             return None;
         };
-        return Some(((first, second), rest));
+        return Some(((first, calls_decoder(second)?), rest));
     }
     let (Statement::ExpressionStatement(assignment), prelude) = rest.split_last()? else {
         return None;
     };
-    Some(((&assignment.expression, returned), prelude))
+    Some(((&assignment.expression, calls_decoder(returned)?), prelude))
 }
 
 fn forwards_parameters(
@@ -270,13 +277,26 @@ pub(crate) fn callee_uses(
         candidates,
         callees: FxHashSet::default(),
         member_callees: FxHashSet::default(),
+        copies: FxHashMap::default(),
         observed: FxHashSet::default(),
+        copied: Vec::new(),
     };
     scan.visit_program(program);
+    let mut observed = scan.observed;
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for (from, to) in &scan.copied {
+            if !observed.contains(from) && (observed.contains(to) || !candidates.contains(to)) {
+                observed.insert(*from);
+                changed = true;
+            }
+        }
+    }
     let callee_only = candidates
         .iter()
         .copied()
-        .filter(|symbol| !scan.observed.contains(symbol))
+        .filter(|symbol| !observed.contains(symbol))
         .collect();
     CalleeUses {
         callee_only,
@@ -289,7 +309,9 @@ struct CalleeScan<'s> {
     candidates: &'s FxHashSet<SymbolId>,
     callees: FxHashSet<Span>,
     member_callees: FxHashSet<Span>,
+    copies: FxHashMap<Span, Option<SymbolId>>,
     observed: FxHashSet<SymbolId>,
+    copied: Vec<(SymbolId, SymbolId)>,
 }
 
 impl<'a> VisitJs<'a> for CalleeScan<'_> {
@@ -308,6 +330,28 @@ impl<'a> VisitJs<'a> for CalleeScan<'_> {
         walk_js::walk_call_expression(self, it);
     }
 
+    fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        if let (BindingPattern::BindingIdentifier(id), Some(Expression::Identifier(init))) =
+            (&it.id, &it.init)
+        {
+            self.copies.insert(init.span, id.symbol_id.get());
+        }
+        walk_js::walk_variable_declarator(self, it);
+    }
+
+    fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
+        if let (
+            AssignmentOperator::Assign,
+            AssignmentTarget::AssignmentTargetIdentifier(target),
+            Expression::Identifier(right),
+        ) = (it.operator, &it.left, &it.right)
+        {
+            self.copies
+                .insert(right.span, resolved_symbol(target, self.scoping));
+        }
+        walk_js::walk_assignment_expression(self, it);
+    }
+
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
         let Some(reference) = it.reference_id.get() else {
             return;
@@ -316,11 +360,17 @@ impl<'a> VisitJs<'a> for CalleeScan<'_> {
         let Some(symbol) = reference.symbol_id() else {
             return;
         };
-        if !self.candidates.contains(&symbol) {
+        if !self.candidates.contains(&symbol) || !reference.is_read() {
             return;
         }
-        if reference.is_read() && !self.callees.contains(&it.span) {
-            self.observed.insert(symbol);
+        if self.callees.contains(&it.span) {
+            return;
+        }
+        match self.copies.get(&it.span) {
+            Some(Some(to)) if *to != symbol => self.copied.push((symbol, *to)),
+            _ => {
+                self.observed.insert(symbol);
+            }
         }
     }
 }
