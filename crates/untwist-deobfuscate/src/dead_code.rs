@@ -18,7 +18,7 @@ use untwist_core::semantic::{may_call_eval, misbound_catch_vars, program_is_stri
 use untwist_eval::fold::{fold_to_const, Const, FoldOptions};
 
 use crate::constant_test::literal_truthiness;
-use crate::merge_rename::rename_is_observable;
+use crate::merge_rename::{hoist_needs_braces, shadows_unread, unread_var, Givers};
 use crate::notes;
 
 pub const PASS: &str = "dead-code";
@@ -101,57 +101,74 @@ fn fresh_name(
         .find(|candidate| is_available(candidate, &taken, moved, handed_out))
 }
 
-fn relocate<'a>(
-    name: &str,
-    symbol: SymbolId,
+struct Planner<'p, 'b, 'a> {
     outer: ScopeId,
-    moved: &Moved,
-    handed_out: &mut FxHashSet<String>,
-    staged: &mut Vec<(SymbolId, Ident<'a>)>,
-    cx: &Cx<'a, '_>,
-) -> Option<String> {
-    if !collides(name, outer, moved, cx) {
-        return Some(name.to_string());
-    }
-    if is_unbound_name(name) {
-        return None;
-    }
-    let fresh = fresh_name(name, cx.scoping(), moved, handed_out)?;
-    handed_out.insert(fresh.clone());
-    staged.push((symbol, Ident::from_str_in(&fresh, cx)));
-    Some(fresh)
+    moved: &'p Moved,
+    handed_out: &'p mut FxHashSet<String>,
+    staged: Vec<(SymbolId, Ident<'a>)>,
+    givers: Givers<'b, 'a>,
+    dropped: &'p FxHashSet<ReferenceId>,
 }
 
-fn plan_merge<'a>(
-    statement: &Statement<'a>,
-    outer: ScopeId,
-    moved: &Moved,
-    handed_out: &mut FxHashSet<String>,
-    staged: &mut Vec<(SymbolId, Ident<'a>)>,
-    cx: &Cx<'a, '_>,
-) -> Option<Vec<(SymbolId, String)>> {
-    let Statement::BlockStatement(block) = statement else {
-        return (!declares_function(statement)).then(Vec::new);
-    };
-    if block.body.iter().any(declares_function) {
-        return None;
+impl<'a> Planner<'_, '_, 'a> {
+    fn relocate(&mut self, name: &str, symbol: SymbolId, cx: &Cx<'a, '_>) -> Option<String> {
+        if !collides(name, self.outer, self.moved, cx) {
+            return Some(name.to_string());
+        }
+        if is_unbound_name(name) {
+            return None;
+        }
+        if !self.givers.gives(symbol) {
+            return self.rename(symbol, name, cx);
+        }
+        let taken = self
+            .moved
+            .get(&self.outer)
+            .is_some_and(|entries| entries.iter().any(|(_, existing)| existing == name));
+        if taken {
+            return None;
+        }
+        if shadows_unread(name, self.outer, self.dropped, cx.scoping()) {
+            return Some(name.to_string());
+        }
+        let unread = unread_var(name, self.outer, self.dropped, cx.scoping())?;
+        self.rename(unread, name, cx)?;
+        Some(name.to_string())
     }
-    let scope_id = block.scope_id.get()?;
-    if block.body.iter().any(declares_without_a_symbol) {
-        return None;
+
+    fn rename(&mut self, symbol: SymbolId, name: &str, cx: &Cx<'a, '_>) -> Option<String> {
+        let fresh = fresh_name(name, cx.scoping(), self.moved, self.handed_out)?;
+        self.handed_out.insert(fresh.clone());
+        self.staged.push((symbol, Ident::from_str_in(&fresh, cx)));
+        Some(fresh)
     }
-    let mut introduced = Vec::new();
-    for (symbol, name) in declared_in(scope_id, cx.scoping()) {
-        let final_name = relocate(&name, symbol, outer, moved, handed_out, staged, cx)?;
-        introduced.push((symbol, final_name));
-    }
-    if let Some(relocated) = moved.get(&scope_id) {
-        for (symbol, name) in relocated.clone() {
-            let final_name = relocate(&name, symbol, outer, moved, handed_out, staged, cx)?;
+
+    fn plan(
+        &mut self,
+        statement: &Statement<'a>,
+        cx: &Cx<'a, '_>,
+    ) -> Option<Vec<(SymbolId, String)>> {
+        let Statement::BlockStatement(block) = statement else {
+            return (!declares_function(statement)).then(Vec::new);
+        };
+        if block.body.iter().any(declares_function) {
+            return None;
+        }
+        let scope_id = block.scope_id.get()?;
+        if block.body.iter().any(declares_without_a_symbol) {
+            return None;
+        }
+        let mut introduced = Vec::new();
+        let forwarded = self.moved.get(&scope_id).cloned().unwrap_or_default();
+        for (symbol, name) in declared_in(scope_id, cx.scoping())
+            .into_iter()
+            .chain(forwarded)
+        {
+            let final_name = self.relocate(&name, symbol, cx)?;
             introduced.push((symbol, final_name));
         }
+        Some(introduced)
     }
-    Some(introduced)
 }
 
 fn declares_without_a_symbol(statement: &Statement<'_>) -> bool {
@@ -735,18 +752,22 @@ impl<'a> DeadCode<'a> {
         stmts: &mut AVec<'a, Statement<'a>>,
         cx: &mut Cx<'a, '_>,
     ) -> Result<(), Statement<'a>> {
-        let mut staged = Vec::new();
-        let planned = plan_merge(
-            &branch,
+        let mut planner = Planner {
             outer,
-            &self.moved,
-            &mut self.handed_out,
-            &mut staged,
-            cx,
-        );
+            moved: &self.moved,
+            handed_out: &mut self.handed_out,
+            staged: Vec::new(),
+            givers: Givers::new(&branch, cx),
+            dropped: &self.dropped,
+        };
+        let planned = planner.plan(&branch, cx);
+        let staged = planner.staged;
         let renamed: Vec<SymbolId> = staged.iter().map(|(symbol, _)| *symbol).collect();
         match planned {
-            Some(_) if rename_is_observable(&branch, &renamed, cx) => Err(branch),
+            Some(_) if hoist_needs_braces(&branch, &renamed, cx.scoping()) => {
+                keep_braced(branch, stmts, cx);
+                Ok(())
+            }
             Some(introduced) => {
                 self.moved.entry(outer).or_default().extend(introduced);
                 for (symbol, name) in staged {
