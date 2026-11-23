@@ -551,6 +551,7 @@ impl LazyFacts {
             .filter(|site| site.symbol != site.source)
             .map(|site| site.symbol)
             .chain(objects.iter().map(|object| object.symbol))
+            .chain(reads.copies.iter().filter_map(|(to, _)| *to))
             .collect();
         let uses = callee_uses(program, scoping, &candidates);
         let held_objects: Vec<&ObjectAlias> = objects
@@ -561,7 +562,7 @@ impl LazyFacts {
         let observed = observed_sources(
             (program, scoping),
             (&reads, &uses),
-            (&held, held_sites),
+            held_sites,
             &held_objects,
         );
         for source in observed.into_iter().chain(unhomed) {
@@ -595,10 +596,13 @@ impl LazyFacts {
 fn observed_sources(
     (program, scoping): (&Program<'_>, &Scoping),
     (reads, uses): (&ValueReadFacts, &CalleeUses),
-    (held, sites): (&[(SymbolId, SymbolId)], &[(SymbolId, SymbolId)]),
+    sites: &[(SymbolId, SymbolId)],
     objects: &[&ObjectAlias],
 ) -> FxHashSet<SymbolId> {
-    let pairs: FxHashSet<(SymbolId, SymbolId)> = held.iter().copied().collect();
+    let object_pairs: FxHashSet<(SymbolId, SymbolId)> = objects
+        .iter()
+        .map(|object| (object.symbol, object.source))
+        .collect();
     let dynamic = DynamicScopes::of(scoping);
     let hidden = |symbol: SymbolId| {
         reads.parameters.contains(&symbol) || dynamic.refusal(scoping, symbol).is_some()
@@ -606,7 +610,11 @@ fn observed_sources(
     let stray = reads
         .copies
         .iter()
-        .filter(|(to, source)| !to.is_some_and(|to| pairs.contains(&(to, *source))))
+        .filter(|(to, source)| match to {
+            None => true,
+            Some(to) if object_pairs.contains(&(*to, *source)) => false,
+            Some(to) => !uses.callee_only.contains(to) || hidden(*to),
+        })
         .map(|(_, source)| *source);
     let loose_aliases = sites
         .iter()
