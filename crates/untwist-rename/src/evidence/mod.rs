@@ -1,6 +1,7 @@
 mod events;
 mod functions;
 mod methods;
+mod returns;
 mod values;
 
 use std::borrow::Cow;
@@ -20,8 +21,11 @@ use crate::human::looks_human_written;
 use events::{
     event_param_name, handler_name, on_property_event, settled_value_name, timer_callback_name,
 };
+pub use functions::title;
 use functions::{arrow_facts, function_facts, ArgName, CallFacts, FunctionFacts};
 use methods::MethodSites;
+use returns::descriptor_getter;
+pub use returns::{Getter, Returned, DESCRIPTOR};
 pub use values::is_word_like;
 use values::{
     assigned_value_name, declared_fallback_name, declared_value_name, element_name,
@@ -92,9 +96,24 @@ pub struct Evidence {
     names: FxHashMap<SymbolId, String>,
     constructors: FxHashSet<SymbolId>,
     flows: FxHashMap<SymbolId, Vec<SymbolId>>,
+    returns: FxHashMap<SymbolId, Returned>,
+    params: FxHashMap<SymbolId, Vec<Option<SymbolId>>>,
+    getters: FxHashMap<SymbolId, Getter>,
 }
 
 impl Evidence {
+    pub fn getter(&self, symbol: SymbolId) -> Option<&Getter> {
+        self.getters.get(&symbol)
+    }
+
+    pub fn param(&self, function: SymbolId, index: usize) -> Option<SymbolId> {
+        self.params.get(&function)?.get(index).copied().flatten()
+    }
+
+    pub fn returned(&self, symbol: SymbolId) -> Option<&Returned> {
+        self.returns.get(&symbol)
+    }
+
     pub fn name(&self, symbol: SymbolId) -> Option<&str> {
         self.names.get(&symbol).map(String::as_str)
     }
@@ -120,6 +139,7 @@ pub fn collect_evidence(program: &Program<'_>, scoping: &Scoping) -> Evidence {
         prototypes: FxHashSet::default(),
         flows: FxHashMap::default(),
         methods: MethodSites::default(),
+        getters: FxHashMap::default(),
     };
     walker.visit_program(program);
     walker.finish()
@@ -142,6 +162,7 @@ struct EvidenceWalker<'s> {
     prototypes: FxHashSet<SymbolId>,
     flows: FxHashMap<SymbolId, Vec<SymbolId>>,
     methods: MethodSites,
+    getters: FxHashMap<SymbolId, Getter>,
 }
 
 fn simple_symbol(pattern: &BindingPattern<'_>) -> Option<SymbolId> {
@@ -416,6 +437,12 @@ impl EvidenceWalker<'_> {
         }
     }
 
+    fn note_getter(&mut self, symbol: SymbolId, value: &Expression<'_>) {
+        if let Some(getter) = descriptor_getter(value, self.scoping) {
+            self.getters.insert(symbol, getter);
+        }
+    }
+
     fn name_setter(&mut self, params: &FormalParameters<'_>) {
         if let Some(symbol) = params
             .items
@@ -448,10 +475,19 @@ impl EvidenceWalker<'_> {
                 names.insert(symbol, name);
             }
         }
+        let returns = self.traced_returns();
+        let params = self
+            .functions
+            .iter_mut()
+            .map(|(symbol, facts)| (*symbol, std::mem::take(&mut facts.params)))
+            .collect();
         Evidence {
             names,
             constructors,
             flows: std::mem::take(&mut self.flows),
+            returns,
+            params,
+            getters: std::mem::take(&mut self.getters),
         }
     }
 
@@ -483,13 +519,37 @@ impl EvidenceWalker<'_> {
                 }
             }
             let constructed = calls.is_some_and(|calls| calls.constructed > 0);
-            if let Some(name) = facts.predicate.as_ref().filter(|_| !constructed) {
+            if constructed {
+                continue;
+            }
+            if let Some(name) = facts.predicate.as_ref() {
+                found.push((symbol, Rank::Shape, name.clone()));
+            }
+            if let (Some(Returned::Named(name)), false) =
+                (&facts.returned, self.prototypes.contains(&symbol))
+            {
                 found.push((symbol, Rank::Shape, name.clone()));
             }
         }
         for (symbol, rank, name) in found {
             self.offer(symbol, rank, name);
         }
+    }
+
+    fn traced_returns(&mut self) -> FxHashMap<SymbolId, Returned> {
+        let calls = &self.calls;
+        let prototypes = &self.prototypes;
+        self.functions
+            .iter_mut()
+            .filter(|(symbol, _)| {
+                let constructed = calls.get(symbol).is_some_and(|calls| calls.constructed > 0);
+                !constructed && !prototypes.contains(symbol)
+            })
+            .filter_map(|(symbol, facts)| match facts.returned.take() {
+                Some(Returned::Named(_)) | None => None,
+                Some(returned) => Some((*symbol, returned)),
+            })
+            .collect()
     }
 
     fn constructors(&self) -> FxHashSet<SymbolId> {
@@ -586,13 +646,17 @@ impl<'a> VisitJs<'a> for EvidenceWalker<'_> {
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
         if it.is_declaration() {
             if let Some(symbol) = it.id.as_ref().and_then(|id| id.symbol_id.get()) {
-                self.functions.insert(symbol, function_facts(it));
+                self.functions
+                    .insert(symbol, function_facts(it, self.scoping));
             }
         }
         walk_js::walk_function(self, it, flags);
     }
 
     fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        if let (Some(symbol), Some(init)) = (simple_symbol(&it.id), it.init.as_ref()) {
+            self.note_getter(symbol, init);
+        }
         if let (Some(symbol), Some(init)) = (simple_symbol(&it.id), it.init.as_ref()) {
             if let Some(name) = declared_value_name(init) {
                 self.offer(symbol, Rank::Fixed, name);
@@ -607,10 +671,12 @@ impl<'a> VisitJs<'a> for EvidenceWalker<'_> {
             }
             match init.without_parentheses() {
                 Expression::FunctionExpression(function) => {
-                    self.functions.insert(symbol, function_facts(function));
+                    self.functions
+                        .insert(symbol, function_facts(function, self.scoping));
                 }
                 Expression::ArrowFunctionExpression(arrow) => {
-                    self.functions.insert(symbol, arrow_facts(arrow));
+                    self.functions
+                        .insert(symbol, arrow_facts(arrow, self.scoping));
                 }
                 _ => {}
             }
@@ -622,6 +688,11 @@ impl<'a> VisitJs<'a> for EvidenceWalker<'_> {
         if it.operator == AssignmentOperator::Assign {
             self.written(it);
             self.assigned(it);
+            if let AssignmentTarget::AssignmentTargetIdentifier(id) = &it.left {
+                if let Some(symbol) = reference_symbol(id, self.scoping) {
+                    self.note_getter(symbol, &it.right);
+                }
+            }
             if let (AssignmentTarget::StaticMemberExpression(member), Some(params)) =
                 (&it.left, expression_params(&it.right))
             {

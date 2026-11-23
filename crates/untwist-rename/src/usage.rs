@@ -5,7 +5,7 @@ use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::hash_map::Entry;
-use untwist_core::ast_util::prop::member_parts;
+use untwist_core::ast_util::prop::{literal_key, member_parts};
 
 use crate::collect::{module_export_name, reference_symbol};
 use crate::human::looks_human_written;
@@ -45,7 +45,17 @@ pub struct Usage {
     pub props_read: FxHashMap<SymbolId, Vec<String>>,
     pub hints: Vec<ShorthandHint>,
     pub class_hints: FxHashMap<SymbolId, ClassHint>,
+    pub indexed: FxHashSet<SymbolId>,
+    pub numeric_only: FxHashSet<SymbolId>,
+    pub passed: FxHashMap<SymbolId, Vec<(SymbolId, usize)>>,
+    numeric: FxHashMap<SymbolId, NumericUses>,
     literal_keys: FxHashMap<SymbolId, usize>,
+}
+
+#[derive(Clone, Copy, Default)]
+struct NumericUses {
+    strong: u32,
+    neutral: u32,
 }
 
 impl Usage {
@@ -58,6 +68,27 @@ impl Usage {
         for (index, hint) in self.hints.iter().enumerate() {
             if hint.kind == ShorthandKind::ObjectLiteralValue {
                 self.literal_keys.entry(hint.symbol).or_insert(index);
+            }
+        }
+    }
+
+    pub fn is_numeric(&self, symbol: SymbolId) -> bool {
+        self.numeric
+            .get(&symbol)
+            .is_some_and(|uses| uses.strong > 0)
+    }
+
+    fn settle_numeric(&mut self, scoping: &Scoping) {
+        for (symbol, uses) in &self.numeric {
+            if uses.strong == 0 {
+                continue;
+            }
+            let reads = scoping
+                .get_resolved_references(*symbol)
+                .filter(|reference| reference.is_read())
+                .count();
+            if (uses.strong + uses.neutral) as usize >= reads {
+                self.numeric_only.insert(*symbol);
             }
         }
     }
@@ -93,6 +124,9 @@ fn walk_usage<const CLASS_HINTS: bool>(program: &Program<'_>, scoping: &Scoping)
     walker.visit_program(program);
     let mut usage = walker.out;
     usage.index_literal_keys();
+    if CLASS_HINTS {
+        usage.settle_numeric(scoping);
+    }
     usage
 }
 
@@ -293,6 +327,84 @@ impl<const CLASS_HINTS: bool> UsageWalker<'_, CLASS_HINTS> {
         }
     }
 
+    fn count_numeric(&mut self, operand: &Expression<'_>, strong: bool) {
+        if let Some(symbol) = self.identifier_symbol(operand) {
+            self.add_numeric(symbol, strong);
+        }
+    }
+
+    fn add_numeric(&mut self, symbol: SymbolId, strong: bool) {
+        let uses = self.out.numeric.entry(symbol).or_default();
+        if strong {
+            uses.strong += 1;
+        } else {
+            uses.neutral += 1;
+        }
+    }
+
+    fn binary_operands(&mut self, it: &BinaryExpression<'_>) {
+        let operator = it.operator;
+        let strong = (operator.is_arithmetic() && operator != BinaryOperator::Addition)
+            || operator.is_bitwise();
+        let neutral = operator == BinaryOperator::Addition
+            || operator.is_compare()
+            || (operator.is_equality()
+                && [&it.left, &it.right].iter().any(|side| {
+                    matches!(side.without_parentheses(), Expression::NumericLiteral(_))
+                }));
+        if strong || neutral {
+            self.count_numeric(&it.left, strong);
+            self.count_numeric(&it.right, strong);
+        }
+    }
+
+    fn compound_operand(&mut self, it: &AssignmentExpression<'_>) {
+        let AssignmentTarget::AssignmentTargetIdentifier(id) = &it.left else {
+            return;
+        };
+        let operator = it.operator;
+        let strong = (operator.is_arithmetic() && operator != AssignmentOperator::Addition)
+            || operator.is_bitwise();
+        if !strong && operator != AssignmentOperator::Addition {
+            return;
+        }
+        if let Some(symbol) = reference_symbol(id, self.scoping) {
+            self.add_numeric(symbol, strong);
+        }
+    }
+
+    fn math_arguments(&mut self, it: &CallExpression<'_>) {
+        let math = member_parts(it.callee.without_parentheses()).is_some_and(|(object, _)| {
+            matches!(object.without_parentheses(), Expression::Identifier(id) if id.name == "Math")
+        });
+        if !math {
+            return;
+        }
+        for argument in &it.arguments {
+            if let Some(expr) = argument.as_expression() {
+                self.count_numeric(expr, true);
+            }
+        }
+    }
+
+    fn passed_arguments(&mut self, it: &CallExpression<'_>) {
+        let Some(callee) = self.identifier_symbol(&it.callee) else {
+            return;
+        };
+        for (index, argument) in it.arguments.iter().enumerate() {
+            let Some(expr) = argument.as_expression() else {
+                return;
+            };
+            if let Some(symbol) = self.identifier_symbol(expr) {
+                self.out
+                    .passed
+                    .entry(symbol)
+                    .or_default()
+                    .push((callee, index));
+            }
+        }
+    }
+
     fn field_hint(&mut self, it: &PropertyDefinition<'_>) {
         let (Some(class), true, false, Some(value)) =
             (self.class, it.r#static, it.computed, it.value.as_ref())
@@ -376,12 +488,51 @@ impl<'a, const CLASS_HINTS: bool> VisitJs<'a> for UsageWalker<'_, CLASS_HINTS> {
             return walk_js::walk_assignment_expression(self, it);
         }
         self.assignment_hint(it);
+        self.compound_operand(it);
         walk_js::walk_assignment_expression(self, it);
+    }
+
+    fn visit_binary_expression(&mut self, it: &BinaryExpression<'a>) {
+        if CLASS_HINTS {
+            self.binary_operands(it);
+        }
+        walk_js::walk_binary_expression(self, it);
+    }
+
+    fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
+        if CLASS_HINTS && (it.operator.is_arithmetic() || it.operator.is_bitwise()) {
+            self.count_numeric(&it.argument, true);
+        }
+        walk_js::walk_unary_expression(self, it);
+    }
+
+    fn visit_update_expression(&mut self, it: &UpdateExpression<'a>) {
+        if let (true, SimpleAssignmentTarget::AssignmentTargetIdentifier(id)) =
+            (CLASS_HINTS, &it.argument)
+        {
+            if let Some(symbol) = reference_symbol(id, self.scoping) {
+                self.add_numeric(symbol, true);
+            }
+        }
+        walk_js::walk_update_expression(self, it);
+    }
+
+    fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
+        if CLASS_HINTS && literal_key(&it.expression).is_none() {
+            if let Some(symbol) = self.identifier_symbol(&it.object) {
+                self.out.indexed.insert(symbol);
+            }
+        }
+        walk_js::walk_computed_member_expression(self, it);
     }
 
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
         if let Some(symbol) = self.identifier_symbol(&it.callee) {
             self.out.called.insert(symbol);
+        }
+        if CLASS_HINTS {
+            self.math_arguments(it);
+            self.passed_arguments(it);
         }
         walk_js::walk_call_expression(self, it);
     }
