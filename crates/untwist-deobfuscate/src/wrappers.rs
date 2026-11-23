@@ -321,6 +321,7 @@ struct VariablePlan<'a> {
 struct DecoderTargets<'a> {
     names: FxHashMap<SymbolId, Ident<'a>>,
     lazy: FxHashMap<SymbolId, bool>,
+    homes: FxHashMap<SymbolId, ScopeId>,
     speculated: Vec<Ident<'a>>,
 }
 
@@ -362,51 +363,63 @@ fn decoder_targets<'a>(program: &Program<'_>, cx: &Cx<'a, '_>) -> DecoderTargets
             }
         }
     }
-    for symbol in lazy_decoders_seen_changing(program, cx.scoping(), &stamped, &sources) {
+    let (homes, refused) = lazy_homes(&stamped, &sources);
+    for symbol in refused
+        .into_iter()
+        .chain(rewritten_arrays(cx.scoping(), &stamped, &sources))
+    {
         targets.remove(&symbol);
     }
     lazy.retain(|symbol, _| targets.contains_key(symbol));
     DecoderTargets {
         names: targets,
         lazy,
+        homes,
         speculated,
     }
 }
 
-fn lazy_decoders_seen_changing(
-    program: &Program<'_>,
-    scoping: &Scoping,
+fn lazy_homes(
     stamped: &crate::stamp::Stamped<'_>,
     sources: &[(SymbolId, Vec<SymbolId>)],
-) -> Vec<SymbolId> {
-    if sources.is_empty() {
-        return Vec::new();
-    }
-    let scope_of = |found: &[crate::stamp::StampedFn<'_>]| -> FxHashMap<SymbolId, ScopeId> {
+) -> (FxHashMap<SymbolId, ScopeId>, Vec<SymbolId>) {
+    let homes_of = |found: &[crate::stamp::StampedFn<'_>]| -> FxHashMap<SymbolId, ScopeId> {
         found
             .iter()
             .filter_map(|unit| Some((unit.symbol?, unit.function.scope_id.get()?)))
             .collect()
     };
-    let decoder_homes = scope_of(&stamped.decoders);
-    let lazy_homes: FxHashMap<SymbolId, ScopeId> = sources
-        .iter()
-        .filter_map(|(symbol, _)| decoder_homes.get(symbol).map(|home| (*symbol, *home)))
-        .collect();
-    let array_homes = scope_of(&stamped.arrays);
-    let read = read_as_values(program, scoping, &lazy_homes);
-    let rewritten = |array: &SymbolId| {
-        array_homes
-            .get(array)
-            .is_none_or(|home| written_outside(scoping, *array, *home))
+    let decoder_homes = homes_of(&stamped.decoders);
+    let array_homes = homes_of(&stamped.arrays);
+    let mut homes = FxHashMap::default();
+    let mut refused = Vec::new();
+    for (symbol, arrays) in sources {
+        match decoder_homes.get(symbol) {
+            Some(home) if arrays.iter().all(|array| array_homes.contains_key(array)) => {
+                homes.insert(*symbol, *home);
+            }
+            _ => refused.push(*symbol),
+        }
+    }
+    (homes, refused)
+}
+
+fn rewritten_arrays(
+    scoping: &Scoping,
+    stamped: &crate::stamp::Stamped<'_>,
+    sources: &[(SymbolId, Vec<SymbolId>)],
+) -> Vec<SymbolId> {
+    let written = |array: &SymbolId| {
+        stamped
+            .arrays
+            .iter()
+            .filter(|unit| unit.symbol == Some(*array))
+            .filter_map(|unit| unit.function.scope_id.get())
+            .any(|home| written_outside(scoping, *array, home))
     };
     sources
         .iter()
-        .filter(|(symbol, arrays)| {
-            !lazy_homes.contains_key(symbol)
-                || read.contains(symbol)
-                || arrays.iter().any(rewritten)
-        })
+        .filter(|(_, arrays)| arrays.iter().any(written))
         .map(|(symbol, _)| *symbol)
         .collect()
 }
@@ -506,7 +519,7 @@ impl LazyFacts {
     fn of(
         program: &Program<'_>,
         scoping: &Scoping,
-        decoders: FxHashMap<SymbolId, bool>,
+        (mut decoders, homes): (FxHashMap<SymbolId, bool>, FxHashMap<SymbolId, ScopeId>),
         (sites, objects): (&[AliasSite], &[ObjectAlias]),
     ) -> Self {
         let held: Vec<(SymbolId, SymbolId)> = sites
@@ -521,6 +534,21 @@ impl LazyFacts {
                 decoders,
                 ..Self::default()
             };
+        }
+        let held_homes: FxHashMap<SymbolId, ScopeId> = held
+            .iter()
+            .filter_map(|(_, source)| homes.get(source).map(|home| (*source, *home)))
+            .collect();
+        let unhomed = held
+            .iter()
+            .map(|(_, source)| *source)
+            .filter(|source| !held_homes.contains_key(source));
+        let read: Vec<SymbolId> = read_as_values(program, scoping, &held_homes)
+            .into_iter()
+            .chain(unhomed)
+            .collect();
+        for source in read {
+            decoders.insert(source, false);
         }
         let candidates: FxHashSet<SymbolId> = sites
             .iter()
@@ -796,11 +824,13 @@ fn variable_alias_plan<'a>(
     let (mut targets, lazy, speculated, keeps_machinery) = match wanted {
         AliasTargets::Decoders => {
             let found = decoder_targets(program, cx);
-            (found.names, found.lazy, found.speculated, false)
+            let lazy = (found.lazy, found.homes);
+            (found.names, lazy, found.speculated, false)
         }
         AliasTargets::Wrappers(kept) => {
             let targets = wrapper_targets(cx, kept);
-            (targets, FxHashMap::default(), Vec::new(), true)
+            let lazy = (FxHashMap::default(), FxHashMap::default());
+            (targets, lazy, Vec::new(), true)
         }
     };
     if targets.is_empty() {
@@ -821,7 +851,7 @@ fn variable_alias_plan<'a>(
         sites.retain(|site| in_target_scope(scoping, site, &targets));
     }
     let branched = branched_alias_writes(program, cx, &sites);
-    let lazy = match lazy.is_empty() {
+    let lazy = match lazy.0.is_empty() {
         true => LazyFacts::default(),
         false => LazyFacts::of(program, cx.scoping(), lazy, (&sites, &forms.objects)),
     };
