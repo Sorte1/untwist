@@ -28,12 +28,14 @@ use crate::bindings::{reference_symbol, resolved_symbol};
 use crate::call_checks::call_checks_apply;
 use crate::fused::{Fused, Member, Walk};
 use crate::init_order::{lend_order_with, note_overflow, sharing_mark, DeclarationSlot, LentOrder};
-use crate::lazy_decoder::{callee_uses, lazy_shape, read_as_values, written_outside};
+use crate::lazy_decoder::{
+    callee_uses, lazy_shape, read_as_values, written_outside, CalleeUses, ValueReadFacts,
+};
 use crate::mutants::wrapper_guards_dropped;
 use crate::notes;
 use crate::proof::{has_with_statement, refuse_annex_b_bindings};
 use crate::root_reach::reached_roots;
-use crate::stamp::{find_stamped_named, is_unedited};
+use crate::stamp::{find_stamped_named, is_unedited, DynamicScopes};
 use crate::units::MachineryDepth;
 use crate::wrapper_calls::inline_function_wrappers;
 use crate::wrapper_immediate::inline_immediate_wrappers;
@@ -543,20 +545,29 @@ impl LazyFacts {
             .iter()
             .map(|(_, source)| *source)
             .filter(|source| !held_homes.contains_key(source));
-        let read: Vec<SymbolId> = read_as_values(program, scoping, &held_homes)
-            .into_iter()
-            .chain(unhomed)
-            .collect();
-        for source in read {
-            decoders.insert(source, false);
-        }
+        let reads = read_as_values(program, scoping, &held_homes);
         let candidates: FxHashSet<SymbolId> = sites
             .iter()
             .filter(|site| site.symbol != site.source)
             .map(|site| site.symbol)
             .chain(objects.iter().map(|object| object.symbol))
+            .chain(reads.copies.iter().filter_map(|(to, _)| *to))
             .collect();
         let uses = callee_uses(program, scoping, &candidates);
+        let held_objects: Vec<&ObjectAlias> = objects
+            .iter()
+            .filter(|object| decoders.contains_key(&object.source))
+            .collect();
+        let held_sites = &held[..held.len() - held_objects.len()];
+        let observed = observed_sources(
+            (program, scoping),
+            (&reads, &uses),
+            held_sites,
+            &held_objects,
+        );
+        for source in observed.into_iter().chain(unhomed) {
+            decoders.insert(source, false);
+        }
         let blocked = held
             .iter()
             .filter(|(symbol, source)| {
@@ -580,6 +591,80 @@ impl LazyFacts {
                 .any(|member| !self.member_callees.contains(member)),
         }
     }
+}
+
+fn observed_sources(
+    (program, scoping): (&Program<'_>, &Scoping),
+    (reads, uses): (&ValueReadFacts, &CalleeUses),
+    sites: &[(SymbolId, SymbolId)],
+    objects: &[&ObjectAlias],
+) -> FxHashSet<SymbolId> {
+    let object_pairs: FxHashSet<(SymbolId, SymbolId)> = objects
+        .iter()
+        .map(|object| (object.symbol, object.source))
+        .collect();
+    let dynamic = DynamicScopes::of(scoping);
+    let hidden = |symbol: SymbolId| {
+        reads.parameters.contains(&symbol) || dynamic.refusal(scoping, symbol).is_some()
+    };
+    let stray = reads
+        .copies
+        .iter()
+        .filter(|(to, source)| match to {
+            None => true,
+            Some(to) if object_pairs.contains(&(*to, *source)) => false,
+            Some(to) => !uses.callee_only.contains(to) || hidden(*to),
+        })
+        .map(|(_, source)| *source);
+    let loose_aliases = sites
+        .iter()
+        .filter(|(symbol, _)| !uses.callee_only.contains(symbol) || hidden(*symbol))
+        .map(|(_, source)| *source);
+    let loose_objects = objects_read_apart(program, scoping, objects, &uses.member_callees)
+        .into_iter()
+        .chain(
+            objects
+                .iter()
+                .filter(|object| hidden(object.symbol))
+                .map(|object| object.source),
+        );
+    reads
+        .found
+        .iter()
+        .copied()
+        .chain(stray)
+        .chain(loose_aliases)
+        .chain(loose_objects)
+        .collect()
+}
+
+fn objects_read_apart(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    objects: &[&ObjectAlias],
+    member_callees: &FxHashSet<Span>,
+) -> Vec<SymbolId> {
+    if objects.is_empty() {
+        return Vec::new();
+    }
+    let mut wanted: FxHashMap<SymbolId, &str> = FxHashMap::default();
+    let mut repeated: FxHashSet<SymbolId> = FxHashSet::default();
+    for object in objects {
+        if wanted.insert(object.symbol, object.key.as_str()).is_some() {
+            repeated.insert(object.symbol);
+        }
+    }
+    let reads = member_reads(program, scoping, &wanted, true);
+    objects
+        .iter()
+        .filter(|object| {
+            repeated.contains(&object.symbol)
+                || !reads.get(&object.symbol).is_some_and(|members| {
+                    members.iter().all(|member| member_callees.contains(member))
+                })
+        })
+        .map(|object| object.source)
+        .collect()
 }
 
 #[cfg(debug_assertions)]
