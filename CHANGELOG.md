@@ -6,6 +6,181 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-23
+
+There is no 0.5.1: the readability work planned for it ships in this release, together with
+library recognition, `--modern`, `--split-assume-modules` and experimental `--types`. The
+soundness review of the default lane went on, so some inputs that 0.5.0 decoded or unpacked now
+keep that code (with a note) where the rewrite could change what the program does.
+Every javascript-obfuscator 5 option combination is now checked before a release: applied once,
+it decodes fully in both lanes, and the default lane never gives wrong output.
+
+### Added
+
+- Library recognition: copies of core-js 3.x, regenerator-runtime, tslib, @babel/runtime and
+  @swc/helpers are recognised by their exact shape, also when terser inlined or mangled them.
+  Their bindings get the library's names in every rename mode, each module gets a comment such
+  as `// core-js 3.36–3.41: internals/well-known-symbol.js`, and `--report` lists the
+  libraries found (#328, #350, #353, #374).
+- Split modules are named after their library (`node_modules/<package>/<path>`), the bundle's
+  own module path or their main export instead of a minified name (#377), and the text report
+  keeps library modules apart from the app's own (#383).
+- Rollup commonjs wrappers: the `requireX()`/`hasRequiredX` lazy wrappers in their terser,
+  esbuild and swc forms, rolldown's `__commonJSMin` factories and the commonjs interop helpers
+  are named in every rename mode (#296); with `--split-hoisted` each wrapper becomes its own
+  module (#300); under `--rename smart` a wrapper call's result is named after the module it
+  returns (#311).
+- More `--rename smart` evidence: the property a value is read from or stored under,
+  constructors, element ids, selectors and storage keys, event and timer callbacks, `fetch`
+  responses, boolean returners, PascalCase for functions only used with `new`, and parameter
+  names every call site agrees on (#290); long hex tokens it has evidence for (#301).
+- `--modern <baseline>` (opt-in) removes core-js polyfills of features native in an ES year
+  (es2017 to es2024) or a list of engines, and turns calls of the core-js helpers left into the
+  native form (#317, #374).
+- `--split-assume-modules` (with `--split-hoisted`) splits Rollup iife bundles as ES modules,
+  also inside an outer wrapper function, and infers module boundaries inside a Rollup entry.
+  The tree is meant for reading and for running in node; it does not keep
+  `document.currentScript`, classic-script load timing or sloppy top-level behaviour
+  (#325, #333, #336). `--split-hoisted` also splits scope-hoisted ES module bundles (#313).
+- `--types` (experimental, opt-in) annotates, as JSDoc or TypeScript, only the types that hold
+  for every value on every run (#375, #403, #407).
+- Unpack: webpack 4 and 5 entries together with the chunks they load (`import()`,
+  `splitChunks`, `runtimeChunk`) (#323); webpack's eval devtools, by inlining direct `eval`
+  layers that behave the same in place (#305); rolldown and Vite 8 bundles (#299); esbuild and
+  bun `--splitting` entries whose helpers live in a shared chunk (#327); esbuild, bun and
+  Parcel bundles that other tools reshaped (#306); webpack 4 modules that read the module
+  polyfill (#358, #368).
+- Untranspile: optional chains lowered with a loose `== null` test (#302), default parameters
+  behind Babel's leading declarations (#284), and helper versions from pinned Babel 6 to 8,
+  tsc 3.9 to 7.0, swc and esbuild releases (#294, #312). Under `--unsafe`: `for … of` loops
+  from Babel's iterator helper, TypeScript's `__values` and the inline iterator protocol
+  (#318, #320, #326), Babel regenerator generators and async functions (#324), `super`
+  properties (#326), and a `'use strict'` that protection code had pushed out of place (#312).
+- Unminify moves a bare `var` to its first use or makes it the declaration (#288, #351), and
+  var-to-let also converts vars that later closures read (#319).
+- Deobfuscate: javascript-obfuscator applied two to four times in a row (#412) and its
+  browser-no-eval and service-worker targets (#424, #442); layers built from array and object
+  conversions or a constructor chain (#287). A bytecode interpreter loop beside its bytecode
+  gets a report note (#298).
+- When the default lane leaves a string array undecoded because the program may replace a
+  built-in, one warning (also on stderr) says to rerun with `--unsafe` (#289).
+- Playground: the settings the CLI had and it did not (modern, split hoisted, assume modules,
+  inline source maps, budgets) (#360); opt-in library names with a libraries panel and folded
+  library modules (#286, #330, #342, #345); live run progress (#342); editor themes, a site
+  theme and GitHub Dark as the dark default (#367, #372, #379). The output scrollbar stays in
+  its pane on wide lines (#344).
+
+### Changed
+
+- Krunker 10.0.7 reads much closer to its source: under `--unsafe`, 444 Babel classes become
+  `class` again (none in 0.5.0) (#312), optional-chain rewrites go from 94 to 208 (#302), the
+  `requireX` wrapper names are spread to the values they return (#311), and the walls of bare
+  `var` at the top of functions are gone (#351).
+- The default lane keeps every function and class name (#399) and never renames a classic
+  script's top-level bindings (#385).
+- The playground finds refusal places in one pass per line and lists each place once, capped
+  at 1,000 (game3.js: 80 s and a 5.8 MB report before) (#339, #341); language features work on
+  outputs up to 32 MiB (#295). Deep control-flow nests and the init-order scan cost less
+  (#283, #293).
+- The playground takes inputs nesting up to 1,532 units deep instead of passing through
+  those over 661, so Krunker 3.2.1 and 3.2.4 run there as in the CLI (#304).
+- New release checks: a bundle-variant matrix over webpack, Rollup, Vite, rolldown, esbuild,
+  bun and Parcel versions (#297), outputs of obfuscators other than javascript-obfuscator
+  (#285), and the javascript-obfuscator option sweep: every option combination, also applied
+  two and three times over (#444). `RELEASING.md` lists the matrices to run before a release
+  (#348).
+- `docs/known-divergences` states the default-lane premise for reading a function's caller
+  (#415), the `--unsafe` premise for writes to decoder names (#428), and that no
+  `Object.prototype` property may be named like a module id or request (#386).
+- Pull requests link their playground preview (#370).
+
+### Fixed
+
+#### Default lane soundness
+
+- The check for a patched built-in is an allow-list of safe forms and fails closed by
+  structure: method results, sloppy `this`, timers on any receiver, code-runner modules,
+  window-alias writes, escaping strict functions, numeric keys, RegExp statics and nested
+  objects' built-ins are judged, and only literal keys are trusted (#356, #359, #363, #418,
+  #419, #422, #425, #434, #447, #454, #459, #463, #473). Such programs keep their decoder
+  calls.
+- Every route to a code runner (`eval` however it is bound, `Function`, code text that may
+  hand back a runner, reflective readers and writers) is closed by an allow-list (#390, #405,
+  #409, #413, #414, #421, #432), and uses of the global object and namespaces are judged
+  against a closed list of safe forms (#423, #437, #453, #457).
+- When several inputs run together, a name counts as shared only when another input may reach
+  it, and shared inputs, foreign values and built-in names another input declares are judged
+  across all of them (#331, #381, #388, #445, #462, #465). Getter, descriptor and
+  `Proxy` copies carry their source into these checks (#435).
+- Top-level decoder aliases and wrappers are judged by the global reach check, and machinery
+  names on shared globals stay under observation (#427, #436). Self-defending code is kept
+  when a built-in it calls is used as a value or its check would see a reprinted function,
+  and only obfuscator.io's own call controller shape is removed (#308, #337, #417, #426,
+  #431, #433). Console silencing and debug-protection timers are kept together, and the
+  default lane keeps its output when only some protection layers can be removed (#443, #448).
+- Decoding refuses or keeps more shapes it cannot prove: a stateful decoder unit where any call
+  throws, a decoder that rewrites itself or is written outside its body, memoised calls that
+  touched the memo, string-array wraps in loops or over non-plain bindings, Annex B block
+  functions and lexical aliases in folds, method calls on assembled objects and optional calls
+  in dead-branch proofs, and the meaning of statements a cookie or checksum wrap moves (#450,
+  #458, #460, #466, #467, #468, #471, #472, #483, #484, #486, #487, #488, #489, #490, #491,
+  #492, #493).
+
+#### Decoding coverage
+
+- Layered and re-obfuscated javascript-obfuscator output decodes much further, mostly under
+  `--unsafe`: detection and decoding run again until a round removes nothing, with refusals
+  and source maps carried across rounds (#441, #446, #474); layered stateful units, string arrays
+  hidden by later layers and dead-code copies, inlined rotators and inner-decoder calls
+  (#438, #440, #452, #461, #470, #481); debug protection, console disabling, call controllers
+  and self-defending that later layers kept or moved into decoders and wrappers (#449, #455,
+  #469, #475, #476, #478, #480, #485); control-flow objects that hide the decoder, alias each
+  other, form cycles or escape only in dead branches (#439, #456, #464, #477, #479, #482);
+  nested objects used only in dead branches (#451, #456). Earlier fixes: a literal
+  control-flow nest's inner call (#309), storage objects that escape only in dead code (#292)
+  and a minified decoder beside its rotator (#376).
+
+#### Unpack
+
+- Unpack refuses more bundles the written tree would run differently: browserify bundles
+  whose `require` is redeclared, renamed or unlinkable, or whose requests or host values the
+  written files answer differently (#310, #316, #335, #384, #387, #393, #408); webpack shapes
+  a merged tree runs differently (#338, #361, #382); every bundle kind on a `.caller` or
+  `.arguments` read (#365); a split where a module could see its caller (#391); host
+  `require`, `import()` and node's loader outside an allow-list (#401). Strictness, early
+  errors, node's module goal and UMD `define` follow the source (#395, #398, #406, #416).
+- `--split-hoisted` no longer splits a webpack runtime chunk (#307), and real strict webpack
+  5 bundles split again (#397). Factory parameters are renamed with every same-named binding
+  moved aside (#410), twice-declared functions and setter parameters work in assumed-module
+  runs (#347), and factories with a closed `eval` unpack (#354). When a bundle leaves some
+  inputs out, each is written under its own name (#291).
+
+#### Unminify, untranspile and rename
+
+- Names: `NamedEvaluation` names survive every naming-slot rewrite (#362); a function assigned
+  to a parenthesised name stays unnamed (#349); catch parameters, catch vars and Annex B block
+  functions keep their bindings (#400, #402, #420, #430); rename keeps names that code text
+  spells, `with` and `eval` see or computed keys and reflection read (#352, #378, #389, #394,
+  #411).
+- Unminify keeps a `var` a `var` when a catch body redeclares it or beside a direct `eval`
+  under `--unsafe` (#303, #396), and splits a function out of a sequence only when no name is
+  read (#314). Lexical untranspile, layer inlining and `--modern` close the gaps their reviews
+  found (#332, #340, #343). Further review findings on eval, `with`, class awaits, script
+  globals and Annex B hoists are fixed (#334, #346, #355, #364, #369, #380, #392, #404).
+
+### Known gaps
+
+Some multi-layer (re-obfuscated) javascript-obfuscator inputs still keep machinery under
+`--unsafe`. In the release sweep: a web of about 30 control-flow objects whose escapes depend on
+each other (pw038-n3, console disabling left); a debug interval recognised only after the
+rotator is refused (pw023-m3, debug protection left; a second run decodes it); decoder aliases
+read before their declaration or a decoder used other than as a callee (rnd001-m3, pw039-m3;
+the functions case prints differently); a later layer's `renameProperties` or control-flow
+flattening inside the console-disable callback (pw035-m3, pw038-n2; the output prints what the
+source prints); a stateful decoder whose call throws in the first pass (rnd022-m3, rnd031-n3);
+and a dead-code copy that calls the wrapper with a bad index, which leaves the string array
+(the default lane prints like node). The default lane gives no wrong output on any of them.
+
 ## [0.5.0] - 2026-11-12
 
 There is no 0.4.0: its planned scope ships in this release. Most of the work is a soundness
