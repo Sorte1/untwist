@@ -1449,3 +1449,66 @@ fn callee_only_aliases_of_a_lazy_decoder_in_a_function_run_twice_still_decode() 
     }
     prints_like_node_in(&["a6-lazy-copy-callee-only"], &[default_code, unsafe_lane]);
 }
+
+const SHORTHAND_PROTO_ALIASES: &[&str] = &["rn2-cfo-alias-proto", "rn2-cfo-alias-proto-var"];
+
+#[test]
+fn a_control_flow_object_alias_read_through_a_shorthand_proto_key_keeps_the_key_in_both_lanes() {
+    prints_like_node_in(SHORTHAND_PROTO_ALIASES, &[default_code, unsafe_lane]);
+}
+
+fn stdout_of(node: &Path, file: &Path) -> Option<String> {
+    let observed = untwist_testing::node::run(node, file).ok()??;
+    (observed.exit == Some(0)).then_some(observed.stdout)
+}
+
+fn unpacked_entry_prints(node: &Path, source: &str, options: Options) -> Option<String> {
+    let dir = tempfile::tempdir().unwrap();
+    Pipeline::new(options)
+        .run(source)
+        .write_to(dir.path())
+        .ok()?;
+    stdout_of(node, &dir.path().join("index.js"))
+}
+
+fn unpacked_prints_like_node(label: &str, lanes: &[Options]) {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let source = read(&format!("{label}.js"));
+    let dir = tempfile::tempdir().unwrap();
+    let bundle = dir.path().join("bundle.js");
+    std::fs::write(&bundle, &source).unwrap();
+    let expected = stdout_of(&node, &bundle);
+    assert!(expected.is_some(), "{label}");
+    for lane in lanes {
+        let actual = unpacked_entry_prints(&node, &source, lane.clone());
+        assert_eq!(actual, expected, "{label}");
+    }
+}
+
+#[test]
+fn a_webpack_parameter_named_proto_in_a_shorthand_property_keeps_the_key_in_both_lanes() {
+    unpacked_prints_like_node(
+        "rn2-webpack-param-proto",
+        &[
+            Options::default(),
+            Options {
+                unsafe_transforms: true,
+                ..Options::default()
+            },
+        ],
+    );
+}
+
+#[test]
+fn a_metro_parameter_named_proto_in_a_shorthand_property_keeps_the_key() {
+    unpacked_prints_like_node(
+        "rn2-metro-param-proto",
+        &[Options {
+            unsafe_transforms: true,
+            unminify: false,
+            ..Options::default()
+        }],
+    );
+}

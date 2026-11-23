@@ -297,3 +297,12 @@ fn a_renamed_parameter_in_a_shorthand_assignment_target_keeps_its_key() {
         "({e: module, t: exports = 1} = o);\nconsole.log(module, exports);"
     );
 }
+
+#[test]
+fn a_renamed_parameter_in_a_shorthand_proto_property_keeps_its_own_key() {
+    let source = "const o = {__proto__, t};\nconsole.log(o, __proto__);";
+    assert_eq!(
+        rename(source, &["__proto__", "t"], &["exports", "module"]),
+        "const o = {\n  [\"__proto__\"]: exports,\n  t: module\n};\nconsole.log(o, exports);"
+    );
+}

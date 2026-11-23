@@ -117,3 +117,11 @@ fn a_return_wrapped_in_single_statement_blocks_is_inlined() {
     );
     assert!(try_inline("function w(a, b) { { g(); return a(b); } }\nw(f, 2);").is_none());
 }
+
+#[test]
+fn a_parameter_substituted_into_a_shorthand_property_keeps_its_key() {
+    assert_eq!(
+        inline("function w(__proto__, b) { return { __proto__, b }; }\nw(p, 2);"),
+        "({\n\t[\"__proto__\"]: p,\n\tb: 2\n})"
+    );
+}

@@ -65,3 +65,45 @@ fn unsafe_lane() -> Options {
         ..Options::default()
     }
 }
+
+const PROTO_BUNDLE: &str = "var __commonJS = (cb, mod) => () => (mod || cb((mod = { exports: {} }).exports, mod), mod.exports);
+var __esm = (fn, res) => () => (fn && (res = fn(fn = 0)), res);
+var __proto__;
+var value;
+var init_value = __esm(() => {
+  __proto__ = { z: 9 };
+  value = 42;
+});
+var require_main = __commonJS((exports, module) => {
+  init_value();
+  var o = { __proto__, value };
+  module.exports = Object.keys(o).join() + \" \" + o.z + \" \" + value;
+});
+console.log(require_main());
+";
+
+#[test]
+fn a_runtime_binding_named_proto_read_through_a_shorthand_property_keeps_an_own_key() {
+    let options = Options {
+        deobfuscate: false,
+        unminify: false,
+        ..unsafe_lane()
+    };
+    let dir = tempfile::tempdir().expect("temp dir");
+    Pipeline::new(options)
+        .run(PROTO_BUNDLE)
+        .write_to(dir.path())
+        .expect("write");
+    let Some(node) = node() else {
+        let required = std::env::var("UNTWIST_REQUIRE_NODE").ok();
+        assert!(
+            skip_allowed(required.as_deref()),
+            "required: {SKIP_MESSAGE}"
+        );
+        return;
+    };
+    let unpacked = run(&node, &dir.path().join("index.js"))
+        .expect("spawn")
+        .expect("terminates");
+    assert_eq!(unpacked.stdout, "__proto__,value undefined 42\n");
+}
