@@ -1402,3 +1402,50 @@ fn an_alias_of_a_lazy_decoder_whose_inner_function_differs_from_a_fresh_call_pri
         &[default_code, unsafe_lane],
     );
 }
+
+const LAZY_DECODER_COPIES: &[&str] = &[
+    "a6-lazy-copy-argalias",
+    "a6-lazy-copy-argalias-decl",
+    "a6-lazy-copy-arrow",
+    "a6-lazy-copy-asg",
+    "a6-lazy-copy-asgseq-iife",
+    "a6-lazy-copy-chain",
+    "a6-lazy-copy-closure",
+    "a6-lazy-copy-const-sif",
+    "a6-lazy-copy-ctl",
+    "a6-lazy-copy-declobj-o",
+    "a6-lazy-copy-evald",
+    "a6-lazy-copy-evalread",
+    "a6-lazy-copy-fnget",
+    "a6-lazy-copy-fnobj",
+    "a6-lazy-copy-iife",
+    "a6-lazy-copy-iife-o",
+    "a6-lazy-copy-let",
+    "a6-lazy-copy-loop",
+    "a6-lazy-copy-mixed",
+    "a6-lazy-copy-obj",
+    "a6-lazy-copy-objsh",
+    "a6-lazy-copy-objstr-o",
+    "a6-lazy-copy-onecall",
+    "a6-lazy-copy-tag",
+    "a6-lazy-copy-twice",
+    "a6-lazy-copy-two-dec-sif",
+];
+
+#[test]
+fn copies_of_a_lazy_decoder_taken_apart_keep_every_alias_of_it_in_both_lanes() {
+    prints_like_node_in(LAZY_DECODER_COPIES, &[default_code, unsafe_lane]);
+}
+
+#[test]
+fn callee_only_aliases_of_a_lazy_decoder_in_a_function_run_twice_still_decode() {
+    let source = read("a6-lazy-copy-callee-only.js");
+    for lane in [default_code, unsafe_lane] {
+        let output = lane(&source);
+        assert!(
+            !output.contains("var y") && !output.contains("Y.k"),
+            "{output}"
+        );
+    }
+    prints_like_node_in(&["a6-lazy-copy-callee-only"], &[default_code, unsafe_lane]);
+}
