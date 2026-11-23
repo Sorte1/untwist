@@ -530,28 +530,40 @@ fn within(scoping: &Scoping, scope: ScopeId, home: ScopeId) -> bool {
         .any(|ancestor| ancestor == home)
 }
 
+pub(crate) struct ValueReadFacts {
+    pub(crate) found: FxHashSet<SymbolId>,
+    pub(crate) copies: Vec<(Option<SymbolId>, SymbolId)>,
+    pub(crate) parameters: FxHashSet<SymbolId>,
+}
+
 pub(crate) fn read_as_values(
     program: &Program<'_>,
     scoping: &Scoping,
     homes: &FxHashMap<SymbolId, ScopeId>,
-) -> FxHashSet<SymbolId> {
+) -> ValueReadFacts {
     let mut scan = ValueReads {
         scoping,
         homes,
         passed: FxHashSet::default(),
-        copying: false,
-        found: FxHashSet::default(),
+        copied_into: FxHashMap::default(),
+        copying: None,
+        facts: ValueReadFacts {
+            found: FxHashSet::default(),
+            copies: Vec::new(),
+            parameters: FxHashSet::default(),
+        },
     };
     scan.visit_program(program);
-    scan.found
+    scan.facts
 }
 
 struct ValueReads<'s> {
     scoping: &'s Scoping,
     homes: &'s FxHashMap<SymbolId, ScopeId>,
     passed: FxHashSet<ReferenceId>,
-    copying: bool,
-    found: FxHashSet<SymbolId>,
+    copied_into: FxHashMap<ReferenceId, Option<SymbolId>>,
+    copying: Option<Option<SymbolId>>,
+    facts: ValueReadFacts,
 }
 
 impl ValueReads<'_> {
@@ -560,9 +572,24 @@ impl ValueReads<'_> {
             self.passed.insert(reference);
         }
     }
+
+    fn outside_home(&self, reference: ReferenceId) -> Option<SymbolId> {
+        let reference = self.scoping.get_reference(reference);
+        let symbol = reference.symbol_id()?;
+        let home = self.homes.get(&symbol)?;
+        let outside = !within(self.scoping, reference.scope_id(), *home);
+        (outside && reference.is_read()).then_some(symbol)
+    }
 }
 
 impl<'a> VisitJs<'a> for ValueReads<'_> {
+    fn visit_formal_parameter(&mut self, it: &FormalParameter<'a>) {
+        if let BindingPattern::BindingIdentifier(id) = &it.pattern {
+            self.facts.parameters.extend(id.symbol_id.get());
+        }
+        walk_js::walk_formal_parameter(self, it);
+    }
+
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
         if let (false, Some(id)) = (it.optional, plain_identifier(&it.callee)) {
             self.pass(id);
@@ -571,15 +598,17 @@ impl<'a> VisitJs<'a> for ValueReads<'_> {
     }
 
     fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
-        let copies = match (&it.id, &it.init) {
-            (BindingPattern::BindingIdentifier(_), Some(init)) => {
-                alias_source(init, self.scoping).is_some()
-                    || single_property_source(init, self.scoping).is_some()
+        let copy = match (&it.id, &it.init) {
+            (BindingPattern::BindingIdentifier(id), Some(init))
+                if alias_source(init, self.scoping).is_some()
+                    || single_property_source(init, self.scoping).is_some() =>
+            {
+                Some(id.symbol_id.get())
             }
-            _ => false,
+            _ => None,
         };
         let outer = self.copying;
-        self.copying |= copies;
+        self.copying = outer.or(copy);
         walk_js::walk_variable_declarator(self, it);
         self.copying = outer;
     }
@@ -587,35 +616,33 @@ impl<'a> VisitJs<'a> for ValueReads<'_> {
     fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
         if let (
             AssignmentOperator::Assign,
-            AssignmentTarget::AssignmentTargetIdentifier(_),
+            AssignmentTarget::AssignmentTargetIdentifier(target),
             Some(right),
         ) = (it.operator, &it.left, plain_identifier(&it.right))
         {
-            self.pass(right);
+            if let Some(reference) = right.reference_id.get() {
+                self.copied_into
+                    .insert(reference, resolved_symbol(target, self.scoping));
+            }
         }
         walk_js::walk_assignment_expression(self, it);
     }
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        if self.copying {
-            return;
-        }
         let Some(id) = it.reference_id.get() else {
             return;
         };
         if self.passed.contains(&id) {
             return;
         }
-        let reference = self.scoping.get_reference(id);
-        let Some(symbol) = reference.symbol_id() else {
+        let Some(symbol) = self.outside_home(id) else {
             return;
         };
-        let outside = self
-            .homes
-            .get(&symbol)
-            .is_some_and(|home| !within(self.scoping, reference.scope_id(), *home));
-        if outside && reference.is_read() {
-            self.found.insert(symbol);
+        match self.copying.or_else(|| self.copied_into.get(&id).copied()) {
+            Some(to) => self.facts.copies.push((to, symbol)),
+            None => {
+                self.facts.found.insert(symbol);
+            }
         }
     }
 }
