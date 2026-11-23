@@ -86,11 +86,10 @@ pub fn keep_object_shorthand_key<'a>(it: &mut ObjectProperty<'a>, alloc: &'a All
     if !it.shorthand {
         return;
     }
-    let (PropertyKey::StaticIdentifier(key), Expression::Identifier(value)) = (&it.key, &it.value)
-    else {
+    let PropertyKey::StaticIdentifier(key) = &it.key else {
         return;
     };
-    if key.name == value.name {
+    if matches!(&it.value, Expression::Identifier(value) if value.name == key.name) {
         return;
     }
     it.shorthand = false;

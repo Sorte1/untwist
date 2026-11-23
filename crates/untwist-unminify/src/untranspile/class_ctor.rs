@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use oxc_allocator::{Box as ABox, Vec as AVec};
+use oxc_allocator::{Box as ABox, GetAllocator, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast::builder::AstBuilder;
 use oxc_ast_visit::{walk_js, walk_js_mut, VisitJs, VisitJsMut};
@@ -10,6 +10,7 @@ use oxc_str::Ident;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 use untwist_core::ast_util::frame::{self, Frame, FrameScan};
+use untwist_core::ast_util::shorthand::keep_object_shorthand_key;
 use untwist_core::pass::Cx;
 
 use super::class_members::{key_is_pure, property_key};
@@ -549,6 +550,11 @@ impl<'a> VisitJsMut<'a> for ThisFor<'_, 'a> {
             }
         }
         walk_js_mut::walk_expression(self, it);
+    }
+
+    fn visit_object_property(&mut self, it: &mut ObjectProperty<'a>) {
+        walk_js_mut::walk_object_property(self, it);
+        keep_object_shorthand_key(it, self.ast.allocator());
     }
 }
 

@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     AssignmentTargetProperty, BindingIdentifier, CallExpression, Expression, IdentifierReference,
-    Program,
+    ObjectProperty, Program,
 };
 use oxc_ast_visit::{VisitJs, VisitMut};
 use oxc_semantic::Scoping;
@@ -13,7 +13,9 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::rename::{unique_name_avoiding, Renames};
 use untwist_core::ast_util::respan::{follow_spans, take_followed_spans};
-use untwist_core::ast_util::shorthand::walk_target_keeping_key;
+use untwist_core::ast_util::shorthand::{
+    walk_object_property_keeping_key, walk_target_keeping_key,
+};
 use untwist_core::semantic::scope_hazard;
 use untwist_core::semantic::unbound::is_unbound_name;
 
@@ -272,6 +274,11 @@ impl<'a> VisitMut<'a> for ReferenceMarks<'a, '_> {
     fn visit_assignment_target_property(&mut self, it: &mut AssignmentTargetProperty<'a>) {
         let alloc = self.alloc;
         walk_target_keeping_key(self, it, alloc);
+    }
+
+    fn visit_object_property(&mut self, it: &mut ObjectProperty<'a>) {
+        let alloc = self.alloc;
+        walk_object_property_keeping_key(self, it, alloc);
     }
 }
 

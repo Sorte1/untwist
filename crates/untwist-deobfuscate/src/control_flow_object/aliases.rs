@@ -1,4 +1,4 @@
-use oxc_allocator::Vec as AVec;
+use oxc_allocator::{Allocator, GetAllocator, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk, Visit, VisitMut};
 use oxc_semantic::Scoping;
@@ -9,6 +9,7 @@ use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::FxHashSet;
 use std::cell::OnceCell;
 use untwist_core::ast_util::prop::identifier_name;
+use untwist_core::ast_util::shorthand::walk_object_property_keeping_key;
 use untwist_core::pass::Cx;
 use untwist_core::semantic::may_call_eval;
 
@@ -155,6 +156,7 @@ struct Redirect<'s, 'a> {
     scoping: &'s mut Scoping,
     targets: FxHashSet<ReferenceId>,
     fold: &'s AliasFold<'a>,
+    alloc: &'a Allocator,
     redirected: usize,
 }
 
@@ -175,6 +177,11 @@ impl<'a> VisitMut<'a> for Redirect<'_, 'a> {
         self.scoping
             .add_resolved_reference(self.fold.object, reference);
         self.redirected += 1;
+    }
+
+    fn visit_object_property(&mut self, it: &mut ObjectProperty<'a>) {
+        let alloc = self.alloc;
+        walk_object_property_keeping_key(self, it, alloc);
     }
 }
 
@@ -234,10 +241,12 @@ fn all_follow(
 
 fn commit<'a>(stmts: &mut AVec<'a, Statement<'a>>, fold: &AliasFold<'a>, cx: &mut Cx<'a, '_>) {
     let targets = alias_targets(fold, cx.scoping());
+    let alloc = cx.allocator();
     let mut redirect = Redirect {
         scoping: cx.scoping_mut(),
         targets,
         fold,
+        alloc,
         redirected: 0,
     };
     for stmt in stmts.iter_mut().skip(fold.alias_at + 1) {

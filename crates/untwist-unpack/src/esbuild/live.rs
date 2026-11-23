@@ -1,4 +1,4 @@
-use oxc_allocator::{Allocator, TakeIn, Vec as AVec};
+use oxc_allocator::{Allocator, GetAllocator, TakeIn, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast::builder::AstBuilder;
 use oxc_ast_visit::{walk_js, walk_mut, VisitJs, VisitMut};
@@ -8,6 +8,7 @@ use oxc_syntax::operator::UnaryOperator;
 use oxc_syntax::reference::ReferenceId;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
+use untwist_core::ast_util::shorthand::walk_object_property_keeping_key;
 
 use crate::esbuild::mentions::{fresh_name, mentioned};
 
@@ -164,10 +165,8 @@ impl<'a> VisitMut<'a> for Live<'a, '_> {
     }
 
     fn visit_object_property(&mut self, it: &mut ObjectProperty<'a>) {
-        if it.shorthand && self.reads(&it.value) {
-            it.shorthand = false;
-        }
-        walk_mut::walk_object_property(self, it);
+        let alloc = self.builder.allocator();
+        walk_object_property_keeping_key(self, it, alloc);
     }
 }
 

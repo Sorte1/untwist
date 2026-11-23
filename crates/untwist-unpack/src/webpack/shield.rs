@@ -4,6 +4,7 @@ use oxc_ast_visit::{walk_mut, VisitMut};
 use oxc_semantic::Scoping;
 use oxc_str::Ident;
 use rustc_hash::FxHashSet;
+use untwist_core::ast_util::shorthand::walk_object_property_keeping_key;
 use untwist_core::semantic::build_scoping;
 
 use crate::esbuild::mentions::binds_any;
@@ -58,6 +59,11 @@ impl<'a> VisitMut<'a> for Restore<'a, '_> {
 
     fn visit_binding_identifier(&mut self, it: &mut BindingIdentifier<'a>) {
         walk_mut::walk_binding_identifier(self, it);
+    }
+
+    fn visit_object_property(&mut self, it: &mut ObjectProperty<'a>) {
+        let alloc = self.alloc;
+        walk_object_property_keeping_key(self, it, alloc);
     }
 }
 
