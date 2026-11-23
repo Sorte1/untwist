@@ -1198,6 +1198,43 @@ fn a_cookie_var_written_after_the_cookie_moves_keeps_an_outer_declaration_in_bot
     );
 }
 
+const COOKIE_VARS_NAMED_OUTSIDE_THE_LIST: &[&str] = &[
+    "ox2d4f-g4-read-after",
+    "ox2d4f-g4-read-after-strict",
+    "ox2d4f-g4-holder-after",
+    "ox2d4f-g4-holder-after-strict",
+    "ox2d4f-g4-closure-after",
+    "ox2d4f-g4-closure-after-strict",
+    "ox2d4f-g4-fn-after",
+    "ox2d4f-g4-fn-after-strict",
+    "ox2d4f-g4-fn-before",
+    "ox2d4f-g4-fn-before-strict",
+    "ox2d4f-g4-write-before",
+    "ox2d4f-g4-write-before-strict",
+    "ox2d4f-g4-var-after",
+    "ox2d4f-g4-var-after-strict",
+    "ox2d4f-g4-if-after",
+    "ox2d4f-g4-if-after-strict",
+    "ox2d4f-g4-try-finally",
+    "ox2d4f-g4-try-finally-strict",
+    "ox2d4f-g4-labelled",
+    "ox2d4f-g4-labelled-strict",
+    "ox2d4f-g4-switch-next",
+    "ox2d4f-g4-switch-next-strict",
+    "ox2d4f-g4-do-after",
+    "ox2d4f-g4-do-after-strict",
+    "ox2d4f-g4-eval-after",
+    "ox2d4f-g4-eval-after-strict",
+];
+
+#[test]
+fn a_cookie_var_named_outside_the_wrapped_list_stays_outside_in_both_lanes() {
+    prints_like_node_in(
+        COOKIE_VARS_NAMED_OUTSIDE_THE_LIST,
+        &[default_code, unsafe_lane],
+    );
+}
+
 const DECODER_SELF_WRITES_AND_LAZY_ALIASES: &[&str] = &[
     "a4-body-write-reset",
     "a4-body-write-hook",
