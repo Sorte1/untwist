@@ -28,7 +28,7 @@ use crate::bindings::{reference_symbol, resolved_symbol};
 use crate::call_checks::call_checks_apply;
 use crate::fused::{Fused, Member, Walk};
 use crate::init_order::{lend_order_with, note_overflow, sharing_mark, DeclarationSlot, LentOrder};
-use crate::lazy_decoder::{callee_uses, lazy_shape};
+use crate::lazy_decoder::{callee_uses, lazy_shape, read_as_values, written_outside};
 use crate::mutants::wrapper_guards_dropped;
 use crate::notes;
 use crate::proof::{has_with_statement, refuse_annex_b_bindings};
@@ -343,6 +343,7 @@ fn decoder_targets<'a>(program: &Program<'_>, cx: &Cx<'a, '_>) -> DecoderTargets
     let speculating = !cx.opts.nested_root && crate::legacy_reach::speculates_lazy_aliases();
     let mut lazy = FxHashMap::default();
     let mut speculated = Vec::new();
+    let mut sources: Vec<(SymbolId, Vec<SymbolId>)> = Vec::new();
     for (symbol, inside) in writes.inside {
         let shape = functions
             .get(&symbol)
@@ -354,11 +355,15 @@ fn decoder_targets<'a>(program: &Program<'_>, cx: &Cx<'a, '_>) -> DecoderTargets
                     speculated.push(*name);
                 }
                 lazy.insert(symbol, shape.stateless || guessed);
+                sources.push((symbol, shape.arrays));
             }
             _ => {
                 targets.remove(&symbol);
             }
         }
+    }
+    for symbol in lazy_decoders_seen_changing(program, cx.scoping(), &stamped, &sources) {
+        targets.remove(&symbol);
     }
     lazy.retain(|symbol, _| targets.contains_key(symbol));
     DecoderTargets {
@@ -366,6 +371,44 @@ fn decoder_targets<'a>(program: &Program<'_>, cx: &Cx<'a, '_>) -> DecoderTargets
         lazy,
         speculated,
     }
+}
+
+fn lazy_decoders_seen_changing(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    stamped: &crate::stamp::Stamped<'_>,
+    sources: &[(SymbolId, Vec<SymbolId>)],
+) -> Vec<SymbolId> {
+    if sources.is_empty() {
+        return Vec::new();
+    }
+    let scope_of = |found: &[crate::stamp::StampedFn<'_>]| -> FxHashMap<SymbolId, ScopeId> {
+        found
+            .iter()
+            .filter_map(|unit| Some((unit.symbol?, unit.function.scope_id.get()?)))
+            .collect()
+    };
+    let decoder_homes = scope_of(&stamped.decoders);
+    let lazy_homes: FxHashMap<SymbolId, ScopeId> = sources
+        .iter()
+        .filter_map(|(symbol, _)| decoder_homes.get(symbol).map(|home| (*symbol, *home)))
+        .collect();
+    let array_homes = scope_of(&stamped.arrays);
+    let read = read_as_values(program, scoping, &lazy_homes);
+    let rewritten = |array: &SymbolId| {
+        array_homes
+            .get(array)
+            .is_none_or(|home| written_outside(scoping, *array, *home))
+    };
+    sources
+        .iter()
+        .filter(|(symbol, arrays)| {
+            !lazy_homes.contains_key(symbol)
+                || read.contains(symbol)
+                || arrays.iter().any(rewritten)
+        })
+        .map(|(symbol, _)| *symbol)
+        .collect()
 }
 
 #[derive(Default)]

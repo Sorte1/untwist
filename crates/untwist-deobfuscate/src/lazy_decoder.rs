@@ -3,19 +3,21 @@ use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::{AssignmentOperator, UnaryOperator};
+use oxc_syntax::reference::ReferenceId;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::matcher::call_parts;
 use untwist_core::ast_util::prop::identifier_name;
 
-use crate::alias_forms::literal_headed_identifier;
+use crate::alias_forms::{alias_source, literal_headed_identifier, single_property_source};
 use crate::bindings::{reference_symbol, resolved_symbol};
 use untwist_core::machinery_name::string_array_unit;
 
 pub(crate) struct LazyShape {
     pub(crate) self_write: Span,
     pub(crate) stateless: bool,
+    pub(crate) arrays: Vec<SymbolId>,
 }
 
 pub(crate) fn lazy_shape(
@@ -40,13 +42,65 @@ pub(crate) fn lazy_shape(
     let Expression::FunctionExpression(inner) = assignment.right.without_parentheses() else {
         return None;
     };
-    let stateless = forwards_parameters(outer, arguments, scoping)
-        .and_then(|params| array_prelude(prelude, &params))
-        .is_some_and(|arrays| inner_is_stateless(outer, inner, symbol, &arrays, scoping));
+    if !plain_function(outer) || !plain_function(inner) || !same_parameters(outer, inner) {
+        return None;
+    }
+    if names_itself(inner, scoping) {
+        return None;
+    }
+    let prelude = forwards_parameters(outer, arguments, scoping)
+        .and_then(|params| array_prelude(prelude, &params, scoping));
+    let (stateless, arrays) = match prelude {
+        Some(prelude) => (
+            inner_is_stateless(outer, inner, symbol, &prelude.locals, scoping),
+            prelude.sources,
+        ),
+        None => (false, Vec::new()),
+    };
     Some(LazyShape {
         self_write: target.span,
         stateless,
+        arrays,
     })
+}
+
+fn plain_function(function: &Function<'_>) -> bool {
+    !function.r#async && !function.generator
+}
+
+fn plain_parameters<'p>(params: &'p FormalParameters<'_>) -> Option<Vec<&'p str>> {
+    if params.rest.is_some() {
+        return None;
+    }
+    let mut names = Vec::with_capacity(params.items.len());
+    for param in &params.items {
+        let BindingPattern::BindingIdentifier(id) = &param.pattern else {
+            return None;
+        };
+        if param.initializer.is_some() || names.contains(&id.name.as_str()) {
+            return None;
+        }
+        names.push(id.name.as_str());
+    }
+    Some(names)
+}
+
+fn same_parameters(outer: &Function<'_>, inner: &Function<'_>) -> bool {
+    match (
+        plain_parameters(&outer.params),
+        plain_parameters(&inner.params),
+    ) {
+        (Some(outer), Some(inner)) => outer.len() == inner.len(),
+        _ => false,
+    }
+}
+
+fn names_itself(inner: &Function<'_>, scoping: &Scoping) -> bool {
+    inner
+        .id
+        .as_ref()
+        .and_then(|id| id.symbol_id.get())
+        .is_some_and(|symbol| !scoping.get_resolved_reference_ids(symbol).is_empty())
 }
 
 type Redefinition<'k, 'a> = (&'k Expression<'a>, &'k [Argument<'a>]);
@@ -106,8 +160,18 @@ fn forwards_parameters(
     Some(params)
 }
 
-fn array_prelude(prelude: &[Statement<'_>], params: &[SymbolId]) -> Option<FxHashSet<SymbolId>> {
+struct ArrayPrelude {
+    locals: FxHashSet<SymbolId>,
+    sources: Vec<SymbolId>,
+}
+
+fn array_prelude(
+    prelude: &[Statement<'_>],
+    params: &[SymbolId],
+    scoping: &Scoping,
+) -> Option<ArrayPrelude> {
     let mut arrays = FxHashSet::default();
+    let mut sources = Vec::new();
     for statement in prelude {
         let Statement::VariableDeclaration(declaration) = statement else {
             return None;
@@ -124,10 +188,14 @@ fn array_prelude(prelude: &[Statement<'_>], params: &[SymbolId]) -> Option<FxHas
             if !is_array || !arguments.is_empty() || params.contains(&symbol) {
                 return None;
             }
+            sources.push(reference_symbol(callee, scoping)?);
             arrays.insert(symbol);
         }
     }
-    Some(arrays)
+    Some(ArrayPrelude {
+        locals: arrays,
+        sources,
+    })
 }
 
 fn inner_is_stateless(
@@ -445,5 +513,109 @@ fn plain_identifier<'e, 'a>(expr: &'e Expression<'a>) -> Option<&'e IdentifierRe
     match expr.without_parentheses() {
         Expression::Identifier(id) => Some(id),
         _ => literal_headed_identifier(expr),
+    }
+}
+
+pub(crate) fn written_outside(scoping: &Scoping, symbol: SymbolId, home: ScopeId) -> bool {
+    scoping
+        .get_resolved_reference_ids(symbol)
+        .iter()
+        .map(|reference| scoping.get_reference(*reference))
+        .any(|reference| reference.is_write() && !within(scoping, reference.scope_id(), home))
+}
+
+fn within(scoping: &Scoping, scope: ScopeId, home: ScopeId) -> bool {
+    scoping
+        .scope_ancestors(scope)
+        .any(|ancestor| ancestor == home)
+}
+
+pub(crate) fn read_as_values(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    homes: &FxHashMap<SymbolId, ScopeId>,
+) -> FxHashSet<SymbolId> {
+    let mut scan = ValueReads {
+        scoping,
+        homes,
+        passed: FxHashSet::default(),
+        copying: false,
+        found: FxHashSet::default(),
+    };
+    scan.visit_program(program);
+    scan.found
+}
+
+struct ValueReads<'s> {
+    scoping: &'s Scoping,
+    homes: &'s FxHashMap<SymbolId, ScopeId>,
+    passed: FxHashSet<ReferenceId>,
+    copying: bool,
+    found: FxHashSet<SymbolId>,
+}
+
+impl ValueReads<'_> {
+    fn pass(&mut self, id: &IdentifierReference<'_>) {
+        if let Some(reference) = id.reference_id.get() {
+            self.passed.insert(reference);
+        }
+    }
+}
+
+impl<'a> VisitJs<'a> for ValueReads<'_> {
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        if let (false, Some(id)) = (it.optional, plain_identifier(&it.callee)) {
+            self.pass(id);
+        }
+        walk_js::walk_call_expression(self, it);
+    }
+
+    fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        let copies = match (&it.id, &it.init) {
+            (BindingPattern::BindingIdentifier(_), Some(init)) => {
+                alias_source(init, self.scoping).is_some()
+                    || single_property_source(init, self.scoping).is_some()
+            }
+            _ => false,
+        };
+        let outer = self.copying;
+        self.copying |= copies;
+        walk_js::walk_variable_declarator(self, it);
+        self.copying = outer;
+    }
+
+    fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
+        if let (
+            AssignmentOperator::Assign,
+            AssignmentTarget::AssignmentTargetIdentifier(_),
+            Some(right),
+        ) = (it.operator, &it.left, plain_identifier(&it.right))
+        {
+            self.pass(right);
+        }
+        walk_js::walk_assignment_expression(self, it);
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        if self.copying {
+            return;
+        }
+        let Some(id) = it.reference_id.get() else {
+            return;
+        };
+        if self.passed.contains(&id) {
+            return;
+        }
+        let reference = self.scoping.get_reference(id);
+        let Some(symbol) = reference.symbol_id() else {
+            return;
+        };
+        let outside = self
+            .homes
+            .get(&symbol)
+            .is_some_and(|home| !within(self.scoping, reference.scope_id(), *home));
+        if outside && reference.is_read() {
+            self.found.insert(symbol);
+        }
     }
 }
