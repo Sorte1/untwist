@@ -94,6 +94,6 @@ pub(crate) fn apply_renames<'a>(program: &mut Program<'a>, cx: &mut Cx<'a, '_>) 
     for (symbol, name) in renames {
         planned.insert(symbol, Ident::from_str_in(&name, &*cx));
     }
-    let applied = planned.apply(program, cx.scoping());
+    let applied = planned.apply(program, cx.scoping(), &*cx);
     cx.changed_by(applied);
 }

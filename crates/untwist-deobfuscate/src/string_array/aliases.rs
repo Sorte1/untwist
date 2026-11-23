@@ -521,7 +521,7 @@ pub(super) fn resolve_array_aliases<'a>(
         return FxHashSet::default();
     }
     let wanted = removals.len();
-    let renamed = renames.apply(program, cx.scoping());
+    let renamed = renames.apply(program, cx.scoping(), &*cx);
     let removed = removals.apply(program, cx.allocator(), cx.scoping_mut());
     cx.changed_by(renamed + removed);
     if removed != wanted {

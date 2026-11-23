@@ -1,4 +1,4 @@
-use oxc_allocator::GetAllocator;
+use oxc_allocator::{Allocator, GetAllocator};
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_mut, VisitMut};
 use oxc_semantic::Scoping;
@@ -6,6 +6,9 @@ use oxc_str::Ident;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use crate::ast_util::shorthand::{
+    walk_binding_property_keeping_key, walk_object_property_keeping_key, walk_target_keeping_key,
+};
 use crate::semantic::unbound::is_unbound_name;
 
 #[derive(Default)]
@@ -16,6 +19,7 @@ pub struct Renames<'a> {
 struct Applier<'a, 'r> {
     map: &'r FxHashMap<SymbolId, Ident<'a>>,
     scoping: &'r Scoping,
+    alloc: &'a Allocator,
     count: usize,
 }
 
@@ -50,11 +54,18 @@ impl<'a> Renames<'a> {
             .any(|symbol| is_unbound_name(scoping.symbol_name(*symbol)))
     }
 
-    pub fn apply(&self, program: &mut Program<'a>, scoping: &Scoping) -> usize {
+    pub fn apply(
+        &self,
+        program: &mut Program<'a>,
+        scoping: &Scoping,
+        alloc: &impl GetAllocator<'a>,
+    ) -> usize {
         if self.meets_an_unbound_reference(scoping) {
             return 0;
         }
-        let count = self.run(scoping, |applier| applier.visit_program(program));
+        let count = self.run(scoping, alloc.allocator(), |applier| {
+            applier.visit_program(program)
+        });
         if count > 0 {
             let renames = self
                 .map
@@ -77,13 +88,19 @@ impl<'a> Renames<'a> {
         applier.count
     }
 
-    fn run(&self, scoping: &Scoping, visit: impl FnOnce(&mut Applier<'a, '_>)) -> usize {
+    fn run(
+        &self,
+        scoping: &Scoping,
+        alloc: &'a Allocator,
+        visit: impl FnOnce(&mut Applier<'a, '_>),
+    ) -> usize {
         if self.map.is_empty() {
             return 0;
         }
         let mut applier = Applier {
             map: &self.map,
             scoping,
+            alloc,
             count: 0,
         };
         visit(&mut applier);
@@ -113,6 +130,20 @@ impl<'a> VisitMut<'a> for Applier<'a, '_> {
         }
         walk_mut::walk_identifier_reference(self, it);
     }
+
+    fn visit_assignment_target_property(&mut self, it: &mut AssignmentTargetProperty<'a>) {
+        let alloc = self.alloc;
+        walk_target_keeping_key(self, it, alloc);
+    }
+
+    fn visit_object_property(&mut self, it: &mut ObjectProperty<'a>) {
+        let alloc = self.alloc;
+        walk_object_property_keeping_key(self, it, alloc);
+    }
+
+    fn visit_binding_property(&mut self, it: &mut BindingProperty<'a>) {
+        walk_binding_property_keeping_key(self, it);
+    }
 }
 
 impl<'a> VisitMut<'a> for BindingApplier<'a, '_> {
@@ -124,6 +155,10 @@ impl<'a> VisitMut<'a> for BindingApplier<'a, '_> {
             }
         }
         walk_mut::walk_binding_identifier(self, it);
+    }
+
+    fn visit_binding_property(&mut self, it: &mut BindingProperty<'a>) {
+        walk_binding_property_keeping_key(self, it);
     }
 }
 
