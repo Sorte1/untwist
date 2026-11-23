@@ -1367,3 +1367,38 @@ fn mangle_lane(source: &str) -> String {
 fn a_block_binding_renamed_on_a_merge_keeps_the_key_of_a_shorthand_property_under_rename() {
     prints_like_node_in(MERGED_BLOCK_SHORTHAND_KEYS, &[smart_lane, mangle_lane]);
 }
+
+const LAZY_DECODERS_WHOSE_INNER_DIFFERS: &[&str] = &[
+    "a5-lazy-f1",
+    "a5-lazy-f1b",
+    "a5-lazy-f1c",
+    "a5-lazy-f1-obj",
+    "a5-lazy-f2",
+    "a5-lazy-f2-obj",
+    "a5-lazy-namedsame",
+    "a5-lazy-f3",
+    "a5-lazy-f3-obj",
+    "a5-lazy-f3b",
+    "a5-lazy-f4",
+    "a5-lazy-f4b",
+    "a5-lazy-innerasync",
+    "a5-lazy-f5",
+    "a5-lazy-f5-obj",
+    "a5-lazy-f5b",
+    "a5-lazy-dcall-count",
+    "a5-lazy-dpass",
+    "a5-lazy-dtostr",
+    "a5-lazy-f6",
+    "a5-lazy-f6-obj",
+    "a5-lazy-f6-iife",
+    "a5-lazy-cwrite-in",
+];
+
+#[test]
+fn an_alias_of_a_lazy_decoder_whose_inner_function_differs_from_a_fresh_call_prints_like_node_in_both_lanes(
+) {
+    prints_like_node_in(
+        LAZY_DECODERS_WHOSE_INNER_DIFFERS,
+        &[default_code, unsafe_lane],
+    );
+}

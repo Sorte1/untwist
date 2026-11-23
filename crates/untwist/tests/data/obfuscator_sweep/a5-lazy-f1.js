@@ -1,0 +1,16 @@
+function c() {
+  var o = ['TyxkK', 'hello', 'log', 'world'];
+  c = function () { return o; };
+  return c();
+}
+function d(a) {
+  var e = c();
+  return (d = function (f, g) {
+    f = f - 0x10;
+    var h = e[f];
+    return g === undefined ? h : h + '!';
+  }), d(a);
+}
+var z = d;
+console.log(z(0x11, 1));
+console.log(z(0x11, 1), z(0x13, 1));
