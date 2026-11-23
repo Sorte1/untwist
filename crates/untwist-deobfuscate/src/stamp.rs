@@ -53,7 +53,7 @@ pub fn unstamp_names<'a>(
     for (symbol, name) in symbols {
         renames.insert(*symbol, Ident::from_str_in(name, &*cx));
     }
-    let count = renames.apply(program, cx.scoping());
+    let count = renames.apply(program, cx.scoping(), &*cx);
     cx.changed_by(count);
 }
 
@@ -443,7 +443,7 @@ pub fn apply_stamps<'a>(
     if renames.is_empty() {
         return;
     }
-    let count = renames.apply(program, cx.scoping());
+    let count = renames.apply(program, cx.scoping(), &*cx);
     cx.changed_by(count);
     if count == 0 {
         return;

@@ -25,7 +25,7 @@ fn renaming_a_binding_rewrites_the_declaration_and_every_reference() {
 
     let mut renames = Renames::new();
     renames.insert(symbol, Ident::from("__STRING_ARRAY__"));
-    let count = renames.apply(&mut parsed.program, &sem.scoping);
+    let count = renames.apply(&mut parsed.program, &sem.scoping, &&alloc);
 
     assert_eq!(count, 3);
     assert_eq!(
@@ -158,5 +158,144 @@ fn a_crowded_base_name_scans_the_symbols_once_per_lookup() {
     assert!(
         ratio < 8.0,
         "800 crowded names took {large:?}, 200 took {small:?}: x{ratio:.1}"
+    );
+}
+
+fn renamed_text(source: &str, from: &str, to: &str) -> String {
+    let alloc = Allocator::default();
+    let source = alloc.alloc_str(source);
+    let mut parsed = parse_program(&alloc, source);
+    let sem = build_scoping(&parsed.program);
+    let mut renames = Renames::new();
+    for symbol in sem.scoping.symbol_ids() {
+        if sem.scoping.symbol_name(symbol) == from {
+            renames.insert(symbol, Ident::from_str_in(to, &&alloc));
+        }
+    }
+    renames.apply(&mut parsed.program, &sem.scoping, &&alloc);
+    print(&parsed.program, PrintStyle::Compact)
+}
+
+#[test]
+fn a_renamed_shorthand_assignment_target_keeps_its_key() {
+    assert_eq!(
+        renamed_text("function f(o) { let x; ({x} = o); return x; }", "x", "y"),
+        "function f(o){let y;({x:y}=o);return y}"
+    );
+}
+
+#[test]
+fn a_renamed_shorthand_assignment_target_keeps_its_key_and_default() {
+    assert_eq!(
+        renamed_text(
+            "function f(o) { let x; ({x = 7} = o); return x; }",
+            "x",
+            "y"
+        ),
+        "function f(o){let y;({x:y=7}=o);return y}"
+    );
+}
+
+#[test]
+fn a_renamed_shorthand_target_of_a_for_of_head_keeps_its_key() {
+    assert_eq!(
+        renamed_text(
+            "function f(a) { let x; for ({x} of a); return x; }",
+            "x",
+            "y"
+        ),
+        "function f(a){let y;for({x:y}of a);return y}"
+    );
+}
+
+#[test]
+fn a_renamed_shorthand_target_nested_in_a_pattern_keeps_its_key() {
+    assert_eq!(
+        renamed_text(
+            "function f(a, o) { let x; [{x}] = a; ({b: {x}} = o); return x; }",
+            "x",
+            "y"
+        ),
+        "function f(a,o){let y;[{x:y}]=a;({b:{x:y}}=o);return y}"
+    );
+}
+
+#[test]
+fn a_renamed_shorthand_target_beside_a_rest_of_the_same_name_keeps_its_key() {
+    assert_eq!(
+        renamed_text(
+            "function f(o) { let x; ({x, ...x} = o); return x; }",
+            "x",
+            "y"
+        ),
+        "function f(o){let y;({x:y,...y}=o);return y}"
+    );
+}
+
+#[test]
+fn a_shorthand_target_left_alone_stays_shorthand() {
+    assert_eq!(
+        renamed_text(
+            "function f(o) { let x, z; ({x, z = 1} = o); return x + z; }",
+            "x",
+            "y"
+        ),
+        "function f(o){let y,z;({x:y,z=1}=o);return y+z}"
+    );
+}
+
+#[test]
+fn a_renamed_shorthand_binding_property_keeps_its_key() {
+    assert_eq!(
+        renamed_text(
+            "function f(o) { let {x, w: {x: v} = 1} = o; let {z = 2} = o; return x + v + z; }",
+            "x",
+            "y"
+        ),
+        "function f(o){let{x:y,w:{x:v}=1}=o;let{z=2}=o;return y+v+z}"
+    );
+    assert_eq!(
+        renamed_text("function f(o) { let {x = 2} = o; return x; }", "x", "y"),
+        "function f(o){let{x:y=2}=o;return y}"
+    );
+}
+
+#[test]
+fn a_renamed_shorthand_object_literal_property_keeps_its_key() {
+    assert_eq!(
+        renamed_text("function f() { let x = 1; return {x}; }", "x", "y"),
+        "function f(){let y=1;return{x:y}}"
+    );
+}
+
+#[test]
+fn a_renamed_shorthand_proto_property_keeps_an_own_proto_key() {
+    assert_eq!(
+        renamed_text(
+            "function f() { let __proto__ = 1; return {__proto__}; }",
+            "__proto__",
+            "y"
+        ),
+        "function f(){let y=1;return{[\"__proto__\"]:y}}"
+    );
+}
+
+#[test]
+fn a_renamed_export_specifier_keeps_its_exported_name() {
+    assert_eq!(
+        renamed_text("let x = 1; export { x }; export { x as z };", "x", "y"),
+        "let y=1;export{y as x};export{y as z};"
+    );
+}
+
+#[test]
+fn a_renamed_import_specifier_keeps_its_imported_name() {
+    assert_eq!(
+        renamed_text(
+            "import { x } from \"m\"; import d from \"m\"; console.log(x, d);",
+            "x",
+            "y"
+        ),
+        "import{x as y}from\"m\";import d from\"m\";console.log(y,d);"
     );
 }

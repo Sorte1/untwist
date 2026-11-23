@@ -283,3 +283,17 @@ fn metro_parameters_move_every_colliding_binding_aside() {
         "function f(_require) {\n  return function (_require2) {\n    return require(_dependencyMap[0]) + _require2;\n  }(2) + _require;\n}"
     );
 }
+
+#[test]
+fn a_renamed_parameter_in_a_shorthand_assignment_target_keeps_its_key() {
+    let source = "function f(e, t) { ({e, t = 1} = o); return e + t; }";
+    assert_eq!(
+        rename(source, &["e", "t"], &["module", "exports"]),
+        "function f(e, t) {\n  ({e, t = 1} = o);\n  return e + t;\n}"
+    );
+    let source = "({e, t = 1} = o);\nconsole.log(e, t);";
+    assert_eq!(
+        rename(source, &["e", "t"], &["module", "exports"]),
+        "({e: module, t: exports = 1} = o);\nconsole.log(module, exports);"
+    );
+}

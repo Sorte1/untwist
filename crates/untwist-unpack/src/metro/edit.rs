@@ -1,3 +1,4 @@
+use oxc_allocator::GetAllocator;
 use oxc_ast::ast::*;
 use oxc_ast::builder::AstBuilder;
 use oxc_ast_visit::{walk_mut, VisitMut};
@@ -7,6 +8,7 @@ use oxc_str::{Ident, Str};
 use oxc_syntax::identifier::is_identifier_part;
 use oxc_syntax::number::NumberBase;
 use rustc_hash::FxHashSet;
+use untwist_core::ast_util::shorthand::walk_target_keeping_key;
 
 use super::layout::typed_id;
 use super::{DEPENDENCY_MAP_NAME, ENTRY_ID, GLOBAL_NAME, IMPORT_ALL_NAME, IMPORT_DEFAULT_NAME};
@@ -195,6 +197,11 @@ impl<'a> Edit<'a, '_> {
 }
 
 impl<'a> VisitMut<'a> for Edit<'a, '_> {
+    fn visit_assignment_target_property(&mut self, it: &mut AssignmentTargetProperty<'a>) {
+        let alloc = self.builder.allocator();
+        walk_target_keeping_key(self, it, alloc);
+    }
+
     fn visit_expression(&mut self, it: &mut Expression<'a>) {
         if self.checking {
             walk_mut::walk_expression(self, it);

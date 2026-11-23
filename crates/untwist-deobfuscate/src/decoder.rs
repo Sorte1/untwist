@@ -268,7 +268,7 @@ impl<'a> Pass<'a> for FindDecoders {
         if renames.is_empty() {
             return;
         }
-        let count = renames.apply(program, cx.scoping());
+        let count = renames.apply(program, cx.scoping(), &*cx);
         cx.changed_by(count);
         pass_done(cx.opts.shares_init_order, count > 0);
         cx.progress(notes::decoders_found(total), None);

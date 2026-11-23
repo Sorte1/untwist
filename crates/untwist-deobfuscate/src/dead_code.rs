@@ -1181,6 +1181,6 @@ impl<'a> Pass<'a> for DeadCode<'a> {
 
     fn exit_program(&mut self, node: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
         let renames = std::mem::take(&mut self.renames);
-        renames.apply(node, cx.scoping());
+        renames.apply(node, cx.scoping(), &*cx);
     }
 }

@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use untwist::source_map::{self, OwnedSourceMap, Token};
-use untwist::{Options, Output, Pipeline};
+use untwist::{Options, Output, Pipeline, RenameMode};
 use untwist_core::pass::NoteKind;
 use untwist_deobfuscate::notes;
 use untwist_testing::node_rows::{node_or_skip, printed};
@@ -1329,4 +1329,41 @@ const MERGED_BLOCK_ANNEX_B_SHADOWS: &[&str] = &[
 #[test]
 fn a_block_binding_renamed_on_a_merge_still_shadows_a_nested_block_function_in_both_lanes() {
     prints_like_node_in(MERGED_BLOCK_ANNEX_B_SHADOWS, &[default_code, unsafe_lane]);
+}
+
+const MERGED_BLOCK_SHORTHAND_KEYS: &[&str] = &[
+    "rn1-shorthand-target",
+    "rn1-rest",
+    "rn1-for-of",
+    "rn1-nested",
+    "rn1-default",
+    "rn1-proto",
+    "rn1-binding-and-literal",
+    "rn1-mixed",
+];
+
+#[test]
+fn a_block_binding_renamed_on_a_merge_keeps_the_key_of_a_shorthand_property_in_both_lanes() {
+    prints_like_node_in(MERGED_BLOCK_SHORTHAND_KEYS, &[default_code, unsafe_lane]);
+}
+
+fn renamed_lane(rename: RenameMode, source: &str) -> String {
+    let options = Options {
+        rename,
+        ..Options::default()
+    };
+    Pipeline::new(options).run(source).code().to_string()
+}
+
+fn smart_lane(source: &str) -> String {
+    renamed_lane(RenameMode::Smart, source)
+}
+
+fn mangle_lane(source: &str) -> String {
+    renamed_lane(RenameMode::Mangle, source)
+}
+
+#[test]
+fn a_block_binding_renamed_on_a_merge_keeps_the_key_of_a_shorthand_property_under_rename() {
+    prints_like_node_in(MERGED_BLOCK_SHORTHAND_KEYS, &[smart_lane, mangle_lane]);
 }

@@ -51,7 +51,7 @@ fn unstamped(setup: &Setup) -> (String, Vec<String>) {
         let symbol = nth_symbol(&sem.scoping, name, *nth);
         renames.insert(symbol, Ident::from(*stamp));
     }
-    renames.apply(&mut parsed.program, &sem.scoping);
+    renames.apply(&mut parsed.program, &sem.scoping, &&alloc);
     if let Some((from, to)) = setup.retarget {
         let to = Ident::from(to);
         Retarget { from, to }.visit_program(&mut parsed.program);

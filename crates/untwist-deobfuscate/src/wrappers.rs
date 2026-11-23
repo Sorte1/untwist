@@ -1235,7 +1235,7 @@ fn inline_variable_aliases<'a>(
         return 0;
     }
     let kept = kept_bindings(&plan, cx);
-    let mut renamed = renames.apply(program, cx.scoping());
+    let mut renamed = renames.apply(program, cx.scoping(), &*cx);
     if !kept.is_empty() {
         KeptBindings { names: &kept }.visit_program(program);
     }

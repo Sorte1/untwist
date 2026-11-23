@@ -346,7 +346,7 @@ fn a_rename_refuses_while_an_inserted_read_of_the_name_is_unbound() {
     let mut renames = Renames::new();
     renames.insert(parameter, oxc_str::Ident::from("z"));
     assert!(renames.meets_an_unbound_reference(&sem.scoping));
-    assert_eq!(renames.apply(&mut parsed.program, &sem.scoping), 0);
+    assert_eq!(renames.apply(&mut parsed.program, &sem.scoping, &&alloc), 0);
     let sem = build_scoping(&parsed.program);
     let parameter = symbol_named(&sem.scoping, "y", 0);
     let mut renames = Renames::new();

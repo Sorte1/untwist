@@ -1,7 +1,10 @@
 use std::cell::RefCell;
 
 use oxc_allocator::Allocator;
-use oxc_ast::ast::{BindingIdentifier, CallExpression, Expression, IdentifierReference, Program};
+use oxc_ast::ast::{
+    AssignmentTargetProperty, BindingIdentifier, CallExpression, Expression, IdentifierReference,
+    Program,
+};
 use oxc_ast_visit::{VisitJs, VisitMut};
 use oxc_semantic::Scoping;
 use oxc_span::Span;
@@ -10,6 +13,7 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::rename::{unique_name_avoiding, Renames};
 use untwist_core::ast_util::respan::{follow_spans, take_followed_spans};
+use untwist_core::ast_util::shorthand::walk_target_keeping_key;
 use untwist_core::semantic::scope_hazard;
 use untwist_core::semantic::unbound::is_unbound_name;
 
@@ -253,6 +257,7 @@ const ESCAPE_MARK: &str = "untwist_escape";
 
 struct ReferenceMarks<'a, 'm> {
     marks: &'m FxHashMap<Span, Ident<'a>>,
+    alloc: &'a Allocator,
     count: usize,
 }
 
@@ -262,6 +267,11 @@ impl<'a> VisitMut<'a> for ReferenceMarks<'a, '_> {
             it.name = *mark;
             self.count += 1;
         }
+    }
+
+    fn visit_assignment_target_property(&mut self, it: &mut AssignmentTargetProperty<'a>) {
+        let alloc = self.alloc;
+        walk_target_keeping_key(self, it, alloc);
     }
 }
 
@@ -328,10 +338,11 @@ fn marked_survivors<'a>(
     }
     let renamed = match renames.is_empty() {
         true => true,
-        false => renames.apply(program, scoping) > 0,
+        false => renames.apply(program, scoping, &alloc) > 0,
     };
     let mut references = ReferenceMarks {
         marks: &marks.references,
+        alloc,
         count: 0,
     };
     if !marks.references.is_empty() {

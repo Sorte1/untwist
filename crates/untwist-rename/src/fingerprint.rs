@@ -33,7 +33,7 @@ pub fn alpha_fingerprint(source: &str) -> Option<String> {
         let placeholder = format!("{prefix}{index}");
         renames.insert(symbol, Ident::from_str_in(&placeholder, &&alloc));
     }
-    renames.apply(&mut parsed.program, &sem.scoping);
+    renames.apply(&mut parsed.program, &sem.scoping, &&alloc);
     Some(print(&parsed.program, PrintStyle::Compact))
 }
 

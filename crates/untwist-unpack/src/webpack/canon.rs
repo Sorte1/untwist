@@ -1,3 +1,4 @@
+use oxc_allocator::GetAllocator;
 use oxc_allocator::{Allocator, CloneIn, TakeIn, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast::builder::AstBuilder;
@@ -5,6 +6,7 @@ use oxc_ast_visit::{walk_mut, VisitJs, VisitMut};
 use oxc_span::{SourceType, SPAN};
 use oxc_str::Ident;
 use rustc_hash::{FxHashMap, FxHashSet};
+use untwist_core::ast_util::shorthand::walk_target_keeping_key;
 use untwist_core::print::{print, PrintStyle};
 
 use crate::model::Runtime;
@@ -216,6 +218,11 @@ impl<'a> Rename<'_, 'a> {
 }
 
 impl<'a> VisitMut<'a> for Rename<'_, 'a> {
+    fn visit_assignment_target_property(&mut self, it: &mut AssignmentTargetProperty<'a>) {
+        let alloc = self.builder.allocator();
+        walk_target_keeping_key(self, it, alloc);
+    }
+
     fn visit_statements(&mut self, it: &mut AVec<'a, Statement<'a>>) {
         let old = std::mem::replace(it, AVec::new_in(&self.builder));
         for statement in old {

@@ -1,3 +1,4 @@
+use oxc_allocator::GetAllocator;
 use oxc_allocator::{Allocator, CloneIn};
 use oxc_ast::ast::*;
 use oxc_ast::builder::AstBuilder;
@@ -6,6 +7,7 @@ use oxc_semantic::Scoping;
 use oxc_span::{GetSpan, SourceType, Span, SPAN};
 use oxc_str::{Ident, Str};
 use oxc_syntax::symbol::SymbolId;
+use untwist_core::ast_util::shorthand::walk_target_keeping_key;
 use untwist_core::semantic::build_scoping;
 
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -343,6 +345,11 @@ impl<'a> Symbols<'_, 'a> {
 }
 
 impl<'a> VisitMut<'a> for Symbols<'_, 'a> {
+    fn visit_assignment_target_property(&mut self, it: &mut AssignmentTargetProperty<'a>) {
+        let alloc = self.builder.allocator();
+        walk_target_keeping_key(self, it, alloc);
+    }
+
     fn visit_variable_declaration(&mut self, it: &mut VariableDeclaration<'a>) {
         let lexical = matches!(
             it.kind,

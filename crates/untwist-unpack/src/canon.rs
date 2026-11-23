@@ -7,6 +7,7 @@ use oxc_span::{SourceType, SPAN};
 use oxc_str::Ident;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
+use untwist_core::ast_util::shorthand::walk_target_keeping_key;
 use untwist_core::print::{function_text, print, PrintStyle};
 use untwist_core::semantic::build_scoping;
 
@@ -28,6 +29,11 @@ impl<'a> Canon<'a, '_> {
 }
 
 impl<'a> VisitMut<'a> for Canon<'a, '_> {
+    fn visit_assignment_target_property(&mut self, it: &mut AssignmentTargetProperty<'a>) {
+        let alloc = self.alloc;
+        walk_target_keeping_key(self, it, alloc);
+    }
+
     fn visit_identifier_reference(&mut self, it: &mut IdentifierReference<'a>) {
         let symbol = it
             .reference_id

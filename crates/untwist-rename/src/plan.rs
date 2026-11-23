@@ -67,7 +67,7 @@ impl RenamePlan {
         if changed == 0 {
             return 0;
         }
-        renames.apply(program, scoping);
+        renames.apply(program, scoping, alloc);
         changed
     }
 }
