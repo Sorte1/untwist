@@ -1,8 +1,10 @@
 use oxc_ast::ast::*;
+use oxc_syntax::operator::BinaryOperator;
 use untwist_core::ast_util::prop::member_parts;
 
 use crate::generate::{lower_camel, strip_accessor_prefix};
 use crate::human::looks_human_written;
+use crate::reserved::is_reserved;
 
 const NAMED_RESULTS: [(&str, &str); 37] = [
     ("map", "mapped"),
@@ -86,11 +88,58 @@ const WEBGL_CONTEXTS: [&str; 3] = ["webgl", "webgl2", "experimental-webgl"];
 
 const STORAGES: [&str; 2] = ["localStorage", "sessionStorage"];
 
-const UNNAMING_METHODS: [&str; 24] = [
-    "call", "apply", "bind", "then", "catch", "finally", "push", "pop", "shift", "unshift",
-    "slice", "splice", "concat", "replace", "toString", "valueOf", "set", "get", "add", "has",
-    "emit", "log", "assign", "create",
+const UNNAMING_METHODS: [&str; 15] = [
+    "call",
+    "apply",
+    "bind",
+    "then",
+    "catch",
+    "finally",
+    "push",
+    "unshift",
+    "splice",
+    "valueOf",
+    "has",
+    "emit",
+    "log",
+    "build",
+    "subscribe",
 ];
+
+const ELEMENT_METHODS: [&str; 5] = ["get", "at", "pop", "shift", "peek"];
+
+const RECEIVER_METHODS: [&str; 14] = [
+    "set",
+    "add",
+    "sub",
+    "mul",
+    "div",
+    "slice",
+    "concat",
+    "replace",
+    "trim",
+    "assign",
+    "create",
+    "copy",
+    "normalize",
+    "negate",
+];
+
+const SHORT_PROPERTIES: [&str; 15] = [
+    "x", "y", "z", "w", "i", "dx", "dy", "dz", "vx", "vy", "vz", "r", "g", "b", "id",
+];
+
+const CONVERSION_PREFIX: &str = "to";
+
+const LAST_INDEX: &str = "lastIndex";
+
+const LOOKED_UP: &str = "value";
+
+const CALL_RESULT: &str = "result";
+
+const THIS_ALIAS: &str = "self";
+
+const FUNCTION_VALUE: &str = "fn";
 
 const IGNORED_PROPERTIES: [&str; 4] = ["prototype", "exports", "default", "__proto__"];
 
@@ -289,13 +338,62 @@ fn method_result_name(call: &CallExpression<'_>) -> Option<String> {
     if let Some(name) = call_result_name(call) {
         return Some(name);
     }
-    let method = method_name(&call.callee)?;
-    if UNNAMING_METHODS.contains(&method.as_ref()) || !is_naming_property(&method) {
+    if let Some(name) = verb_result_name(call) {
+        return (name != CALL_RESULT).then_some(name);
+    }
+    callee_word(&method_name(&call.callee)?)
+}
+
+fn callee_word(callee: &str) -> Option<String> {
+    if !is_naming_property(callee) {
         return None;
     }
-    strip_accessor_prefix(&method)
-        .or_else(|| Some(lower_camel(&method)))
+    strip_accessor_prefix(callee)
+        .or_else(|| Some(lower_camel(callee)))
         .filter(|name| is_word_like(name))
+}
+
+fn conversion_name(method: &str) -> Option<String> {
+    let rest = method.strip_prefix(CONVERSION_PREFIX)?;
+    if !rest.starts_with(|ch: char| ch.is_ascii_uppercase()) {
+        return None;
+    }
+    let name = if rest.chars().all(|ch| ch.is_ascii_uppercase()) {
+        rest.to_ascii_lowercase()
+    } else {
+        lower_camel(rest)
+    };
+    (is_word_like(&name) && !is_reserved(&name)).then_some(name)
+}
+
+fn receiver_name(callee: &Expression<'_>) -> Option<String> {
+    let (receiver, _) = member_parts(callee.without_parentheses())?;
+    let name = collection_name(receiver)?;
+    is_naming_property(name).then(|| lower_camel(name))
+}
+
+fn verb_result_name(call: &CallExpression<'_>) -> Option<String> {
+    let method = method_name(&call.callee)?;
+    let method = method.as_ref();
+    if ELEMENT_METHODS.contains(&method) {
+        let element = member_parts(call.callee.without_parentheses())
+            .and_then(|(receiver, _)| element_name(receiver));
+        return Some(element.unwrap_or_else(|| LOOKED_UP.to_string()));
+    }
+    let is_conversion = method
+        .strip_prefix(CONVERSION_PREFIX)
+        .is_some_and(|rest| rest.starts_with(|ch: char| ch.is_ascii_uppercase()));
+    if is_conversion {
+        if let Some(name) = conversion_name(method) {
+            return Some(name);
+        }
+    }
+    if is_conversion || RECEIVER_METHODS.contains(&method) {
+        return Some(receiver_name(&call.callee).unwrap_or_else(|| CALL_RESULT.to_string()));
+    }
+    UNNAMING_METHODS
+        .contains(&method)
+        .then(|| CALL_RESULT.to_string())
 }
 
 fn singular(plural: &str) -> Option<String> {
@@ -337,6 +435,54 @@ fn indexed_element_name(member: &ComputedMemberExpression<'_>) -> Option<String>
     element_name(&member.object)
 }
 
+fn singular_property_element(member: &ComputedMemberExpression<'_>) -> Option<String> {
+    if !matches!(member.expression, Expression::NumericLiteral(_)) {
+        return None;
+    }
+    let Expression::StaticMemberExpression(collection) = member.object.without_parentheses() else {
+        return None;
+    };
+    member_value_name(collection)
+}
+
+fn member_value_name(member: &StaticMemberExpression<'_>) -> Option<String> {
+    let name = member.property.name.as_str();
+    (SHORT_PROPERTIES.contains(&name) || is_naming_property(name)).then(|| name.to_string())
+}
+
+fn last_index_name(binary: &BinaryExpression<'_>) -> Option<String> {
+    let is_length = matches!(binary.left.without_parentheses(), Expression::StaticMemberExpression(member) if member.property.name == "length");
+    let is_one =
+        matches!(&binary.right, Expression::NumericLiteral(literal) if literal.value == 1.0);
+    let last = binary.operator == BinaryOperator::Subtraction && is_length && is_one;
+    last.then(|| LAST_INDEX.to_string())
+}
+
+fn awaited_call_name(call: &CallExpression<'_>) -> Option<String> {
+    if let Some(name) = verb_result_name(call) {
+        return Some(name);
+    }
+    match method_name(&call.callee) {
+        Some(method) => callee_word(&method),
+        None => callee_word(global_callee(&call.callee)?),
+    }
+}
+
+pub fn declared_fallback_name(init: &Expression<'_>) -> Option<String> {
+    match init.without_parentheses() {
+        Expression::StaticMemberExpression(member) => member_value_name(member),
+        Expression::ComputedMemberExpression(member) => singular_property_element(member),
+        Expression::BinaryExpression(binary) => last_index_name(binary),
+        Expression::ThisExpression(_) => Some(THIS_ALIAS.to_string()),
+        Expression::CallExpression(call) => verb_result_name(call),
+        Expression::AwaitExpression(awaited) => match awaited.argument.without_parentheses() {
+            Expression::CallExpression(call) => awaited_call_name(call),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 pub fn declared_value_name(init: &Expression<'_>) -> Option<String> {
     match init.without_parentheses() {
         Expression::ComputedMemberExpression(member) => indexed_element_name(member),
@@ -352,6 +498,9 @@ pub fn assigned_value_name(value: &Expression<'_>) -> Option<String> {
         Expression::CallExpression(call) => method_result_name(call),
         Expression::NewExpression(new) => construction_name(new),
         Expression::AwaitExpression(awaited) => assigned_value_name(&awaited.argument),
+        Expression::FunctionExpression(_) | Expression::ArrowFunctionExpression(_) => {
+            Some(FUNCTION_VALUE.to_string())
+        }
         Expression::StaticMemberExpression(member) => {
             let name = member.property.name.as_str();
             is_naming_property(name).then(|| name.to_string())
