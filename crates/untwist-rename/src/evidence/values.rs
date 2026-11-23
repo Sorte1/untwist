@@ -131,6 +131,10 @@ const SHORT_PROPERTIES: [&str; 15] = [
 
 const CONVERSION_PREFIX: &str = "to";
 
+const AWAITED_PREFIXES: [&str; 4] = ["get", "fetch", "load", "read"];
+
+const ASYNC_SUFFIX: &str = "Async";
+
 const LAST_INDEX: &str = "lastIndex";
 
 const LOOKED_UP: &str = "value";
@@ -462,10 +466,22 @@ fn awaited_call_name(call: &CallExpression<'_>) -> Option<String> {
     if let Some(name) = verb_result_name(call) {
         return Some(name);
     }
-    match method_name(&call.callee) {
-        Some(method) => callee_word(&method),
-        None => callee_word(global_callee(&call.callee)?),
-    }
+    let callee = match method_name(&call.callee) {
+        Some(method) => method,
+        None => std::borrow::Cow::Borrowed(global_callee(&call.callee)?),
+    };
+    awaited_word(&callee)
+}
+
+fn awaited_word(callee: &str) -> Option<String> {
+    let stem = callee.strip_suffix(ASYNC_SUFFIX).unwrap_or(callee);
+    let rest = AWAITED_PREFIXES
+        .iter()
+        .find_map(|prefix| stem.strip_prefix(prefix))
+        .filter(|rest| rest.starts_with(|ch: char| ch.is_ascii_uppercase()));
+    let name = lower_camel(rest.unwrap_or(stem));
+    let usable = is_naming_property(&name) && !AWAITED_PREFIXES.contains(&name.as_str());
+    usable.then_some(name)
 }
 
 pub fn declared_fallback_name(init: &Expression<'_>) -> Option<String> {

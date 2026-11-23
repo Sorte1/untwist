@@ -147,3 +147,21 @@ fn an_alias_of_a_kept_name_takes_that_name() {
     assert_has(&code, &["const surfNorm2 = surfNorm"]);
     assert_lacks(&code, &["const toVar"]);
 }
+
+#[test]
+fn an_awaited_call_keeps_words_that_are_not_read_prefixes() {
+    let code = smart(
+        "async function f(_0x9) { const _0x1 = await _0x9.createOrUpdateRecruitment(1); const _0x2 = await _0x9.loadAsync(2); const _0x3 = await _0x9.loadTextureAsync(3); return [_0x1, _0x2, _0x3]; }",
+    );
+    assert_has(
+        &code,
+        &[
+            "const createOrUpdateRecruitment = await",
+            "const texture = await",
+        ],
+    );
+    assert_lacks(
+        &code,
+        &["const orUpdateRecruitment", "const async", "const load ="],
+    );
+}
