@@ -298,6 +298,9 @@ fn overwritten_after(
     if crate::mutants::cookie_block_vars_trusted() {
         return true;
     }
+    if !local_to(body, scoping, symbol) {
+        return false;
+    }
     let outside: Vec<usize> = (0..body.len())
         .filter(|index| *index != cookie && mentions(&body[*index], scoping, symbol))
         .collect();
@@ -306,7 +309,6 @@ fn overwritten_after(
     };
 
     first > cookie
-        && local_to(body, scoping, symbol)
         && overwrites(&body[first], scoping, symbol)
         && !read_by_closure(&body[cookie], scoping, symbol)
         && outside
