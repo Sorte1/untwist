@@ -6,7 +6,7 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
-## [0.6.0] - 2026-11-23
+## [0.6.0] - 2026-11-25
 
 There is no 0.5.1: the readability work planned for it ships in this release, together with
 library recognition, `--modern`, `--split-assume-modules` and experimental `--types`. The
@@ -34,6 +34,12 @@ it decodes fully in both lanes, and the default lane never gives wrong output.
   constructors, element ids, selectors and storage keys, event and timer callbacks, `fetch`
   responses, boolean returners, PascalCase for functions only used with `new`, and parameter
   names every call site agrees on (#290); long hex tokens it has evidence for (#301).
+- `--rename smart` names parameters from how the body uses them (`arr`, `str`, `promise`,
+  `event`, `Ctor` for one used with `new`) or from the parameter they are passed on to,
+  functions from what they return, call results from their callee, values from the property
+  they are read from, and `const v = this` as `self`. A value is never named after a verb such
+  as `get` or `mul`, and a reassigned binding no longer keeps its first value's name (#500,
+  #501, #502).
 - `--modern <baseline>` (opt-in) removes core-js polyfills of features native in an ES year
   (es2017 to es2024) or a list of engines, and turns calls of the core-js helpers left into the
   native form (#317, #374).
@@ -75,7 +81,8 @@ it decodes fully in both lanes, and the default lane never gives wrong output.
 - Krunker 10.0.7 reads much closer to its source: under `--unsafe`, 444 Babel classes become
   `class` again (none in 0.5.0) (#312), optional-chain rewrites go from 94 to 208 (#302), the
   `requireX` wrapper names are spread to the values they return (#311), and the walls of bare
-  `var` at the top of functions are gone (#351).
+  `var` at the top of functions are gone (#351). With `--rename smart`, names of two characters
+  or fewer fall from 35% to 27% of its bindings (#500, #501, #502).
 - The default lane keeps every function and class name (#399) and never renames a classic
   script's top-level bindings (#385).
 - The playground finds refusal places in one pass per line and lists each place once, capped
@@ -124,7 +131,11 @@ it decodes fully in both lanes, and the default lane never gives wrong output.
   functions and lexical aliases in folds, method calls on assembled objects and optional calls
   in dead-branch proofs, and the meaning of statements a cookie or checksum wrap moves (#450,
   #458, #460, #466, #467, #468, #471, #472, #483, #484, #486, #487, #488, #489, #490, #491,
-  #492, #493).
+  #492, #493, #494).
+- A lazy decoder's aliases are replaced only when its inner function behaves like a fresh call
+  of the outer one and every copy of the decoder goes into a binding that is only called and
+  that no parameter, export, `eval`, `with` or other input sees; any other copy keeps every
+  alias (#497, #499, #503, #505).
 
 #### Decoding coverage
 
@@ -149,6 +160,9 @@ it decodes fully in both lanes, and the default lane never gives wrong output.
   `.arguments` read (#365); a split where a module could see its caller (#391); host
   `require`, `import()` and node's loader outside an allow-list (#401). Strictness, early
   errors, node's module goal and UMD `define` follow the source (#395, #398, #406, #416).
+- Because a factory may now use the host's `require` only with `typeof` or a literal request
+  (#393), the obfuscated webpack apps whose code aliases it (`const r = require`) are no longer
+  unpacked under `--unsafe`: 20 obf-matrix webpack cells keep the bundle packed.
 - `--split-hoisted` no longer splits a webpack runtime chunk (#307), and real strict webpack
   5 bundles split again (#397). Factory parameters are renamed with every same-named binding
   moved aside (#410), twice-declared functions and setter parameters work in assumed-module
@@ -167,19 +181,25 @@ it decodes fully in both lanes, and the default lane never gives wrong output.
   read (#314). Lexical untranspile, layer inlining and `--modern` close the gaps their reviews
   found (#332, #340, #343). Further review findings on eval, `with`, class awaits, script
   globals and Annex B hoists are fixed (#334, #346, #355, #364, #369, #380, #392, #404).
+- A shorthand property keeps its key when rename, unpack, inlining or decoding changes its
+  value, so `({x} = o)` and `{__proto__}` keep their meaning, and `__assign` over a literal with
+  a `__proto__` key is refused (#496, #498, #504).
 
 ### Known gaps
 
-Some multi-layer (re-obfuscated) javascript-obfuscator inputs still keep machinery under
-`--unsafe`. In the release sweep: a web of about 30 control-flow objects whose escapes depend on
-each other (pw038-n3, console disabling left); a debug interval recognised only after the
-rotator is refused (pw023-m3, debug protection left; a second run decodes it); decoder aliases
-read before their declaration or a decoder used other than as a callee (rnd001-m3, pw039-m3;
-the functions case prints differently); a later layer's `renameProperties` or control-flow
-flattening inside the console-disable callback (pw035-m3, pw038-n2; the output prints what the
-source prints); a stateful decoder whose call throws in the first pass (rnd022-m3, rnd031-n3);
-and a dead-code copy that calls the wrapper with a bad index, which leaves the string array
-(the default lane prints like node). The default lane gives no wrong output on any of them.
+The javascript-obfuscator sweep decodes every single-layer case fully in both lanes (655 of
+655). Over all 2,189 run cases, the default lane gives no wrong output and `--unsafe` fully
+decodes 2,180. The nine left are multi-layer (re-obfuscated) inputs that keep machinery under
+`--unsafe`: a web of about 30 control-flow objects whose escapes depend on each other (pw038-n3,
+console disabling left); a debug interval recognised only after the rotator is refused
+(pw023-m3, debug protection left; a second run decodes it); decoder aliases read before their
+declaration or a decoder used other than as a callee (rnd001-m3, pw039-m3 twice; the functions
+case prints differently); a later layer's `renameProperties` or control-flow flattening inside
+the console-disable callback (pw035-m3, pw038-n2); and a stateful decoder whose call throws in
+the first pass (rnd022-m3, rnd031-n3). On all nine the default lane prints what the obfuscated
+input prints, and pw035-m3 and rnd031-n3 also print like the source under `--unsafe`. Outside
+the sweep, a dead-code copy that calls the wrapper with a bad index leaves the string array
+under `--unsafe` (the default lane prints like node).
 
 ## [0.5.0] - 2026-11-12
 
