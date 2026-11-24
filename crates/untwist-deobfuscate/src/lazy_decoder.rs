@@ -334,17 +334,34 @@ impl<'a> VisitJs<'a> for InnerScan<'_> {
 pub(crate) struct CalleeUses {
     pub(crate) callee_only: FxHashSet<SymbolId>,
     pub(crate) member_callees: FxHashSet<Span>,
+    pub(crate) copied_to: FxHashMap<SymbolId, Vec<SymbolId>>,
+}
+
+impl CalleeUses {
+    pub(crate) fn reach(&self, symbol: SymbolId) -> FxHashSet<SymbolId> {
+        let mut reached = FxHashSet::default();
+        let mut pending = vec![symbol];
+        while let Some(next) = pending.pop() {
+            if reached.insert(next) {
+                pending.extend(self.copied_to.get(&next).into_iter().flatten());
+            }
+        }
+        reached
+    }
 }
 
 pub(crate) fn callee_uses(
     program: &Program<'_>,
     scoping: &Scoping,
     candidates: &FxHashSet<SymbolId>,
+    discarded: &FxHashSet<ReferenceId>,
 ) -> CalleeUses {
     let mut copies = CopyScan {
         scoping,
+        discarded,
         found: Vec::new(),
         members: Vec::new(),
+        member_objects: Vec::new(),
     };
     copies.visit_program(program);
     let mut reached = candidates.clone();
@@ -360,6 +377,7 @@ pub(crate) fn callee_uses(
     }
     let mut scan = CalleeScan {
         scoping,
+        discarded,
         candidates: &reached,
         callees: FxHashSet::default(),
         member_callees: FxHashSet::default(),
@@ -392,16 +410,30 @@ pub(crate) fn callee_uses(
             .filter(|(_, to)| !observed.contains(to))
             .map(|(member, _)| *member),
     );
+    let mut copied_to: FxHashMap<SymbolId, Vec<SymbolId>> = FxHashMap::default();
+    for (from, to) in copies.found.iter().chain(&copies.member_objects) {
+        copied_to.entry(*from).or_default().push(*to);
+    }
     CalleeUses {
         callee_only,
         member_callees,
+        copied_to,
     }
 }
 
 struct CopyScan<'s> {
     scoping: &'s Scoping,
+    discarded: &'s FxHashSet<ReferenceId>,
     found: Vec<(SymbolId, SymbolId)>,
     members: Vec<(Span, SymbolId)>,
+    member_objects: Vec<(SymbolId, SymbolId)>,
+}
+
+fn dropped(right: &IdentifierReference<'_>, discarded: &FxHashSet<ReferenceId>) -> bool {
+    right
+        .reference_id
+        .get()
+        .is_some_and(|reference| discarded.contains(&reference))
 }
 
 impl<'a> VisitJs<'a> for CopyScan<'_> {
@@ -415,6 +447,9 @@ impl<'a> VisitJs<'a> for CopyScan<'_> {
                 }
                 (None, Expression::StaticMemberExpression(member), Some(to)) => {
                     self.members.push((member.span, to));
+                    if let Some(object) = reference_symbol(&member.object, self.scoping) {
+                        self.member_objects.push((object, to));
+                    }
                 }
                 _ => {}
             }
@@ -429,6 +464,10 @@ impl<'a> VisitJs<'a> for CopyScan<'_> {
             Some(right),
         ) = (it.operator, &it.left, plain_identifier(&it.right))
         {
+            if !dropped(right, self.discarded) {
+                walk_js::walk_assignment_expression(self, it);
+                return;
+            }
             let from = resolved_symbol(right, self.scoping);
             if let (Some(from), Some(to)) = (from, resolved_symbol(target, self.scoping)) {
                 self.found.push((from, to));
@@ -440,6 +479,7 @@ impl<'a> VisitJs<'a> for CopyScan<'_> {
 
 struct CalleeScan<'s> {
     scoping: &'s Scoping,
+    discarded: &'s FxHashSet<ReferenceId>,
     candidates: &'s FxHashSet<SymbolId>,
     callees: FxHashSet<Span>,
     member_callees: FxHashSet<Span>,
@@ -480,8 +520,10 @@ impl<'a> VisitJs<'a> for CalleeScan<'_> {
             Some(right),
         ) = (it.operator, &it.left, plain_identifier(&it.right))
         {
-            self.copies
-                .insert(right.span, resolved_symbol(target, self.scoping));
+            if dropped(right, self.discarded) {
+                self.copies
+                    .insert(right.span, resolved_symbol(target, self.scoping));
+            }
         }
         walk_js::walk_assignment_expression(self, it);
     }
@@ -534,6 +576,8 @@ pub(crate) struct ValueReadFacts {
     pub(crate) found: FxHashSet<SymbolId>,
     pub(crate) copies: Vec<(Option<SymbolId>, SymbolId)>,
     pub(crate) parameters: FxHashSet<SymbolId>,
+    pub(crate) exported: FxHashSet<SymbolId>,
+    pub(crate) discarded: FxHashSet<ReferenceId>,
 }
 
 pub(crate) fn read_as_values(
@@ -551,6 +595,8 @@ pub(crate) fn read_as_values(
             found: FxHashSet::default(),
             copies: Vec::new(),
             parameters: FxHashSet::default(),
+            exported: FxHashSet::default(),
+            discarded: FxHashSet::default(),
         },
     };
     scan.visit_program(program);
@@ -571,6 +617,40 @@ impl ValueReads<'_> {
         if let Some(reference) = id.reference_id.get() {
             self.passed.insert(reference);
         }
+    }
+
+    fn discard(&mut self, expr: &Expression<'_>) {
+        match expr.without_parentheses() {
+            Expression::SequenceExpression(sequence) => {
+                for expr in &sequence.expressions {
+                    self.discard(expr);
+                }
+            }
+            Expression::AssignmentExpression(it) => self.discard_assignment(it),
+            _ => {}
+        }
+    }
+
+    fn discard_assignment(&mut self, it: &AssignmentExpression<'_>) {
+        let (
+            AssignmentOperator::Assign,
+            AssignmentTarget::AssignmentTargetIdentifier(target),
+            Some(right),
+        ) = (it.operator, &it.left, plain_identifier(&it.right))
+        else {
+            return;
+        };
+        if let Some(reference) = right.reference_id.get() {
+            self.facts.discarded.insert(reference);
+            self.copied_into
+                .insert(reference, resolved_symbol(target, self.scoping));
+        }
+    }
+
+    fn export(&mut self, id: Option<&BindingIdentifier<'_>>) {
+        self.facts
+            .exported
+            .extend(id.and_then(|id| id.symbol_id.get()));
     }
 
     fn outside_home(&self, reference: ReferenceId) -> Option<SymbolId> {
@@ -613,19 +693,55 @@ impl<'a> VisitJs<'a> for ValueReads<'_> {
         self.copying = outer;
     }
 
-    fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
-        if let (
-            AssignmentOperator::Assign,
-            AssignmentTarget::AssignmentTargetIdentifier(target),
-            Some(right),
-        ) = (it.operator, &it.left, plain_identifier(&it.right))
-        {
-            if let Some(reference) = right.reference_id.get() {
-                self.copied_into
-                    .insert(reference, resolved_symbol(target, self.scoping));
+    fn visit_expression_statement(&mut self, it: &ExpressionStatement<'a>) {
+        self.discard(&it.expression);
+        walk_js::walk_expression_statement(self, it);
+    }
+
+    fn visit_sequence_expression(&mut self, it: &SequenceExpression<'a>) {
+        if let Some((_, heads)) = it.expressions.split_last() {
+            for head in heads {
+                self.discard(head);
             }
         }
-        walk_js::walk_assignment_expression(self, it);
+        walk_js::walk_sequence_expression(self, it);
+    }
+
+    fn visit_for_statement(&mut self, it: &ForStatement<'a>) {
+        if let Some(init) = it.init.as_ref().and_then(ForStatementInit::as_expression) {
+            self.discard(init);
+        }
+        if let Some(update) = &it.update {
+            self.discard(update);
+        }
+        walk_js::walk_for_statement(self, it);
+    }
+
+    fn visit_export_declaration(&mut self, it: &ExportDeclaration<'a>) {
+        match &it.declaration {
+            Declaration::VariableDeclaration(declaration) => {
+                for declarator in &declaration.declarations {
+                    for id in declarator.id.get_binding_identifiers() {
+                        self.export(Some(id));
+                    }
+                }
+            }
+            Declaration::FunctionDeclaration(function) => self.export(function.id.as_ref()),
+            Declaration::ClassDeclaration(class) => self.export(class.id.as_ref()),
+            _ => {}
+        }
+        walk_js::walk_export_declaration(self, it);
+    }
+
+    fn visit_export_default_declaration(&mut self, it: &ExportDefaultDeclaration<'a>) {
+        match &it.declaration {
+            ExportDefaultDeclarationKind::FunctionDeclaration(function) => {
+                self.export(function.id.as_ref())
+            }
+            ExportDefaultDeclarationKind::ClassDeclaration(class) => self.export(class.id.as_ref()),
+            _ => {}
+        }
+        walk_js::walk_export_default_declaration(self, it);
     }
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {

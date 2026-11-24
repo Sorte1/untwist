@@ -4,7 +4,8 @@ use untwist::source_map::{self, OwnedSourceMap, Token};
 use untwist::{Options, Output, Pipeline, RenameMode};
 use untwist_core::pass::NoteKind;
 use untwist_deobfuscate::notes;
-use untwist_testing::node_rows::{node_or_skip, printed};
+use untwist_testing::node::run;
+use untwist_testing::node_rows::{node_or_skip, observed, printed};
 
 const SECOND_ROUND: &str = "../../fixtures/obfuscator-versions/0.18.8--plain-norot-t75-self--wp4-module--uglify--control-1.js";
 
@@ -1511,4 +1512,61 @@ fn a_metro_parameter_named_proto_in_a_shorthand_property_keeps_the_key() {
             ..Options::default()
         }],
     );
+}
+
+const LAZY_DECODER_COPIES_STILL_READ: &[&str] = &[
+    "a7-lazy-copy-asgval",
+    "a7-lazy-copy-asgval-arg",
+    "a7-lazy-copy-asgval-copychain",
+    "a7-lazy-copy-asgval-nested",
+    "a7-lazy-copy-asgval-obj",
+    "a7-lazy-copy-asgval-ret",
+    "a7-lazy-copy-asgval-seq",
+    "a7-lazy-copy-chain-param",
+    "a7-lazy-copy-chain-param-two",
+    "a7-lazy-copy-member-param",
+];
+
+#[test]
+fn a_lazy_decoder_copy_read_through_its_assignment_or_a_mapped_parameter_prints_like_node_in_both_lanes(
+) {
+    prints_like_node_in(LAZY_DECODER_COPIES_STILL_READ, &[default_code, unsafe_lane]);
+}
+
+const LAZY_DECODER_COPIES_EXPORTED: &[&str] = &[
+    "a7-lazy-copy-export",
+    "a7-lazy-copy-export-asg",
+    "a7-lazy-copy-export-chain",
+    "a7-lazy-copy-export-obj",
+];
+
+fn printed_as_module(node: &Path, dir: &Path, text: &str) -> Option<String> {
+    let path = dir.join("program.mjs");
+    std::fs::write(&path, text).unwrap();
+    run(node, &path).unwrap().map(|out| observed(&out))
+}
+
+#[test]
+fn a_lazy_decoder_copy_exported_by_its_declaration_prints_like_node_in_both_lanes() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let mut wrong = Vec::new();
+    for label in LAZY_DECODER_COPIES_EXPORTED {
+        let source = read(&format!("{label}.mjs"));
+        let expected = printed_as_module(&node, dir.path(), &source);
+        assert_eq!(
+            expected.as_deref(),
+            Some("hello\nworld\nfalse\nexit 0\n"),
+            "{label}"
+        );
+        for lane in [default_code, unsafe_lane] {
+            let actual = printed_as_module(&node, dir.path(), &lane(&source));
+            if expected != actual {
+                wrong.push(format!("{label}: {expected:?} vs {actual:?}"));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
