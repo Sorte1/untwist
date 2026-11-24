@@ -1,0 +1,20 @@
+function c() {
+  var o = ['TyxkK', 'hello', 'log', 'world'];
+  c = function () { return o; };
+  return c();
+}
+function d(a, b) {
+  var e = c();
+  return (d = function (f, g) {
+    f = f - 0x10;
+    var h = e[f];
+    return h;
+  }), d(a, b);
+}
+function id(v) { return v; }
+var z = d;
+console.log(z(0x11));
+var t, u; var r1 = id(t = d);
+console.log(z(0x13));
+var r2 = id(u = d);
+console.log(r1 === r2);

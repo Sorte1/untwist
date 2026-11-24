@@ -553,7 +553,7 @@ impl LazyFacts {
             .chain(objects.iter().map(|object| object.symbol))
             .chain(reads.copies.iter().filter_map(|(to, _)| *to))
             .collect();
-        let uses = callee_uses(program, scoping, &candidates);
+        let uses = callee_uses(program, scoping, &candidates, &reads.discarded);
         let held_objects: Vec<&ObjectAlias> = objects
             .iter()
             .filter(|object| decoders.contains_key(&object.source))
@@ -605,7 +605,11 @@ fn observed_sources(
         .collect();
     let dynamic = DynamicScopes::of(scoping);
     let hidden = |symbol: SymbolId| {
-        reads.parameters.contains(&symbol) || dynamic.refusal(scoping, symbol).is_some()
+        uses.reach(symbol).into_iter().any(|reached| {
+            reads.parameters.contains(&reached)
+                || reads.exported.contains(&reached)
+                || dynamic.refusal(scoping, reached).is_some()
+        })
     };
     let stray = reads
         .copies
