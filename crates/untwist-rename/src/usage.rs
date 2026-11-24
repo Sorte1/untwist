@@ -42,6 +42,7 @@ pub struct ClassHint {
 #[derive(Default)]
 pub struct Usage {
     pub called: FxHashSet<SymbolId>,
+    pub constructed: FxHashSet<SymbolId>,
     pub props_read: FxHashMap<SymbolId, Vec<String>>,
     pub hints: Vec<ShorthandHint>,
     pub class_hints: FxHashMap<SymbolId, ClassHint>,
@@ -95,6 +96,14 @@ impl Usage {
 
     pub fn class_hint(&self, symbol: SymbolId) -> Option<&str> {
         self.class_hints.get(&symbol).map(|hint| hint.name.as_str())
+    }
+
+    pub fn is_callable(&self, symbol: SymbolId) -> bool {
+        self.called.contains(&symbol) || self.constructed.contains(&symbol)
+    }
+
+    pub fn is_only_constructed(&self, symbol: SymbolId) -> bool {
+        self.constructed.contains(&symbol) && !self.called.contains(&symbol)
     }
 
     pub fn reads_any(&self, symbol: SymbolId, names: &[&str]) -> bool {
@@ -535,6 +544,13 @@ impl<'a, const CLASS_HINTS: bool> VisitJs<'a> for UsageWalker<'_, CLASS_HINTS> {
             self.passed_arguments(it);
         }
         walk_js::walk_call_expression(self, it);
+    }
+
+    fn visit_new_expression(&mut self, it: &NewExpression<'a>) {
+        if let Some(symbol) = self.identifier_symbol(&it.callee) {
+            self.out.constructed.insert(symbol);
+        }
+        walk_js::walk_new_expression(self, it);
     }
 
     fn visit_expression(&mut self, it: &Expression<'a>) {

@@ -73,9 +73,9 @@ enum Rank {
     Exported,
     Fixed,
     Holder,
-    Declared,
     Assigned,
     Written,
+    Declared,
     Role,
     CallSite,
     Shape,
@@ -87,7 +87,8 @@ impl Rank {
     }
 
     fn yields_to(self, defined: bool, param: bool) -> bool {
-        (defined && self >= Rank::Assigned) || (param && self == Rank::Assigned)
+        (defined && self >= Rank::Assigned && self != Rank::Declared)
+            || (param && self == Rank::Assigned)
     }
 }
 
@@ -232,6 +233,11 @@ impl EvidenceWalker<'_> {
             .entry(symbol)
             .or_default()
             .push((rank, name.into()));
+    }
+
+    fn unwritten(&self, symbol: SymbolId) -> bool {
+        !self.scoping.symbol_is_mutated(symbol)
+            && self.scoping.symbol_redeclarations(symbol).is_empty()
     }
 
     fn name_params(&mut self, params: &FormalParameters<'_>, names: &[&str]) {
@@ -660,7 +666,9 @@ impl<'a> VisitJs<'a> for EvidenceWalker<'_> {
         if let (Some(symbol), Some(init)) = (simple_symbol(&it.id), it.init.as_ref()) {
             if let Some(name) = declared_value_name(init) {
                 self.offer(symbol, Rank::Fixed, name);
-            } else if let Some(name) = declared_fallback_name(init) {
+            } else if let Some(name) =
+                declared_fallback_name(init).filter(|_| self.unwritten(symbol))
+            {
                 self.offer(symbol, Rank::Declared, name);
             }
             if is_informative_init(init) {
