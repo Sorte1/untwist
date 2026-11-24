@@ -1672,7 +1672,7 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "untwist"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "criterion",
@@ -1703,7 +1703,7 @@ dependencies = [
 
 [[package]]
 name = "untwist-cli"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1720,7 +1720,7 @@ dependencies = [
 
 [[package]]
 name = "untwist-core"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "oxc_allocator",
  "oxc_ast",
@@ -1742,7 +1742,7 @@ dependencies = [
 
 [[package]]
 name = "untwist-deobfuscate"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "hashbrown",
  "insta",
@@ -1770,7 +1770,7 @@ dependencies = [
 
 [[package]]
 name = "untwist-eval"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "criterion",
  "hashbrown",
@@ -1801,7 +1801,7 @@ dependencies = [
 
 [[package]]
 name = "untwist-jsx"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "insta",
  "oxc_allocator",
@@ -1819,11 +1819,11 @@ dependencies = [
 
 [[package]]
 name = "untwist-libraries-core"
-version = "0.5.0"
+version = "0.6.0"
 
 [[package]]
 name = "untwist-libraries-corejs"
-version = "0.5.0"
+version = "0.6.0"
 
 [[package]]
 name = "untwist-regress"
@@ -1835,7 +1835,7 @@ dependencies = [
 
 [[package]]
 name = "untwist-rename"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "miniz_oxide",
  "oxc_allocator",
@@ -1856,7 +1856,7 @@ dependencies = [
 
 [[package]]
 name = "untwist-testing"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "insta",
  "oxc_allocator",
@@ -1870,7 +1870,7 @@ dependencies = [
 
 [[package]]
 name = "untwist-types"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "oxc_allocator",
  "oxc_ast",
@@ -1889,7 +1889,7 @@ dependencies = [
 
 [[package]]
 name = "untwist-unminify"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "insta",
  "oxc_allocator",
@@ -1914,7 +1914,7 @@ dependencies = [
 
 [[package]]
 name = "untwist-unpack"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "indexmap",
  "insta",
@@ -1937,7 +1937,7 @@ dependencies = [
 
 [[package]]
 name = "untwist-wasm"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "oxc_allocator",
  "oxc_ast",
@@ -2324,7 +2324,7 @@ checksum = "589f6da84c646204747d1270a2a5661ea66ed1cced2631d546fdfb155959f9ec"
 
 [[package]]
 name = "xtask"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "clap",

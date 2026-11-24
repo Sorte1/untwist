@@ -31,7 +31,6 @@ base/vite5-iife	split	recognised	xfail	bm-computed-key-unproven: lodash isIterat
 base/vite6-iife	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
 base/vite7-iife	split	recognised	xfail	bm-computed-key-unproven: lodash isIterateeCall hands a computed read to eq from another module, which the default-lane runner check does not follow; --unsafe splits it
 base/browserify+uglify	*	recognised	xfail	bm-browserify-require-rebound: a module that redeclares its renamed require parameter (var e=e(...)) refuses the bundle
-base/webpack5-prod-node+obf-heavy	unsafe	clean	xfail	bm-obf-heavy-proxies: one CFF proxy object survives the unsafe lane in the webpack heavy cell
 *+obf*	default	recognised	xfail	safe-global-names: the default lane keeps the string array, so the bundle it hides is not unpacked
 *+obf*	split	recognised	xfail	safe-global-names: the default lane keeps the string array, so the bundle it hides is not unpacked
 *+obf*	default	clean	xfail	safe-global-names: the default lane keeps the string array when code may hold the global object
