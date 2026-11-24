@@ -8,7 +8,9 @@ use oxc_str::{Ident, Str};
 use oxc_syntax::operator::AssignmentOperator;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::naming_slot::{text_observes_names, unnamed};
-use untwist_core::ast_util::shorthand::walk_target_keeping_key;
+use untwist_core::ast_util::shorthand::{
+    walk_object_property_keeping_key, walk_target_keeping_key,
+};
 
 use super::exports::{context_import, declarator_export, is_export_call, value, Value};
 use super::layout::{Bind, Declare, Layout};
@@ -237,6 +239,11 @@ impl<'a> VisitMut<'a> for Rewrite<'a, '_, '_> {
     fn visit_assignment_target_property(&mut self, it: &mut AssignmentTargetProperty<'a>) {
         let alloc = self.builder.allocator();
         walk_target_keeping_key(self, it, alloc);
+    }
+
+    fn visit_object_property(&mut self, it: &mut ObjectProperty<'a>) {
+        let alloc = self.builder.allocator();
+        walk_object_property_keeping_key(self, it, alloc);
     }
 
     fn visit_variable_declarator(&mut self, it: &mut VariableDeclarator<'a>) {

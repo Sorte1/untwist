@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use oxc_allocator::{GetAllocator, Vec as AVec};
+use oxc_allocator::{Allocator, GetAllocator, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_ast_visit::{walk_js, walk_mut, VisitJs, VisitMut};
 use oxc_semantic::Scoping;
@@ -11,6 +11,7 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::edit::StmtEdits;
 use untwist_core::ast_util::prop::member_parts;
+use untwist_core::ast_util::shorthand::walk_object_property_keeping_key;
 use untwist_core::pass::Cx;
 use untwist_core::semantic::is_constant_binding;
 
@@ -201,6 +202,7 @@ impl<'a> VisitJs<'a> for Shadowing<'_, '_, 'a> {
 struct Renamer<'s, 'k, 'a> {
     scoping: &'s Scoping,
     collapses: &'k FxHashMap<SymbolId, Collapse<'a>>,
+    alloc: &'a Allocator,
     renamed: usize,
 }
 
@@ -216,6 +218,11 @@ impl<'a> VisitMut<'a> for Renamer<'_, '_, 'a> {
             }
         }
         walk_mut::walk_identifier_reference(self, it);
+    }
+
+    fn visit_object_property(&mut self, it: &mut ObjectProperty<'a>) {
+        let alloc = self.alloc;
+        walk_object_property_keeping_key(self, it, alloc);
     }
 }
 
@@ -266,6 +273,7 @@ pub(super) fn collapse_object_aliases<'a>(program: &mut Program<'a>, cx: &mut Cx
     let mut renamer = Renamer {
         scoping: cx.scoping(),
         collapses: &collapses,
+        alloc: cx.allocator(),
         renamed: 0,
     };
     renamer.visit_program(program);

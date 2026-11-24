@@ -1,6 +1,6 @@
 use std::cell::{Cell, OnceCell};
 
-use oxc_allocator::{Allocator, TakeIn};
+use oxc_allocator::{Allocator, GetAllocator, TakeIn};
 use oxc_ast::ast::*;
 use oxc_ast::builder::AstBuilder;
 use oxc_ast_visit::{walk_mut, VisitJs, VisitMut};
@@ -10,6 +10,9 @@ use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::naming_slot::{named_as, text_observes_names};
+use untwist_core::ast_util::shorthand::{
+    walk_binding_property_keeping_key, walk_object_property_keeping_key,
+};
 use untwist_core::semantic::{
     build_scoping, eval_payload_names, hoist_shadowing_catches, may_call_eval, misbound_catch_vars,
     open_eval_sites,
@@ -216,6 +219,15 @@ impl<'a> VisitMut<'a> for Apply<'a, '_> {
             }
         }
         walk_mut::walk_assignment_target_property(self, it);
+    }
+
+    fn visit_object_property(&mut self, it: &mut ObjectProperty<'a>) {
+        let alloc = self.builder.allocator();
+        walk_object_property_keeping_key(self, it, alloc);
+    }
+
+    fn visit_binding_property(&mut self, it: &mut BindingProperty<'a>) {
+        walk_binding_property_keeping_key(self, it);
     }
 
     fn visit_statement(&mut self, it: &mut Statement<'a>) {

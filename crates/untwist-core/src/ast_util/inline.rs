@@ -5,6 +5,7 @@ use oxc_ast_visit::{walk_js, walk_mut, VisitJs, VisitMut};
 use oxc_span::SPAN;
 
 use crate::ast_util::literal::undefined_expression;
+use crate::ast_util::shorthand::walk_object_property_keeping_key;
 
 pub fn returned_expression<'k, 'a>(function: &'k Function<'a>) -> Option<&'k Expression<'a>> {
     let body = function.body.as_ref()?;
@@ -157,6 +158,11 @@ impl<'a> VisitMut<'a> for Substitute<'_, 'a, '_> {
             Some(argument) => argument.clone_in(self.allocator),
             None => undefined_expression(SPAN, &builder),
         };
+    }
+
+    fn visit_object_property(&mut self, it: &mut ObjectProperty<'a>) {
+        let alloc = self.allocator;
+        walk_object_property_keeping_key(self, it, alloc);
     }
 }
 
