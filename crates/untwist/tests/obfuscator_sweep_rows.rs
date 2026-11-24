@@ -1570,3 +1570,19 @@ fn a_lazy_decoder_copy_exported_by_its_declaration_prints_like_node_in_both_lane
     }
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
+
+const SHORTHAND_PROTO_CONSTANTS: &[&str] = &[
+    "rn3-const-arg-proto",
+    "rn3-const-arg-proto-later",
+    "rn3-const-arg-proto-source",
+];
+
+#[test]
+fn a_decoder_argument_constant_named_proto_inlined_into_a_shorthand_keeps_the_key_in_both_lanes() {
+    prints_like_node_in(SHORTHAND_PROTO_CONSTANTS, &[default_code, unsafe_lane]);
+}
+
+#[test]
+fn an_assign_over_a_literal_with_a_proto_key_is_not_spread_in_either_lane() {
+    prints_like_node_in(&["rn3-assign-literal-proto"], &[default_code, unsafe_lane]);
+}

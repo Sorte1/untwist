@@ -12,6 +12,7 @@ use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::ast_util::respan::{fresh_spans_expression, fresh_spans_statement};
+use crate::ast_util::shorthand::walk_object_property_keeping_key;
 use crate::semantic::renamed_since_refresh;
 use crate::semantic::unbound::note_unbound;
 use crate::source_map::origins::note_replaced;
@@ -359,6 +360,11 @@ impl<'a> VisitMut<'a> for ExprApplier<'a, '_> {
             self.applied.insert(span);
         }
         walk_mut::walk_expression(self, it);
+    }
+
+    fn visit_object_property(&mut self, it: &mut ObjectProperty<'a>) {
+        let alloc = self.alloc;
+        walk_object_property_keeping_key(self, it, alloc);
     }
 }
 

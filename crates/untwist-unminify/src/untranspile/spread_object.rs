@@ -136,9 +136,20 @@ fn chain_holds(expression: &Expression<'_>, table: &Table, scoping: &Scoping) ->
     base && key_first
 }
 
-fn copy_action(source: &Expression<'_>, semantics: Semantics, scoping: &Scoping) -> (Action, bool) {
+fn has_proto_key(object: &ObjectExpression<'_>) -> bool {
+    object.properties.iter().any(|member| {
+        matches!(member, ObjectPropertyKind::ObjectProperty(property)
+            if property.key.is_specific_static_name("__proto__"))
+    })
+}
+
+fn copy_action(
+    source: &Expression<'_>,
+    semantics: Semantics,
+    scoping: &Scoping,
+) -> Option<(Action, bool)> {
     if is_skipped_source(source, scoping) {
-        return (Action::Skip, false);
+        return Some((Action::Skip, false));
     }
     match source.without_parentheses() {
         Expression::ObjectExpression(object)
@@ -147,10 +158,15 @@ fn copy_action(source: &Expression<'_>, semantics: Semantics, scoping: &Scoping)
                 .iter()
                 .all(|member| copies_as_data(member, semantics)) =>
         {
-            (Action::Inline, false)
+            Some((Action::Inline, false))
         }
-        other if is_string_like(other) => (Action::Spread, false),
-        _ => (Action::Spread, true),
+        Expression::ObjectExpression(object)
+            if semantics == Semantics::Assign && has_proto_key(object) =>
+        {
+            None
+        }
+        other if is_string_like(other) => Some((Action::Spread, false)),
+        _ => Some((Action::Spread, true)),
     }
 }
 
@@ -193,7 +209,7 @@ fn plan(call: &CallExpression<'_>, kind: Kind, table: &Table, scoping: &Scoping)
         }
         let action = match position {
             Position::Copy => {
-                let (action, assumed) = copy_action(source, semantics, scoping);
+                let (action, assumed) = copy_action(source, semantics, scoping)?;
                 if assumed {
                     safety = Safety::Unsafe;
                     runs_code = true;
