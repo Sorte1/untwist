@@ -201,6 +201,15 @@ input prints, and pw035-m3 and rnd031-n3 also print like the source under `--uns
 the sweep, a dead-code copy that calls the wrapper with a bad index leaves the string array
 under `--unsafe` (the default lane prints like node).
 
+Two hand-written shapes found in the last review round are not fixed yet. A classic script
+that copies the lazy decoder as `function t() {}; t = d`, an Annex B block function, a
+`for (var t = d; …)` init, a labelled assignment or `var t = t0.k`, and reads the copy back
+through `this.t` or `globalThis`, still has its alias calls redirected, so the copy compares
+equal to the decoder where node says it does not (both lanes; `var t = d` is right). In a
+multi-input run under `--unsafe`, a whole-program `eval` layer is replaced at the top level,
+so its `let`, `const` and `class` become script bindings that another input can clash with or
+read. No javascript-obfuscator output in the sweep has either shape.
+
 ## [0.5.0] - 2026-11-12
 
 There is no 0.4.0: its planned scope ships in this release. Most of the work is a soundness
