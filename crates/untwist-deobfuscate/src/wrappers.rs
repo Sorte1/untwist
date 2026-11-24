@@ -16,8 +16,8 @@ use untwist_core::ast_util::scope::binding_symbol;
 use untwist_core::ast_util::search::{expression_at, statement_at};
 use untwist_core::pass::{Cx, Interest, Pass};
 use untwist_core::semantic::{
-    has_module_syntax, is_constant_binding, observers, scope_hazard, write_reference_count,
-    Observers,
+    has_module_syntax, is_constant_binding, is_shared_global, observers, other_inputs_given,
+    scope_hazard, write_reference_count, Observers,
 };
 
 use crate::alias_forms::{
@@ -35,7 +35,7 @@ use crate::mutants::wrapper_guards_dropped;
 use crate::notes;
 use crate::proof::{has_with_statement, refuse_annex_b_bindings};
 use crate::root_reach::reached_roots;
-use crate::stamp::{find_stamped_named, is_unedited, DynamicScopes};
+use crate::stamp::{find_stamped_named, is_unedited, original_name, DynamicScopes};
 use crate::units::MachineryDepth;
 use crate::wrapper_calls::inline_function_wrappers;
 use crate::wrapper_immediate::inline_immediate_wrappers;
@@ -523,6 +523,7 @@ impl LazyFacts {
         scoping: &Scoping,
         (mut decoders, homes): (FxHashMap<SymbolId, bool>, FxHashMap<SymbolId, ScopeId>),
         (sites, objects): (&[AliasSite], &[ObjectAlias]),
+        roots_shared: bool,
     ) -> Self {
         let held: Vec<(SymbolId, SymbolId)> = sites
             .iter()
@@ -560,7 +561,7 @@ impl LazyFacts {
             .collect();
         let held_sites = &held[..held.len() - held_objects.len()];
         let observed = observed_sources(
-            (program, scoping),
+            (program, scoping, roots_shared),
             (&reads, &uses),
             held_sites,
             &held_objects,
@@ -593,8 +594,21 @@ impl LazyFacts {
     }
 }
 
+fn read_by_another_input(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    roots_shared: bool,
+    symbol: SymbolId,
+) -> bool {
+    scoping.symbol_scope_id(symbol) == scoping.root_scope_id()
+        && !program.source_type.is_module()
+        && (roots_shared
+            || is_shared_global(scoping.symbol_name(symbol))
+            || original_name(program.source_text, scoping, symbol).is_some_and(is_shared_global))
+}
+
 fn observed_sources(
-    (program, scoping): (&Program<'_>, &Scoping),
+    (program, scoping, roots_shared): (&Program<'_>, &Scoping, bool),
     (reads, uses): (&ValueReadFacts, &CalleeUses),
     sites: &[(SymbolId, SymbolId)],
     objects: &[&ObjectAlias],
@@ -609,6 +623,7 @@ fn observed_sources(
             reads.parameters.contains(&reached)
                 || reads.exported.contains(&reached)
                 || dynamic.refusal(scoping, reached).is_some()
+                || read_by_another_input(program, scoping, roots_shared, reached)
         })
     };
     let stray = reads
@@ -942,7 +957,13 @@ fn variable_alias_plan<'a>(
     let branched = branched_alias_writes(program, cx, &sites);
     let lazy = match lazy.0.is_empty() {
         true => LazyFacts::default(),
-        false => LazyFacts::of(program, cx.scoping(), lazy, (&sites, &forms.objects)),
+        false => LazyFacts::of(
+            program,
+            cx.scoping(),
+            lazy,
+            (&sites, &forms.objects),
+            roots_shared(program, cx),
+        ),
     };
     let facts = AliasFacts {
         declarations,
@@ -972,6 +993,10 @@ fn variable_alias_plan<'a>(
     defer_speculated_lazy_decoders(&plan, &speculated);
     plan.declarations = facts.declarations.found;
     plan
+}
+
+fn roots_shared(program: &Program<'_>, cx: &Cx<'_, '_>) -> bool {
+    cx.opts.nested_root && other_inputs_given() && !program.source_type.is_module()
 }
 
 fn defer_speculated_lazy_decoders(plan: &VariablePlan<'_>, speculated: &[Ident<'_>]) {
