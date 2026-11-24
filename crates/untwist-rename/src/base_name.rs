@@ -189,6 +189,9 @@ fn alias_base(shape: &InitShape, cx: &Context<'_>, reading: &mut Vec<SymbolId>) 
         if let Some(base) = module_base(info) {
             return Some(base);
         }
+        if is_informative(&info.name) && !is_renameable(info, cx.collected, cx.config) {
+            return Some(info.name.clone());
+        }
         let BindingRole::Variable(next) = &info.role else {
             return structural_base(info);
         };

@@ -37,6 +37,11 @@ fn is_call_result(info: &BindingInfo) -> bool {
     matches!(&info.role, BindingRole::Variable(shape) if shape.kind == InitKind::Call)
 }
 
+fn is_immediate_call(info: &BindingInfo) -> bool {
+    matches!(&info.role, BindingRole::Variable(shape) if shape.kind == InitKind::Call
+        && shape.callee.as_ref().is_some_and(|callee| callee.kind == InitKind::Function))
+}
+
 fn is_constructed(info: &BindingInfo) -> bool {
     matches!(&info.role, BindingRole::Variable(shape) if shape.kind == InitKind::New)
 }
@@ -175,7 +180,8 @@ fn derived_base(info: &BindingInfo, cx: &Context<'_>) -> String {
         return base;
     }
     let base = base_name(info, cx);
-    if base == STRUCTURAL_FUNCTION && is_call_result(info) {
+    let unnamed_call = base == STRUCTURAL_FUNCTION && is_call_result(info);
+    if unnamed_call || (base == FALLBACK_BASE && is_immediate_call(info)) {
         return CALL_RESULT.to_string();
     }
     if base == STRUCTURAL_FUNCTION && is_constructed(info) {

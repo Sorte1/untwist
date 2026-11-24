@@ -24,8 +24,9 @@ use functions::{arrow_facts, function_facts, ArgName, CallFacts, FunctionFacts};
 use methods::MethodSites;
 pub use values::is_word_like;
 use values::{
-    assigned_value_name, declared_value_name, element_name, is_informative_init,
-    is_naming_property, is_storage_call, key_name, method_name, string_argument,
+    assigned_value_name, declared_fallback_name, declared_value_name, element_name,
+    is_informative_init, is_naming_property, is_storage_call, key_name, method_name,
+    string_argument,
 };
 
 const ELEMENT_CALLBACKS: [&str; 10] = [
@@ -68,6 +69,7 @@ enum Rank {
     Exported,
     Fixed,
     Holder,
+    Declared,
     Assigned,
     Written,
     Role,
@@ -594,6 +596,8 @@ impl<'a> VisitJs<'a> for EvidenceWalker<'_> {
         if let (Some(symbol), Some(init)) = (simple_symbol(&it.id), it.init.as_ref()) {
             if let Some(name) = declared_value_name(init) {
                 self.offer(symbol, Rank::Fixed, name);
+            } else if let Some(name) = declared_fallback_name(init) {
+                self.offer(symbol, Rank::Declared, name);
             }
             if is_informative_init(init) {
                 self.defined.insert(symbol);
