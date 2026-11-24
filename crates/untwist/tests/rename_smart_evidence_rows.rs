@@ -201,6 +201,22 @@ const HEX_TOKENS: &str = "(function () {
   }
 })();";
 
+const SHAPE_EVIDENCE: &str = "(function () {
+  var _0xf = Object.getOwnPropertyDescriptor;
+  var _0x9 = _0xf(Map.prototype, 'size').get;
+  function _0x1(_0x2) { return _0x9.call(_0x2); }
+  function _0x3(_0x2) { return _0x1(_0x2); }
+  function _0x4(_0x5) { _0x5.push(3); return _0x5.join('-'); }
+  function _0x6(_0x5, _0x7) { return _0x5 * 2 - _0x7 * 3; }
+  function _0x8(_0x5) { return _0x5.x + _0x5.y; }
+  function _0xa(_0x5) { return _0x5.toUpperCase().charCodeAt(0); }
+  function _0xb(_0x5) { return _0x4(_0x5); }
+  function _0xc() { return new Date(0); }
+  var _0xd = _0x3(new Map([[1, 2]]));
+  var _0xe = _0xc();
+  console.log(_0xd, _0xb([1]), _0x6(4, 1), _0x8({ x: 1, y: 2 }), _0xa('q'), _0xe.getTime());
+})();";
+
 fn options(rename: RenameMode, unsafe_transforms: bool) -> Options {
     Options {
         rename,
@@ -364,7 +380,7 @@ fn parameters_take_the_name_every_call_site_passes() {
         &[
             "(player, gravity, v)",
             "return player.hp + gravity",
-            "function fn2(v)",
+            "function fn2(obj)",
         ],
     );
     assert!(!code.contains("function (player)"), "{code}");
@@ -478,6 +494,23 @@ fn long_hex_tokens_are_machine_names_only_under_smart() {
 }
 
 #[test]
+fn parameters_take_shape_names_and_wrappers_take_what_they_return() {
+    let code = unsafe_smart(SHAPE_EVIDENCE);
+    assert_has(
+        &code,
+        &[
+            "function getSize",
+            "const size = getSize",
+            "(arr) {",
+            "(point) {",
+            "(str) {",
+            "function createDate()",
+            "const date = createDate()",
+        ],
+    );
+}
+
+#[test]
 fn node_agrees_on_every_new_evidence_kind_in_both_lanes() {
     let Some(node) = node_or_skip() else {
         return;
@@ -502,6 +535,7 @@ fn node_agrees_on_every_new_evidence_kind_in_both_lanes() {
         ("element evidence", ELEMENT_EVIDENCE),
         ("method call sites", METHOD_CALL_SITES),
         ("hex tokens", HEX_TOKENS),
+        ("shape evidence", SHAPE_EVIDENCE),
     ]
     .iter()
     .map(|(label, source)| (label.to_string(), source.to_string()))

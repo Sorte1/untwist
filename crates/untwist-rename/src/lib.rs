@@ -1,10 +1,12 @@
 use untwist_core::pass::Pass;
 
+mod arg_flow;
 pub mod base_name;
 pub mod collect;
 pub mod collisions;
 pub mod commonjs;
 pub mod evidence;
+mod evidence_namer;
 pub mod fingerprint;
 #[cfg(feature = "test-hooks")]
 pub mod fresh;
@@ -23,6 +25,7 @@ pub mod pins;
 pub mod plan;
 mod prototype_methods;
 pub mod reserved;
+pub mod shapes;
 pub mod shorthand;
 pub mod simple;
 pub mod smart;

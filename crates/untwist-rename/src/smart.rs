@@ -5,13 +5,16 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
 use untwist_core::pass::{Cx, Interest, Pass};
 
+use crate::arg_flow::flow_arguments;
 use crate::base_name::{base_name, structural_base, Context, FALLBACK_BASE};
 use crate::collect::{BindingInfo, BindingRole, Collected, InitKind};
 use crate::evidence::{collect_evidence, Evidence};
+use crate::evidence_namer::EvidenceNamer;
 use crate::generate::{lower_camel, to_identifier, uid_candidates};
 use crate::human::looks_human_written;
 use crate::oracle::{NameOracle, OuterRule};
 use crate::plan::{run_mode, HazardNote, RenamePlan};
+use crate::shapes::shape_word;
 use crate::simple::{is_renameable, unit_roots};
 use crate::text_reads::{text_read_bindings_with, SelfReads, TextReads};
 use crate::usage::{collect_naming_usage, Usage};
@@ -30,6 +33,10 @@ const CALL_RESULT: &str = "result";
 const CONSTRUCTED: &str = "instance";
 
 const CONSTRUCTOR: &str = "Ctor";
+
+const PREDICATE: &str = "predicate";
+
+const BOOLEAN: &str = "bool";
 
 const UNNAMED_CALLABLES: [&str; 2] = ["fn", "cb"];
 
@@ -97,7 +104,7 @@ pub fn smart_config(config: RenameConfig) -> RenameConfig {
     }
 }
 
-fn has_strong_base(info: &BindingInfo, collected: &Collected) -> bool {
+pub(crate) fn has_strong_base(info: &BindingInfo, collected: &Collected) -> bool {
     if collected.loop_counters.contains_key(&info.symbol) {
         return true;
     }
@@ -115,7 +122,11 @@ pub fn is_hex_token(name: &str) -> bool {
     name.len() >= HEX_TOKEN && name.chars().all(|ch| ch.is_ascii_hexdigit())
 }
 
-fn smart_renameable(info: &BindingInfo, collected: &Collected, config: RenameConfig) -> bool {
+pub(crate) fn smart_renameable(
+    info: &BindingInfo,
+    collected: &Collected,
+    config: RenameConfig,
+) -> bool {
     let hex_token = !collected.pinned.contains(&info.symbol) && is_hex_token(&info.name);
     hex_token || is_renameable(info, collected, config)
 }
@@ -175,6 +186,17 @@ fn wrapper_value_base(info: &BindingInfo) -> Option<String> {
     named.then(|| lower_camel(rest))
 }
 
+fn shaped_base(info: &BindingInfo, cx: &Context<'_>) -> Option<String> {
+    let open = match &info.role {
+        BindingRole::Param => true,
+        BindingRole::Variable(shape) => shape.kind == InitKind::Absent,
+        _ => false,
+    };
+    open.then(|| shape_word(cx.usage, info.symbol))
+        .flatten()
+        .map(str::to_string)
+}
+
 fn derived_base(info: &BindingInfo, cx: &Context<'_>) -> String {
     if let Some(base) = wrapper_value_base(info) {
         return base;
@@ -187,12 +209,16 @@ fn derived_base(info: &BindingInfo, cx: &Context<'_>) -> String {
     if base == STRUCTURAL_FUNCTION && is_constructed(info) {
         return CONSTRUCTED.to_string();
     }
+    if base == PREDICATE && is_call_result(info) {
+        return BOOLEAN.to_string();
+    }
     let counter = cx.collected.loop_counters.contains_key(&info.symbol);
     if counter || looks_human_written(&base) {
         return base;
     }
     structural_base(info)
         .filter(|structural| looks_human_written(structural))
+        .or_else(|| shaped_base(info, cx))
         .unwrap_or_else(|| FALLBACK_BASE.to_string())
 }
 
@@ -227,10 +253,16 @@ fn decide_with_limit(
         TextReads::Bindings(pinned) => pinned,
         TextReads::Unknown => return refused(),
     };
+    let namer = EvidenceNamer {
+        collected,
+        evidence: &evidence,
+        usage: &usage,
+        config,
+    };
     let cx = Context {
         collected,
         usage: &usage,
-        namer: None,
+        namer: Some(&namer),
         config,
     };
     let candidates: Vec<&BindingInfo> = collected
@@ -243,6 +275,7 @@ fn decide_with_limit(
         .iter()
         .filter_map(|info| smart_base(info, &cx, &evidence).map(|base| (*info, base)))
         .collect();
+    flow_arguments(&mut planned, (collected, &evidence, &usage));
     let flowed = flowed_hex_tokens(&candidates, &planned, (collected, &evidence, &usage));
     planned.extend(flowed);
     let mut oracle = NameOracle::new(scoping, collected);

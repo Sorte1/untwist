@@ -1,6 +1,9 @@
 use oxc_ast::ast::*;
+use oxc_semantic::Scoping;
 use oxc_syntax::operator::{BinaryOperator, LogicalOperator, UnaryOperator};
 use oxc_syntax::symbol::SymbolId;
+
+use super::returns::{returned_value, Returned};
 
 use super::values::{is_naming_property, is_word_like, key_name, method_name};
 use crate::human::looks_human_written;
@@ -85,6 +88,7 @@ fn argument_name(expr: &Expression<'_>) -> Option<String> {
 pub struct FunctionFacts {
     pub params: Vec<Option<SymbolId>>,
     pub predicate: Option<String>,
+    pub returned: Option<Returned>,
 }
 
 fn simple(pattern: &BindingPattern<'_>) -> Option<SymbolId> {
@@ -102,39 +106,57 @@ pub fn param_symbols(params: &FormalParameters<'_>) -> Vec<Option<SymbolId>> {
         .collect()
 }
 
-pub fn function_facts(function: &Function<'_>) -> FunctionFacts {
-    let predicate = function
+fn facts_of(
+    params: &FormalParameters<'_>,
+    returns: Option<Vec<&Expression<'_>>>,
+    scoping: &Scoping,
+) -> FunctionFacts {
+    let returns = returns.unwrap_or_default();
+    let predicate = predicate_name(&returns);
+    let returned = predicate
+        .is_none()
+        .then(|| returned_value(&returns, scoping))
+        .flatten();
+    FunctionFacts {
+        params: param_symbols(params),
+        predicate,
+        returned,
+    }
+}
+
+pub fn function_facts(function: &Function<'_>, scoping: &Scoping) -> FunctionFacts {
+    let returns = function
         .body
         .as_ref()
         .filter(|_| !function.generator && !function.r#async)
-        .and_then(|body| predicate_name(&body.statements));
-    FunctionFacts {
-        params: param_symbols(&function.params),
-        predicate,
-    }
+        .and_then(|body| returned_expressions(&body.statements));
+    facts_of(&function.params, returns, scoping)
 }
 
-pub fn arrow_facts(arrow: &ArrowFunctionExpression<'_>) -> FunctionFacts {
-    let predicate = if arrow.r#async {
+pub fn arrow_facts(arrow: &ArrowFunctionExpression<'_>, scoping: &Scoping) -> FunctionFacts {
+    let returns = if arrow.r#async {
         None
     } else {
         match &arrow.body {
-            ArrowFunctionBody::FunctionBody(body) => predicate_name(&body.statements),
-            body => body.as_expression().and_then(boolean_name),
+            ArrowFunctionBody::FunctionBody(body) => returned_expressions(&body.statements),
+            body => body.as_expression().map(|expr| vec![expr]),
         }
     };
-    FunctionFacts {
-        params: param_symbols(&arrow.params),
-        predicate,
-    }
+    facts_of(&arrow.params, returns, scoping)
 }
 
-fn predicate_name(statements: &[Statement<'_>]) -> Option<String> {
+fn returned_expressions<'k, 'a>(
+    statements: &'k [Statement<'a>],
+) -> Option<Vec<&'k Expression<'a>>> {
     if !matches!(statements.last(), Some(Statement::ReturnStatement(_))) {
         return None;
     }
     let mut returns = Vec::new();
-    if !collect_returns(statements, &mut returns) || returns.is_empty() {
+    (collect_returns(statements, &mut returns) && !returns.is_empty()).then_some(returns)
+}
+
+fn predicate_name(returns: &[&Expression<'_>]) -> Option<String> {
+    if returns.is_empty() {
         return None;
     }
     let mut specific: Option<String> = None;
@@ -206,7 +228,7 @@ fn has_return(statement: &Statement<'_>) -> bool {
     !collect_from(body, &mut found) || !found.is_empty()
 }
 
-fn title(word: &str) -> String {
+pub fn title(word: &str) -> String {
     let mut chars = word.chars();
     match chars.next() {
         Some(first) => format!("{}{}", first.to_ascii_uppercase(), chars.as_str()),
