@@ -20,6 +20,10 @@ would.
 Try it in the browser at **[untwist.dev](https://untwist.dev)**. The playground runs the same
 engine as WebAssembly, and your code never leaves the page.
 
+[main.untwist.dev](https://main.untwist.dev) runs the current `main` branch and is redeployed as
+changes land. It has features that are mostly ready for the next release, so it can change
+between visits; untwist.dev runs the latest release.
+
 ## What it does
 
 - **Deobfuscate.** Finds javascript-obfuscator / obfuscator.io string arrays with their rotators,
