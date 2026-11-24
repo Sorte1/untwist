@@ -6,7 +6,7 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
-## [0.6.0] - 2026-11-25
+## [0.6.0] - 2026-11-24
 
 There is no 0.5.1: the readability work planned for it ships in this release, together with
 library recognition, `--modern`, `--split-assume-modules` and experimental `--types`. The
