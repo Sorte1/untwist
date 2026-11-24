@@ -166,7 +166,7 @@ fn is_plain(prop: &str) -> bool {
 }
 
 pub fn shape_word(usage: &Usage, symbol: SymbolId) -> Option<&'static str> {
-    if usage.called.contains(&symbol) {
+    if usage.is_callable(symbol) {
         return None;
     }
     let read = usage.props_read.get(&symbol).map_or(&[][..], Vec::as_slice);

@@ -141,8 +141,9 @@ pub fn smart_base(info: &BindingInfo, cx: &Context<'_>, evidence: &Evidence) -> 
         .or_else(|| instance_base(info, cx, evidence))
         .unwrap_or_else(|| {
             let derived = derived_base(info, cx);
-            let unnamed_constructor = evidence.is_constructor(info.symbol)
-                && UNNAMED_CALLABLES.contains(&derived.as_str());
+            let constructor = evidence.is_constructor(info.symbol)
+                || (info.role == BindingRole::Param && cx.usage.is_only_constructed(info.symbol));
+            let unnamed_constructor = constructor && UNNAMED_CALLABLES.contains(&derived.as_str());
             if unnamed_constructor {
                 return CONSTRUCTOR.to_string();
             }

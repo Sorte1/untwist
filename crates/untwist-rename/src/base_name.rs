@@ -295,13 +295,10 @@ fn role_word(info: &BindingInfo, cx: &Context<'_>) -> Option<&'static str> {
     if usage.reads_any(info.symbol, &ERROR_PROPS) {
         return Some("err");
     }
-    if !usage.called.contains(&info.symbol) {
-        return None;
-    }
     if info.role == BindingRole::Param {
-        return Some("cb");
+        return usage.is_callable(info.symbol).then_some("cb");
     }
-    Some("fn")
+    usage.called.contains(&info.symbol).then_some("fn")
 }
 
 pub fn structural_base(info: &BindingInfo) -> Option<String> {

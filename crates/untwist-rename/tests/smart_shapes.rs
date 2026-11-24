@@ -162,3 +162,10 @@ fn an_argument_passed_to_differently_named_parameters_keeps_the_fallback() {
     let code = smart("function _0xa1(_0xb1) { _0xb1.push(1); } function _0xe1(_0xb1) { return _0xb1.toLowerCase(); } function _0xd1(_0xc1) { _0xa1(_0xc1); _0xe1(_0xc1); } _0xd1([]);");
     assert_has(&code, &["(v) {"]);
 }
+
+#[test]
+fn a_constructed_parameter_is_not_named_obj() {
+    let code = smart("function _0xa1(_0xb1, _0xc1) { return new _0xb1(_0xc1) + _0xb1.BYTES_PER_ELEMENT; } _0xa1(Array, 1);");
+    assert_lacks(&code, &["(obj, "]);
+    assert_has(&code, &["(Ctor, "]);
+}

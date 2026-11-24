@@ -165,3 +165,36 @@ fn an_awaited_call_keeps_words_that_are_not_read_prefixes() {
         &["const orUpdateRecruitment", "const async", "const load ="],
     );
 }
+
+#[test]
+fn a_reassigned_this_alias_takes_its_assigned_name() {
+    let code = smart(
+        "function f(_0x9) { let _0x1 = this; _0x1 = _0x9.next; while (_0x1) _0x1 = _0x1.next; return _0x1; }",
+    );
+    assert_has(&code, &["let next = this"]);
+    assert_lacks(&code, &["self", "getSelf"]);
+}
+
+#[test]
+fn a_reassigned_last_index_takes_its_assigned_name() {
+    let code = smart(
+        "function f(_0x9) { let _0x1 = _0x9.length - 1; _0x1--; _0x1 = _0x9.other; return _0x1; }",
+    );
+    assert_has(&code, &["let other = "]);
+    assert_lacks(&code, &["lastIndex"]);
+}
+
+#[test]
+fn a_reassigned_member_value_does_not_keep_its_first_property() {
+    let code =
+        smart("function f(_0x9) { var _0x1 = _0x9.x; _0x1 = _0x9.y; _0x1 = _0x9.z; return _0x1; }");
+    assert_lacks(&code, &["var x = "]);
+}
+
+#[test]
+fn the_property_a_value_is_stored_under_beats_its_declared_name() {
+    let code = smart(
+        "function f(_0x9, _0x8) { var _0x1 = this; _0x8.owner = _0x1; var _0x2 = _0x9.length - 1; _0x8.cursor = _0x2; return [_0x1, _0x2]; }",
+    );
+    assert_has(&code, &["var owner = this", "var cursor = "]);
+}
