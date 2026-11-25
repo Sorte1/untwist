@@ -217,6 +217,23 @@ const SHAPE_EVIDENCE: &str = "(function () {
   console.log(_0xd, _0xb([1]), _0x6(4, 1), _0x8({ x: 1, y: 2 }), _0xa('q'), _0xe.getTime());
 })();";
 
+const POLISH_EVIDENCE: &str = "(function () {
+  function _0x1(_0x2) { return _0x2.items; }
+  function _0x3(_0x2) { return _0x1(_0x2); }
+  function _0x4(_0x2) { return _0x1(_0x2.inner); }
+  function _0x5(_0x2) { return _0x1('logic', _0x2); }
+  function _0x6(_0x2) { _0x2.count++; return _0x2.total; }
+  function _0x7(_0x8) { var _0x9 = _0x8.createList(); _0x9.push(1); return _0x9; }
+  function _0xa(_0xb) { return _0xb.map.size + _0xb.map.spawns.length; }
+  function _0xc(_0xd) { var _0xe = new _0xd(2); if (!_0xe.ok) { return _0xd(3); } return _0xe.ok; }
+  function _0xf(_0x10) { let _0x11 = _0x10.get('a'); _0x11 = _0x11 || 'none'; let _0x12 = Math.floor(_0x10.size / 2); if (_0x12 > 0) { _0x12 = 3; } return _0x11 + _0x12; }
+  function _0x13() { this.ok = 1; }
+  var _0x14 = { count: 0, total: 5 };
+  console.log(_0x3({ items: 1 }), _0x4({ inner: { items: 2 } }), _0x5({ items: 3 }), _0x6(_0x14), _0x14.count);
+  console.log(_0x7({ createList: function () { return []; } }).join(), _0xa({ map: { size: 1, spawns: [1] } }), _0xc(_0x13));
+  console.log(_0xf(new Map([['a', 'b']])), _0xf(new Map()));
+})();";
+
 fn options(rename: RenameMode, unsafe_transforms: bool) -> Options {
     Options {
         rename,
@@ -511,6 +528,35 @@ fn parameters_take_shape_names_and_wrappers_take_what_they_return() {
 }
 
 #[test]
+fn getters_wrappers_constructors_and_reassigned_results_keep_honest_names() {
+    let code = unsafe_smart(POLISH_EVIDENCE);
+    assert_has(
+        &code,
+        &[
+            "function getItems(",
+            "function getItemsLogic(",
+            "function createList(",
+            "(Ctor) {",
+            "instance = new Ctor(2)",
+            "let num = Math.floor",
+        ],
+    );
+    for unwanted in [
+        "getTotal",
+        "getItems3",
+        "(arr) {",
+        "let get = ",
+        "let floor = ",
+        "cb2",
+    ] {
+        assert!(
+            !code.contains(unwanted),
+            "unexpected {unwanted:?} in:\n{code}"
+        );
+    }
+}
+
+#[test]
 fn node_agrees_on_every_new_evidence_kind_in_both_lanes() {
     let Some(node) = node_or_skip() else {
         return;
@@ -536,6 +582,7 @@ fn node_agrees_on_every_new_evidence_kind_in_both_lanes() {
         ("method call sites", METHOD_CALL_SITES),
         ("hex tokens", HEX_TOKENS),
         ("shape evidence", SHAPE_EVIDENCE),
+        ("polish evidence", POLISH_EVIDENCE),
     ]
     .iter()
     .map(|(label, source)| (label.to_string(), source.to_string()))

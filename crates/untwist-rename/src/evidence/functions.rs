@@ -3,7 +3,9 @@ use oxc_semantic::Scoping;
 use oxc_syntax::operator::{BinaryOperator, LogicalOperator, UnaryOperator};
 use oxc_syntax::symbol::SymbolId;
 
-use super::returns::{returned_value, Returned};
+use super::quiet::quiet_statements;
+use super::returns::{returned_value, Body, Returned};
+use oxc_span::Span;
 
 use super::values::{is_naming_property, is_word_like, key_name, method_name};
 use crate::human::looks_human_written;
@@ -108,14 +110,14 @@ pub fn param_symbols(params: &FormalParameters<'_>) -> Vec<Option<SymbolId>> {
 
 fn facts_of(
     params: &FormalParameters<'_>,
-    returns: Option<Vec<&Expression<'_>>>,
+    (returns, body): (Option<Vec<&Expression<'_>>>, Body),
     scoping: &Scoping,
 ) -> FunctionFacts {
     let returns = returns.unwrap_or_default();
     let predicate = predicate_name(&returns);
     let returned = predicate
         .is_none()
-        .then(|| returned_value(&returns, scoping))
+        .then(|| returned_value(&returns, scoping, &body))
         .flatten();
     FunctionFacts {
         params: param_symbols(params),
@@ -125,12 +127,16 @@ fn facts_of(
 }
 
 pub fn function_facts(function: &Function<'_>, scoping: &Scoping) -> FunctionFacts {
-    let returns = function
+    let body = function
         .body
         .as_ref()
-        .filter(|_| !function.generator && !function.r#async)
-        .and_then(|body| returned_expressions(&body.statements));
-    facts_of(&function.params, returns, scoping)
+        .filter(|_| !function.generator && !function.r#async);
+    let returns = body.and_then(|body| returned_expressions(&body.statements));
+    let body = Body {
+        span: body.map_or(Span::default(), |body| body.span),
+        quiet: body.is_some_and(|body| quiet_statements(&body.statements)),
+    };
+    facts_of(&function.params, (returns, body), scoping)
 }
 
 pub fn arrow_facts(arrow: &ArrowFunctionExpression<'_>, scoping: &Scoping) -> FunctionFacts {
@@ -142,7 +148,17 @@ pub fn arrow_facts(arrow: &ArrowFunctionExpression<'_>, scoping: &Scoping) -> Fu
             body => body.as_expression().map(|expr| vec![expr]),
         }
     };
-    facts_of(&arrow.params, returns, scoping)
+    let body = match &arrow.body {
+        ArrowFunctionBody::FunctionBody(body) => Body {
+            span: body.span,
+            quiet: quiet_statements(&body.statements),
+        },
+        _ => Body {
+            span: Span::default(),
+            quiet: true,
+        },
+    };
+    facts_of(&arrow.params, (returns, body), scoping)
 }
 
 fn returned_expressions<'k, 'a>(

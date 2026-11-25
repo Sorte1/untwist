@@ -1,5 +1,6 @@
 use oxc_ast::ast::*;
 use oxc_semantic::Scoping;
+use oxc_span::Span;
 use oxc_syntax::symbol::SymbolId;
 use untwist_core::ast_util::prop::member_parts;
 
@@ -15,23 +16,63 @@ pub const DESCRIPTOR: &str = "getOwnPropertyDescriptor";
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Returned {
     Named(String),
-    Forward(SymbolId),
+    Forward(SymbolId, Passing),
     Local(SymbolId),
+    Built(SymbolId),
 }
 
-pub fn returned_value(returns: &[&Expression<'_>], scoping: &Scoping) -> Option<Returned> {
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Passing {
+    Through,
+    Keyed(String),
+    Computed,
+}
+
+impl Returned {
+    fn is_read(&self) -> bool {
+        match self {
+            Returned::Named(name) => name.starts_with(GETTER_PREFIX),
+            Returned::Local(_) => true,
+            Returned::Forward(..) | Returned::Built(_) => false,
+        }
+    }
+}
+
+const GETTER_PREFIX: &str = "get";
+
+pub struct Body {
+    pub span: Span,
+    pub quiet: bool,
+}
+
+pub fn returned_value(
+    returns: &[&Expression<'_>],
+    scoping: &Scoping,
+    body: &Body,
+) -> Option<Returned> {
     let mut found: Option<Returned> = None;
     for expr in returns {
         if is_empty_value(expr) {
             continue;
         }
-        let next = return_of(expr, scoping)?;
+        let next = match return_of(expr, scoping)? {
+            Returned::Local(local) if !body.quiet && built_inside(local, body.span, scoping) => {
+                Returned::Built(local)
+            }
+            next if !body.quiet && next.is_read() => return None,
+            next => next,
+        };
         match &found {
             Some(held) if *held != next => return None,
             _ => found = Some(next),
         }
     }
     found
+}
+
+fn built_inside(local: SymbolId, body: Span, scoping: &Scoping) -> bool {
+    let span = scoping.symbol_span(local);
+    body.start <= span.start && span.end <= body.end
 }
 
 fn is_empty_value(expr: &Expression<'_>) -> bool {
@@ -51,7 +92,9 @@ fn return_of(expr: &Expression<'_>, scoping: &Scoping) -> Option<Returned> {
     match expr.without_parentheses() {
         Expression::Identifier(id) => reference_symbol(id, scoping).map(Returned::Local),
         Expression::NewExpression(_) => Some(prefixed("create", &assigned_value_name(expr)?)),
-        Expression::StaticMemberExpression(_) => Some(prefixed("get", &assigned_value_name(expr)?)),
+        Expression::StaticMemberExpression(_) => {
+            Some(prefixed(GETTER_PREFIX, &assigned_value_name(expr)?))
+        }
         Expression::CallExpression(call) => call_return(call, expr, scoping),
         _ => None,
     }
@@ -76,7 +119,8 @@ fn call_return(
 ) -> Option<Returned> {
     let callee = call.callee.without_parentheses();
     if let Some(symbol) = invoked(callee, scoping) {
-        return Some(Returned::Forward(symbol));
+        let direct = member_parts(callee).is_none();
+        return Some(Returned::Forward(symbol, passing(&call.arguments, direct)));
     }
     let value = assigned_value_name(expr)?;
     let method = method_name(callee);
@@ -85,7 +129,41 @@ fn call_return(
             Some(Returned::Named(method.into_owned()))
         }
         Some(method) if method == value => None,
-        _ => Some(prefixed("get", &value)),
+        _ => Some(prefixed(GETTER_PREFIX, &value)),
+    }
+}
+
+fn passing(arguments: &[Argument<'_>], direct: bool) -> Passing {
+    if let (true, Some(Argument::StringLiteral(literal))) = (direct, arguments.first()) {
+        if let Some(key) = literal.value.as_str().and_then(key_name) {
+            return Passing::Keyed(key);
+        }
+    }
+    if arguments.iter().all(is_passed_through) {
+        return Passing::Through;
+    }
+    Passing::Computed
+}
+
+fn is_passed_through(argument: &Argument<'_>) -> bool {
+    match argument {
+        Argument::SpreadElement(spread) => {
+            matches!(
+                spread.argument.without_parentheses(),
+                Expression::Identifier(_)
+            )
+        }
+        argument => argument.as_expression().is_some_and(|expr| {
+            matches!(
+                expr.without_parentheses(),
+                Expression::Identifier(_)
+                    | Expression::ThisExpression(_)
+                    | Expression::NumericLiteral(_)
+                    | Expression::StringLiteral(_)
+                    | Expression::BooleanLiteral(_)
+                    | Expression::NullLiteral(_)
+            )
+        }),
     }
 }
 

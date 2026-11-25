@@ -2,7 +2,7 @@ use oxc_syntax::symbol::SymbolId;
 
 use crate::base_name::{base_name, BaseNamer, Context};
 use crate::collect::{BindingInfo, BindingRole, Collected, InitKind};
-use crate::evidence::{title, Evidence, Returned, DESCRIPTOR};
+use crate::evidence::{title, Evidence, Passing, Returned, DESCRIPTOR};
 use crate::generate::to_identifier;
 use crate::human::looks_human_written;
 use crate::smart::{has_strong_base, smart_renameable};
@@ -85,10 +85,20 @@ impl EvidenceNamer<'_> {
             return None;
         }
         match self.evidence.returned(symbol)? {
-            Returned::Forward(target) => self.forwarded(*target, depth - 1),
+            Returned::Forward(target, passing) => {
+                let name = self.forwarded(*target, depth - 1)?;
+                match passing {
+                    Passing::Through => Some(name),
+                    Passing::Keyed(key) => Some(format!("{name}{}", title(key))),
+                    Passing::Computed => None,
+                }
+            }
             Returned::Local(local) if *local != symbol => self
                 .local(*local)
                 .map(|base| format!("get{}", title(&base))),
+            Returned::Built(local) if *local != symbol => self
+                .local(*local)
+                .map(|base| format!("create{}", title(&base))),
             _ => None,
         }
     }

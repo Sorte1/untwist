@@ -401,8 +401,12 @@ fn verb_result_name(call: &CallExpression<'_>) -> Option<String> {
 }
 
 fn singular(plural: &str) -> Option<String> {
+    let cache_like =
+        plural.ends_with("aches") && !plural.ends_with("eaches") && !plural.ends_with("oaches");
     let stem = if let Some(stem) = plural.strip_suffix("ies") {
         format!("{stem}y")
+    } else if cache_like {
+        plural[..plural.len() - 1].to_string()
     } else if ["sses", "shes", "ches", "xes"]
         .iter()
         .any(|end| plural.ends_with(end))
@@ -497,6 +501,13 @@ pub fn declared_fallback_name(init: &Expression<'_>) -> Option<String> {
         },
         _ => None,
     }
+}
+
+pub fn is_element_lookup(init: &Expression<'_>) -> bool {
+    let Expression::CallExpression(call) = init.without_parentheses() else {
+        return false;
+    };
+    method_name(&call.callee).is_some_and(|method| ELEMENT_METHODS.contains(&method.as_ref()))
 }
 
 pub fn declared_value_name(init: &Expression<'_>) -> Option<String> {

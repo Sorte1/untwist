@@ -44,6 +44,7 @@ pub struct Usage {
     pub called: FxHashSet<SymbolId>,
     pub constructed: FxHashSet<SymbolId>,
     pub props_read: FxHashMap<SymbolId, Vec<String>>,
+    pub methods_called: FxHashMap<SymbolId, Vec<String>>,
     pub hints: Vec<ShorthandHint>,
     pub class_hints: FxHashMap<SymbolId, ClassHint>,
     pub indexed: FxHashSet<SymbolId>,
@@ -104,6 +105,12 @@ impl Usage {
 
     pub fn is_only_constructed(&self, symbol: SymbolId) -> bool {
         self.constructed.contains(&symbol) && !self.called.contains(&symbol)
+    }
+
+    pub fn calls_method(&self, symbol: SymbolId, method: &str) -> bool {
+        self.methods_called
+            .get(&symbol)
+            .is_some_and(|called| called.iter().any(|name| name == method))
     }
 
     pub fn reads_any(&self, symbol: SymbolId, names: &[&str]) -> bool {
@@ -414,6 +421,19 @@ impl<const CLASS_HINTS: bool> UsageWalker<'_, CLASS_HINTS> {
         }
     }
 
+    fn called_method(&mut self, it: &CallExpression<'_>) {
+        let Some((object, method)) = member_parts(it.callee.without_parentheses()) else {
+            return;
+        };
+        if let Some(symbol) = self.identifier_symbol(object) {
+            self.out
+                .methods_called
+                .entry(symbol)
+                .or_default()
+                .push(method.into_owned());
+        }
+    }
+
     fn field_hint(&mut self, it: &PropertyDefinition<'_>) {
         let (Some(class), true, false, Some(value)) =
             (self.class, it.r#static, it.computed, it.value.as_ref())
@@ -542,6 +562,7 @@ impl<'a, const CLASS_HINTS: bool> VisitJs<'a> for UsageWalker<'_, CLASS_HINTS> {
         if CLASS_HINTS {
             self.math_arguments(it);
             self.passed_arguments(it);
+            self.called_method(it);
         }
         walk_js::walk_call_expression(self, it);
     }

@@ -153,6 +153,20 @@ impl Shape {
     }
 }
 
+pub const NUMBER: &str = "num";
+
+const OBJECT: &str = "obj";
+
+const PLAIN_READ: &str = "#read";
+
+fn is_method(prop: &str) -> bool {
+    prop != "length"
+        && (SHARED.contains(&prop)
+            || STRING_ONLY.contains(&prop)
+            || ARRAY_ONLY.contains(&prop)
+            || PROMISE.contains(&prop))
+}
+
 fn is_index(prop: &str) -> bool {
     prop.bytes().all(|byte| byte.is_ascii_digit())
 }
@@ -165,6 +179,10 @@ fn is_plain(prop: &str) -> bool {
         && !PROMISE.contains(&prop)
 }
 
+pub fn is_shape_word(name: &str) -> bool {
+    name == NUMBER || name == OBJECT || SHAPES.iter().any(|shape| shape.word == name)
+}
+
 pub fn shape_word(usage: &Usage, symbol: SymbolId) -> Option<&'static str> {
     if usage.is_callable(symbol) {
         return None;
@@ -174,13 +192,21 @@ pub fn shape_word(usage: &Usage, symbol: SymbolId) -> Option<&'static str> {
         .iter()
         .map(String::as_str)
         .filter(|prop| !is_index(prop))
+        .map(|prop| {
+            let uncalled = is_method(prop) && !usage.calls_method(symbol, prop);
+            if uncalled {
+                PLAIN_READ
+            } else {
+                prop
+            }
+        })
         .collect();
     let indexed = usage.indexed.contains(&symbol) || props.len() < read.len();
     props.sort_unstable();
     props.dedup();
     if props.is_empty() {
         let numeric = !indexed && usage.numeric_only.contains(&symbol);
-        return numeric.then_some("num");
+        return numeric.then_some(NUMBER);
     }
     if usage.is_numeric(symbol) {
         return None;
@@ -191,5 +217,5 @@ pub fn shape_word(usage: &Usage, symbol: SymbolId) -> Option<&'static str> {
     if indexed && props == ["length"] {
         return Some("arr");
     }
-    props.iter().all(|prop| is_plain(prop)).then_some("obj")
+    props.iter().all(|prop| is_plain(prop)).then_some(OBJECT)
 }

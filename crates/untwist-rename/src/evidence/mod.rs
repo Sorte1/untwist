@@ -1,7 +1,9 @@
 mod events;
 mod functions;
 mod methods;
+mod quiet;
 mod returns;
+mod rewrites;
 mod values;
 
 use std::borrow::Cow;
@@ -25,12 +27,13 @@ pub use functions::title;
 use functions::{arrow_facts, function_facts, ArgName, CallFacts, FunctionFacts};
 use methods::MethodSites;
 use returns::descriptor_getter;
-pub use returns::{Getter, Returned, DESCRIPTOR};
+pub use returns::{Getter, Passing, Returned, DESCRIPTOR};
+use rewrites::Rewrites;
 pub use values::is_word_like;
 use values::{
     assigned_value_name, declared_fallback_name, declared_value_name, element_name,
-    is_informative_init, is_naming_property, is_storage_call, key_name, method_name,
-    string_argument,
+    is_element_lookup, is_informative_init, is_naming_property, is_storage_call, key_name,
+    method_name, string_argument,
 };
 
 const ELEMENT_CALLBACKS: [&str; 10] = [
@@ -100,9 +103,14 @@ pub struct Evidence {
     returns: FxHashMap<SymbolId, Returned>,
     params: FxHashMap<SymbolId, Vec<Option<SymbolId>>>,
     getters: FxHashMap<SymbolId, Getter>,
+    rewritten: FxHashSet<SymbolId>,
 }
 
 impl Evidence {
+    pub fn is_rewritten(&self, symbol: SymbolId) -> bool {
+        self.rewritten.contains(&symbol)
+    }
+
     pub fn getter(&self, symbol: SymbolId) -> Option<&Getter> {
         self.getters.get(&symbol)
     }
@@ -141,6 +149,7 @@ pub fn collect_evidence(program: &Program<'_>, scoping: &Scoping) -> Evidence {
         flows: FxHashMap::default(),
         methods: MethodSites::default(),
         getters: FxHashMap::default(),
+        rewrites: Rewrites::default(),
     };
     walker.visit_program(program);
     walker.finish()
@@ -164,6 +173,7 @@ struct EvidenceWalker<'s> {
     flows: FxHashMap<SymbolId, Vec<SymbolId>>,
     methods: MethodSites,
     getters: FxHashMap<SymbolId, Getter>,
+    rewrites: Rewrites,
 }
 
 fn simple_symbol(pattern: &BindingPattern<'_>) -> Option<SymbolId> {
@@ -401,6 +411,7 @@ impl EvidenceWalker<'_> {
         if let Some(name) = assigned_value_name(&it.right) {
             self.offer(symbol, Rank::Assigned, name);
         }
+        self.rewrites.assigned(symbol, &it.right, self.scoping);
         self.flows_into((&id.name, symbol), &it.right);
     }
 
@@ -494,6 +505,7 @@ impl EvidenceWalker<'_> {
             returns,
             params,
             getters: std::mem::take(&mut self.getters),
+            rewritten: std::mem::take(&mut self.rewrites).settle(self.scoping),
         }
     }
 
@@ -666,13 +678,16 @@ impl<'a> VisitJs<'a> for EvidenceWalker<'_> {
         if let (Some(symbol), Some(init)) = (simple_symbol(&it.id), it.init.as_ref()) {
             if let Some(name) = declared_value_name(init) {
                 self.offer(symbol, Rank::Fixed, name);
-            } else if let Some(name) =
-                declared_fallback_name(init).filter(|_| self.unwritten(symbol))
+            } else if let Some(name) = declared_fallback_name(init)
+                .filter(|_| self.unwritten(symbol) || is_element_lookup(init))
             {
                 self.offer(symbol, Rank::Declared, name);
             }
             if is_informative_init(init) {
                 self.defined.insert(symbol);
+            }
+            if !self.unwritten(symbol) {
+                self.rewrites.declared(symbol, init);
             }
             if let BindingPattern::BindingIdentifier(id) = &it.id {
                 self.flows_into((&id.name, symbol), init);
@@ -706,8 +721,21 @@ impl<'a> VisitJs<'a> for EvidenceWalker<'_> {
             {
                 self.methods.define(&member.property.name, params);
             }
+        } else if let AssignmentTarget::AssignmentTargetIdentifier(id) = &it.left {
+            if let Some(symbol) = reference_symbol(id, self.scoping) {
+                self.rewrites.updated(symbol);
+            }
         }
         walk_js::walk_assignment_expression(self, it);
+    }
+
+    fn visit_update_expression(&mut self, it: &UpdateExpression<'a>) {
+        if let SimpleAssignmentTarget::AssignmentTargetIdentifier(id) = &it.argument {
+            if let Some(symbol) = reference_symbol(id, self.scoping) {
+                self.rewrites.updated(symbol);
+            }
+        }
+        walk_js::walk_update_expression(self, it);
     }
 
     fn visit_object_property(&mut self, it: &ObjectProperty<'a>) {
