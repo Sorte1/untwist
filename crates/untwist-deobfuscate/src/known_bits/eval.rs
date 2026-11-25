@@ -13,6 +13,9 @@ pub trait Leaves {
     fn leaf(&self, id: &IdentifierReference<'_>) -> Option<(SymbolId, Val)>;
     fn is_imul(&self, callee: &Expression<'_>) -> bool;
     fn lax(&self) -> bool;
+    fn decided(&self, _test: &Expression<'_>) -> Option<bool> {
+        None
+    }
 }
 
 pub fn abstract_value(expr: &Expression<'_>, leaves: &dyn Leaves) -> Option<Val> {
@@ -36,6 +39,14 @@ impl Walker<'_> {
             Expression::UnaryExpression(unary) => self.unary(unary, depth),
             Expression::CallExpression(call) => self.call(call, depth),
             Expression::ConditionalExpression(conditional) if self.leaves.lax() => {
+                if let Some(test) = self.leaves.decided(&conditional.test) {
+                    let chosen = if test {
+                        &conditional.consequent
+                    } else {
+                        &conditional.alternate
+                    };
+                    return self.value(chosen, depth);
+                }
                 let consequent = self.value(&conditional.consequent, depth)?;
                 let alternate = self.value(&conditional.alternate, depth)?;
                 (consequent.kind == alternate.kind).then(|| Val {

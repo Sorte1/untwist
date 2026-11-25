@@ -1,4 +1,5 @@
 mod bits;
+mod checksum;
 mod eval;
 mod value;
 
@@ -52,7 +53,7 @@ impl KnownBits {
             return;
         }
         let scoping = cx.scoping();
-        let computed = seeds(program, scoping);
+        let computed = seeds(program, scoping, cx.opts.unsafe_transforms);
         if computed.is_empty() {
             self.barren = true;
             return;
@@ -185,7 +186,7 @@ fn scatter(mut source: u32, mask: u32) -> u32 {
     out
 }
 
-fn resolved(id: &IdentifierReference<'_>, scoping: &Scoping) -> Option<SymbolId> {
+pub(super) fn resolved(id: &IdentifierReference<'_>, scoping: &Scoping) -> Option<SymbolId> {
     scoping.get_reference(id.reference_id.get()?).symbol_id()
 }
 
@@ -225,12 +226,14 @@ impl Leaves for Strict<'_, '_> {
     }
 }
 
-struct Lax<'k, 's> {
+struct Lax<'k, 's, 'r, 'p> {
     computed: &'k FxHashMap<SymbolId, (Span, Val)>,
     scoping: &'s Scoping,
+    roots: &'r checksum::Roots<'p>,
+    seed: Span,
 }
 
-impl Leaves for Lax<'_, '_> {
+impl Leaves for Lax<'_, '_, '_, '_> {
     fn leaf(&self, id: &IdentifierReference<'_>) -> Option<(SymbolId, Val)> {
         let symbol = resolved(id, self.scoping)?;
         self.computed
@@ -245,9 +248,18 @@ impl Leaves for Lax<'_, '_> {
     fn lax(&self) -> bool {
         true
     }
+
+    fn decided(&self, test: &Expression<'_>) -> Option<bool> {
+        self.roots.decide(test, self.seed, self.scoping)
+    }
 }
 
-fn seeds(program: &Program<'_>, scoping: &Scoping) -> FxHashMap<SymbolId, (Span, Val)> {
+fn seeds<'p>(
+    program: &'p Program<'p>,
+    scoping: &Scoping,
+    unsafe_lane: bool,
+) -> FxHashMap<SymbolId, (Span, Val)> {
+    let roots = checksum::Roots::of(program, unsafe_lane);
     let mut computed = FxHashMap::default();
     for statement in &program.body {
         let Statement::VariableDeclaration(declaration) = statement else {
@@ -270,6 +282,8 @@ fn seeds(program: &Program<'_>, scoping: &Scoping) -> FxHashMap<SymbolId, (Span,
             let lax = Lax {
                 computed: &computed,
                 scoping,
+                roots: &roots,
+                seed: declaration.span,
             };
             if let Some(value) = abstract_value(init, &lax).filter(|value| value.bits.known() != 0)
             {

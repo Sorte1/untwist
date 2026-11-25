@@ -48,7 +48,7 @@ fn static_key<'k>(entry: &'k ObjectProperty<'_>) -> Option<Cow<'k, str>> {
     (key != PROTO_KEY).then_some(key)
 }
 
-pub(super) fn literal_data(expr: &Expression<'_>, nested: bool) -> bool {
+pub(crate) fn literal_data(expr: &Expression<'_>, nested: bool) -> bool {
     literal_data_at(expr, nested, 0)
 }
 
