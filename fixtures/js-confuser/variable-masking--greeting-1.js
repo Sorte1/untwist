@@ -1,0 +1,1 @@
+function greet(...__p_Yzkw_varMask){return"hello, "+__p_Yzkw_varMask[0]}var guests=["ada","grace","linus"];for(var i=0;i<guests["length"];i++){console["log"](greet(guests[i]))}console["log"]("done with "+guests["length"]+" guests");

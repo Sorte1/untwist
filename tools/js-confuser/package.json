@@ -1,0 +1,9 @@
+{
+  "name": "untwist-js-confuser-matrix",
+  "private": true,
+  "description": "Pinned js-confuser for tools/js-confuser/matrix.mjs, which writes fixtures/js-confuser.",
+  "dependencies": {
+    "acorn": "8.15.0",
+    "js-confuser": "2.1.3"
+  }
+}

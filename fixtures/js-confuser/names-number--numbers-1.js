@@ -1,0 +1,1 @@
+function var_1(var_1,var_2){return var_1*var_2}var var_2=[3,4,5];var var_3=var_2[0]+var_2[1]+var_2[var_2["length"]-1];console["log"]("area",var_1(3,4),3*4,10/4,7-9,1+2);console["log"]("perimeter",var_3,var_3/2);console["log"]("mixed",2*3+4,(8-3)*(2+1),100/8-0.5);

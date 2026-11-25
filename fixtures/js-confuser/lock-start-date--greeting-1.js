@@ -1,0 +1,1 @@
+if((new Date).getTime()<1577836800000){while(true){}}function greet(name){if((new Date).getTime()<1577836800000){while(true){}}return"hello, "+name}var guests=["ada","grace","linus"];for(var i=0;i<guests["length"];i++){if(Date.now()<1577836800000){while(true){}}console["log"](greet(guests[i]))}console["log"]("done with "+guests["length"]+" guests");

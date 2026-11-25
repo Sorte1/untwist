@@ -1,3 +1,4 @@
+mod confuser;
 mod names;
 mod scan;
 mod shapes;
@@ -46,6 +47,22 @@ pub const SIMPLIFY: [&str; 8] = [
     "computed_members",
     "quoted_keys",
 ];
+
+pub use confuser::CONFUSER;
+
+pub const CONFUSER_DIR: &str = "fixtures/js-confuser";
+
+pub fn all_machinery() -> Vec<&'static str> {
+    MACHINERY.iter().chain(CONFUSER.iter()).copied().collect()
+}
+
+pub fn measure_in(dir: &str, source: &str) -> Found {
+    let mut found = measure(source);
+    if dir == CONFUSER_DIR {
+        confuser::measure_into(source, &mut found);
+    }
+    found
+}
 
 pub const OUTPUT_ONLY: [&str; 1] = ["dead_declarations"];
 

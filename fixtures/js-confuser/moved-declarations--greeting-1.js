@@ -1,0 +1,1 @@
+var guests,i;function greet(name){return"hello, "+name}guests=["ada","grace","linus"];for(i=0;i<guests["length"];i++){console["log"](greet(guests[i]))}console["log"]("done with "+guests["length"]+" guests");

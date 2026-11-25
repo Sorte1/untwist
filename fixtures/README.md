@@ -15,6 +15,7 @@ own observables, so node must print the same thing before and after Untwist.
 | `deobfuscate-gaps/` | Synthetic inputs for known deobfuscation gaps | `crates/untwist-deobfuscate/tests/` |
 | `eval/` | Decoder corpus over every array, rotator, decoder and encoding combination; do not hand-edit | `cargo xtask corpus`, `crates/untwist-eval/tests/` |
 | `generated/` | Large generated bundles, not committed | `cargo xtask corpus-bundle`, the big-bundle tests |
+| `js-confuser/` | js-confuser 2.1.3 output over every option alone (lock options one by one), pairs of string concealing, renaming, minify, AST scrambler, dispatcher and global concealing, and the three presets, from `tools/js-confuser/matrix.mjs` with `Math.random` seeded per file; `MANIFEST`, `EXPECT` and `BASELINE` describe each file | `cargo xtask obf-options --dir fixtures/js-confuser`, `xtask/tests/obf_options_drift.rs` |
 | `jsx/` | `createElement` and `jsx()` call shapes | `cargo xtask diff-jsx`, `crates/untwist-jsx/tests/fixtures.rs` |
 | `known-bits/` | Programs that print, an int32 predicate that known bits decide, or a near miss `dead-code` must keep | `crates/untwist/tests/known_bits_behaviour.rs` |
 | `layers/` | `eval`, `Function`, `atob` and p.a.c.k.e.r. layers, as classic scripts that print | `cargo xtask diff-layers`, `crates/untwist/tests/layers_*.rs` |
@@ -55,6 +56,6 @@ javascript-obfuscator 5 emits. Their `.snap` files hold the program before obfus
 
 Put the file in the folder whose test should pick it up, name it after the shape it covers, and make
 it print what it computes so node can check it. Generated folders (`eval/`, `corpus-npm/`,
-`obfuscated/`, `obfuscator-io/`, `obfuscators/`, `rollup-commonjs/`, `unpack-bundlers/`, `unpack-rolldown/`, `bundle-matrix/`, `untranspile/`, `webpack-buildin/`) are rewritten by their generator, so change the
+`js-confuser/`, `obfuscated/`, `obfuscator-io/`, `obfuscators/`, `rollup-commonjs/`, `unpack-bundlers/`, `unpack-rolldown/`, `bundle-matrix/`, `untranspile/`, `webpack-buildin/`) are rewritten by their generator, so change the
 generator instead. Run the folder's test or differential; add an allowlist entry only for a
 divergence documented in `docs/known-divergences/`.

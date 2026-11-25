@@ -2,7 +2,9 @@ use std::path::Path;
 
 use anyhow::Result;
 
-use super::machinery::{measure, Found, MACHINERY, SIMPLIFY};
+#[cfg(test)]
+use super::machinery::measure;
+use super::machinery::{all_machinery, measure_in, Found, SIMPLIFY};
 use super::manifest::Entry;
 use crate::obf_matrix::cell::{read_lossy, Cell, Ran, Runner};
 use crate::obf_matrix::notes::{class_of, is_info};
@@ -36,8 +38,9 @@ impl LaneRun {
     pub fn checks(&self) -> Vec<(&'static str, Option<String>)> {
         let runs = (self.exit != Some(0) || !self.found.parses)
             .then(|| format!("exit {:?} parses {}", self.exit, self.found.parses));
+        let classes = all_machinery();
         let machinery =
-            (!self.found.present(&MACHINERY).is_empty()).then(|| self.found.render(&MACHINERY));
+            (!self.found.present(&classes).is_empty()).then(|| self.found.render(&classes));
         let simplified =
             (!self.found.present(&SIMPLIFY).is_empty()).then(|| self.found.render(&SIMPLIFY));
         let mut out = vec![
@@ -85,7 +88,7 @@ pub fn behaviour_of(
     if let Some(reason) = entry.residue_only() {
         return Ok(Behaviour::Skipped(format!("residue-only: {reason}")));
     }
-    if !found.present(&MACHINERY).is_empty() {
+    if !found.present(&all_machinery()).is_empty() {
         return Ok(Behaviour::Skipped(MACHINERY_LEFT.to_string()));
     }
     if exit != Some(0) {
@@ -140,10 +143,10 @@ pub fn observe_untwist(
     };
     let observed = runner.observe(input, cell, work, false)?;
     let output = work.join("out.js");
-    let found = measure(&read_lossy(&output));
+    let found = measure_in(&entry.dir, &read_lossy(&output));
     let stderr = read_lossy(&work.join("err.txt"));
     let mut notes = notes_of(&stderr);
-    if stderr.contains(NO_ARRAY) && !found.present(&MACHINERY).is_empty() {
+    if stderr.contains(NO_ARRAY) && !found.present(&all_machinery()).is_empty() {
         notes.insert(0, format!("note: {NO_ARRAY}"));
     }
     let spans = super::blockers::spans_of(&stderr);

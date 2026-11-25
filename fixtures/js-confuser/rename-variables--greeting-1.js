@@ -1,0 +1,1 @@
+function tFNufS(tFNufS){return"hello, "+tFNufS}var fFsKoMW=["ada","grace","linus"];for(var AZIEZ2=0;AZIEZ2<fFsKoMW["length"];AZIEZ2++){console["log"](tFNufS(fFsKoMW[AZIEZ2]))}console["log"]("done with "+fFsKoMW["length"]+" guests");

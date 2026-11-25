@@ -1,0 +1,9 @@
+range 0 6 12 18
+fib 832040
+set 3 red|green|blue
+symbol hidden 1
+path report .gz
+regex 2026/11/03
+async first=1, second=2
+caught rejected on purpose
+finished

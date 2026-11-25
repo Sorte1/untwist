@@ -1,0 +1,1 @@
+function var_1(var_1){return"hello, "+var_1}var var_2=["ada","grace","linus"];for(var var_3=0;var_3<var_2["length"];var_3++){console["log"](var_1(var_2[var_3]))}console["log"]("done with "+var_2["length"]+" guests");

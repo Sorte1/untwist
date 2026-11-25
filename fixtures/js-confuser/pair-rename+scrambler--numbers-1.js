@@ -1,0 +1,1 @@
+function zVtXvML(zVtXvML,iiN0Mde){return zVtXvML*iiN0Mde}var iiN0Mde=[3,4,5];var kcRWPXl=iiN0Mde[0]+iiN0Mde[1]+iiN0Mde[iiN0Mde["length"]-1];N1lN3R(console["log"]("area",zVtXvML(3,4),3*4,10/4,7-9,1+2),console["log"]("perimeter",kcRWPXl,kcRWPXl/2));function N1lN3R(){N1lN3R=function(){}}console["log"]("mixed",2*3+4,(8-3)*(2+1),100/8-0.5);

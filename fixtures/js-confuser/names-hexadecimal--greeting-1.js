@@ -1,0 +1,1 @@
+function _0x1333B8(_0x1333B8){return"hello, "+_0x1333B8}var _0x479F3A=["ada","grace","linus"];for(var _0xEE11A8=0;_0xEE11A8<_0x479F3A["length"];_0xEE11A8++){console["log"](_0x1333B8(_0x479F3A[_0xEE11A8]))}console["log"]("done with "+_0x479F3A["length"]+" guests");

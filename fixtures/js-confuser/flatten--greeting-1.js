@@ -1,0 +1,1 @@
+function __p_xGk2_flat_greet(__p_fbnj_flat_object,[name]){return"hello, "+name}function greet(...__p_KXvc_args){var __p_fbnj_flat_object={};return __p_xGk2_flat_greet(__p_fbnj_flat_object,__p_KXvc_args)}var guests=["ada","grace","linus"];for(var i=0;i<guests["length"];i++){console["log"](greet(guests[i]))}console["log"]("done with "+guests["length"]+" guests");

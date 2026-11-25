@@ -4,7 +4,7 @@ use std::sync::Mutex;
 
 use untwist::{Options, Pipeline};
 use xtask::obf_matrix::expect::{judge, load, Rule};
-use xtask::obf_options::machinery::{measure, MACHINERY, SIMPLIFY};
+use xtask::obf_options::machinery::{all_machinery, measure_in, CONFUSER_DIR, SIMPLIFY};
 use xtask::obf_options::manifest::{self, Entry, DIR};
 use xtask::obf_options::VERSIONS_DIR;
 
@@ -43,8 +43,8 @@ fn sample(entries: Vec<Entry>) -> Vec<Entry> {
         .collect()
 }
 
-fn checks(code: &str) -> [(&'static str, Option<String>); 3] {
-    let found = measure(code);
+fn checks(dir: &str, code: &str) -> [(&'static str, Option<String>); 3] {
+    let found = measure_in(dir, code);
     let present = |classes: &[&'static str]| {
         (!found.present(classes).is_empty()).then(|| found.render(classes))
     };
@@ -53,7 +53,7 @@ fn checks(code: &str) -> [(&'static str, Option<String>); 3] {
             "runs",
             (!found.parses).then(|| "output does not parse".to_string()),
         ),
-        ("machinery", present(&MACHINERY)),
+        ("machinery", present(&all_machinery())),
         ("simplified", present(&SIMPLIFY)),
     ]
 }
@@ -65,7 +65,7 @@ fn drift(root: &Path, rules: &[Rule], entry: &Entry, lane: &str) -> Vec<String> 
         ..Options::default()
     };
     let output = Pipeline::new(options).run(&source);
-    checks(output.code())
+    checks(&entry.dir, output.code())
         .into_iter()
         .filter_map(|(check, failure)| {
             let detail = failure.clone().unwrap_or_default();
@@ -128,6 +128,19 @@ fn the_version_matrix_matches_expect_without_node() {
     assert!(
         problems.is_empty(),
         "{VERSIONS_DIR} drifted from EXPECT; run cargo xtask obf-options --dir {VERSIONS_DIR}:\n{}",
+        problems.join("\n")
+    );
+}
+
+#[test]
+fn a_sample_of_the_js_confuser_matrix_matches_expect_without_node() {
+    let root = root();
+    let entries = sample(manifest::load_dir(&root, CONFUSER_DIR).expect("MANIFEST"));
+    assert!(entries.len() >= 50, "{} sampled fixtures", entries.len());
+    let problems = problems_in(&root, CONFUSER_DIR, &entries);
+    assert!(
+        problems.is_empty(),
+        "{CONFUSER_DIR} drifted from EXPECT; run cargo xtask obf-options --dir {CONFUSER_DIR}:\n{}",
         problems.join("\n")
     );
 }
