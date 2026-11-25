@@ -1,4 +1,4 @@
-import { expect, openApp, openSettings, paste, readRepo, runAndWait, test } from './fixtures';
+import { expect, openApp, openDiagnostics, openSettings, paste, readRepo, runAndWait, test } from './fixtures';
 
 const COUNTER = readRepo('crates/untwist-svelte/tests/fixtures/Counter.js');
 
@@ -7,6 +7,7 @@ test('a compiled Svelte component shows up restored in the Components tab, besid
   await paste(page, COUNTER);
   await runAndWait(page);
   await expect(page.locator('#output-editor .cm-content')).toContainText('$.from_html');
+  await openDiagnostics(page);
   const tab = page.locator('#components-tab');
   await expect(tab).toBeVisible();
   await expect(page.locator('#components-count')).toHaveText('1');
