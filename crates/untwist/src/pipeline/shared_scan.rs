@@ -1,4 +1,5 @@
 use oxc_allocator::Allocator;
+use oxc_syntax::symbol::SymbolFlags;
 use std::collections::HashSet;
 use untwist_core::ast_util::key_names::{key_names, text_names};
 use untwist_core::ast_util::naming_slot::reads_names;
@@ -16,6 +17,7 @@ use untwist_core::semantic::builtins::{self, Builtins};
 struct Seen {
     script: bool,
     bound: HashSet<String>,
+    lexical: HashSet<String>,
     free: HashSet<String>,
     written: HashSet<String>,
     global_written: GlobalWrites,
@@ -49,6 +51,7 @@ fn unreadable() -> Seen {
     Seen {
         script: true,
         bound: HashSet::new(),
+        lexical: HashSet::new(),
         free: HashSet::new(),
         written: HashSet::new(),
         global_written: GlobalWrites::default(),
@@ -75,6 +78,16 @@ fn seen(source: &str, unsafe_transforms: bool) -> Seen {
             .get_bindings(scoping.root_scope_id())
             .keys()
             .map(|name| name.as_str().to_string())
+            .collect(),
+        lexical: scoping
+            .get_bindings(scoping.root_scope_id())
+            .iter()
+            .filter(|(_, symbol)| {
+                scoping
+                    .symbol_flags(**symbol)
+                    .intersects(SymbolFlags::BlockScoped)
+            })
+            .map(|(name, _)| name.as_str().to_string())
             .collect(),
         free: scoping
             .root_unresolved_references()
@@ -270,7 +283,14 @@ fn shared_for(
         .map(str::to_string)
         .collect();
     let names_read_elsewhere = others().any(|(_, other)| other.names_read);
+    let every_lexical_elsewhere = others().any(|(_, other)| !other.readable);
+    let lexical_elsewhere = others()
+        .filter(|(_, other)| other.script)
+        .flat_map(|(_, other)| other.lexical.iter().cloned())
+        .collect();
     SharedGlobals {
+        every_lexical_elsewhere,
+        lexical_elsewhere,
         names_read_elsewhere,
         every_name,
         names,
