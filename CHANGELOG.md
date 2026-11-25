@@ -16,7 +16,7 @@ All notable changes to this project are documented in this file. The format is b
   Global concealing calls of standard globals (`console`, `Math`, ...) become the global, the
   calculator's `calc("key", 3, 4)` folds, the duplicate-literal array's constant reads become the
   literals, `"key" in dummyFunction` opaque predicates fold to `false`, and `lock.selfDefending`'s
-  newline checks go when no checked function's source holds a newline. In the default lane each
+  newline checks go when no checked function's source holds a newline. `lock.integrity` checks go when the checked function's source text, hashed with js-confuser's cyrb53 the way the check hashes it, gives the expected value; before, a reformatted output could hang on them. In the default lane each
   needs the built-ins it reads unpatched, and the machinery is removed only when no code may
   observe the global object's names.
 - `dead-code` folds int32 opaque predicates by tracking which bits of a `const` are known through

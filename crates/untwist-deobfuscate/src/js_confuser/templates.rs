@@ -32,6 +32,10 @@ const SELF_DEFENDING: [&str; 1] = [include_str!("templates/self-defending-plain.
 
 pub const PRELUDE_LENGTHS: [usize; 2] = [9, 3];
 
+const INTEGRITY: [(usize, &str); 1] = [(6, include_str!("templates/integrity-6-plain.txt"))];
+
+pub const INTEGRITY_LENGTHS: [usize; 1] = [6];
+
 fn slice(source: &str, span: Span) -> &str {
     source
         .get(span.start as usize..span.end as usize)
@@ -64,6 +68,13 @@ pub fn matches_get_global(source: &str, span: Span, names: &Names) -> bool {
 
 pub fn matches_self_defending(source: &str, span: Span, names: &Names) -> bool {
     listed(&SELF_DEFENDING, canonical_text(source, span, names))
+}
+
+pub fn matches_integrity(source: &str, span: Span, names: &Names) -> bool {
+    listed(
+        &INTEGRITY.map(|(_, t)| t),
+        canonical_text(source, span, names),
+    )
 }
 
 pub fn matches_getter(source: &str, span: Span, names: &Names) -> bool {
@@ -128,6 +139,21 @@ mod dump {
                     "PRELUDE {}\n{}",
                     end - start + 1,
                     canonical_text(&source, span, &names).expect("prelude")
+                );
+            }
+        }
+        if let Some(start) = body
+            .iter()
+            .position(|s| text(s.span()).starts_with("function MathImulPolyfill"))
+        {
+            if let Some(end) =
+                (start..body.len()).find(|i| text(body[*i].span()).contains("fnObject"))
+            {
+                let span = Span::new(body[start].span().start, body[end].span().end);
+                println!(
+                    "INTEGRITY {}\n{}",
+                    end - start + 1,
+                    canonical_text(&source, span, &names).expect("integrity")
                 );
             }
         }

@@ -1,5 +1,10 @@
 [
   {
+    "name": "remove-js-confuser-integrity",
+    "stage": "prepare",
+    "unsafe": false
+  },
+  {
     "name": "remove-js-confuser-self-defending",
     "stage": "prepare",
     "unsafe": false
