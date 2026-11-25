@@ -1,6 +1,7 @@
 mod bits;
 mod checksum;
 mod eval;
+mod inert;
 mod value;
 
 #[cfg(test)]
@@ -14,9 +15,9 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
 use untwist_core::pass::Cx;
 use untwist_core::semantic::builtins::{patched_by_another_input, scan, Reliance};
-use untwist_core::semantic::{has_module_syntax, may_call_eval};
+use untwist_core::semantic::{has_module_syntax, may_call_eval, other_inputs_given};
 
-use crate::init_order::read_before_declaration;
+use crate::init_order::{read_before_declaration, read_during_initialiser};
 pub use bits::Bits;
 use eval::{abstract_value, concrete, low_determined, Leaves};
 pub use value::{Kind, Val};
@@ -60,13 +61,18 @@ impl KnownBits {
         }
         let bound: Vec<(Span, SymbolId)> = computed
             .iter()
-            .map(|(symbol, (statement, _))| (*statement, *symbol))
+            .map(|(symbol, seed)| (seed.statement, *symbol))
             .collect();
         let early = read_before_declaration(program, scoping, &bound);
+        let during: Vec<(Span, SymbolId, bool)> = computed
+            .iter()
+            .map(|(symbol, seed)| (seed.statement, *symbol, seed.inert))
+            .collect();
+        let during = read_during_initialiser(program, scoping, &during);
         self.approved = computed
             .into_iter()
-            .filter(|(symbol, _)| !early.contains(symbol))
-            .map(|(symbol, (_, value))| (symbol, value))
+            .filter(|(symbol, _)| !early.contains(symbol) && !during.contains(symbol))
+            .map(|(symbol, seed)| (symbol, seed.value))
             .collect();
         self.imul = !self.approved.is_empty() && imul_holds(program, cx);
         cx.walk_whole_round();
@@ -226,8 +232,14 @@ impl Leaves for Strict<'_, '_> {
     }
 }
 
+struct Seed {
+    statement: Span,
+    value: Val,
+    inert: bool,
+}
+
 struct Lax<'k, 's, 'r, 'p> {
-    computed: &'k FxHashMap<SymbolId, (Span, Val)>,
+    computed: &'k FxHashMap<SymbolId, Seed>,
     scoping: &'s Scoping,
     roots: &'r checksum::Roots<'p>,
     seed: Span,
@@ -236,9 +248,7 @@ struct Lax<'k, 's, 'r, 'p> {
 impl Leaves for Lax<'_, '_, '_, '_> {
     fn leaf(&self, id: &IdentifierReference<'_>) -> Option<(SymbolId, Val)> {
         let symbol = resolved(id, self.scoping)?;
-        self.computed
-            .get(&symbol)
-            .map(|(_, value)| (symbol, *value))
+        self.computed.get(&symbol).map(|seed| (symbol, seed.value))
     }
 
     fn is_imul(&self, _callee: &Expression<'_>) -> bool {
@@ -258,8 +268,9 @@ fn seeds<'p>(
     program: &'p Program<'p>,
     scoping: &Scoping,
     unsafe_lane: bool,
-) -> FxHashMap<SymbolId, (Span, Val)> {
+) -> FxHashMap<SymbolId, Seed> {
     let roots = checksum::Roots::of(program, unsafe_lane);
+    let alone = !other_inputs_given();
     let mut computed = FxHashMap::default();
     for statement in &program.body {
         let Statement::VariableDeclaration(declaration) = statement else {
@@ -287,7 +298,21 @@ fn seeds<'p>(
             };
             if let Some(value) = abstract_value(init, &lax).filter(|value| value.bits.known() != 0)
             {
-                computed.insert(symbol, (declaration.span, value));
+                let inert = alone
+                    && declaration.declarations.iter().all(|declarator| {
+                        declarator
+                            .init
+                            .as_ref()
+                            .is_some_and(|init| inert::runs_no_code(init, &lax))
+                    });
+                computed.insert(
+                    symbol,
+                    Seed {
+                        statement: declaration.span,
+                        value,
+                        inert,
+                    },
+                );
             }
         }
     }
