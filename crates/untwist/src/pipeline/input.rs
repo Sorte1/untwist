@@ -458,6 +458,7 @@ impl Pipeline {
             fresh_tree_state(room.as_ref());
         }
         self.options.progress(Progress::StageBegins("parse"));
+        let mut blocked = String::new();
         let alloc = Allocator::default();
         let mut parsed = match (first, reservation.module_named, reservation.script_named) {
             (true, true, _) => parse_named_module(&alloc, text),
@@ -474,11 +475,19 @@ impl Pipeline {
             .notes
             .extend(super::notes::vm_interpreter_notes(&parsed.program));
         let unsafe_transforms = self.options.unsafe_transforms;
-        if let Some(Err(reason)) =
-            form.map(|form| verdict(form, &parsed.program, unsafe_transforms))
-        {
-            return Step::Kept(reason);
+        let shared = reservation.shared.is_some();
+        match form.map(|form| verdict(form, &parsed.program, unsafe_transforms, shared)) {
+            Some(Err(reason)) => return Step::Kept(reason),
+            Some(Ok(true)) => {
+                blocked = format!("{{\n{text}\n}}");
+                parsed = parse_with(&alloc, &blocked, SourceType::script());
+                if let Err(step) = parse_outcome(&blocked, &parsed, false, result) {
+                    return step;
+                }
+            }
+            _ => {}
         }
+        let text = if blocked.is_empty() { text } else { &blocked };
         *fallback = None;
         if errors == 0 {
             let site = InlineSite {

@@ -65,23 +65,34 @@ fn callee_roots<'a>(callee: &Expression<'a>) -> Vec<&'a str> {
     }
 }
 
-pub fn verdict(program: &Program<'_>, unsafe_transforms: bool) -> Result<(), Refusal> {
+pub fn verdict(
+    program: &Program<'_>,
+    unsafe_transforms: bool,
+    shared: bool,
+) -> Result<bool, Refusal> {
     let found = TopLevel::of(&program.body);
     if found.returns || program.hashbang.is_some() {
         return Err(Refusal::Unparsable);
     }
-    if (!found.lexical && !found.var) || unsafe_transforms {
-        return Ok(());
+    if !found.lexical && !found.var {
+        return Ok(false);
+    }
+    if unsafe_transforms {
+        if shared && (program_is_strict(program) || found.lexical && found.functions) {
+            return Err(Refusal::Shape);
+        }
+        return Ok(shared && found.lexical);
     }
     if found.lexical || program_is_strict(program) || observes_globals(program) {
         return Err(Refusal::NeedsUnsafe);
     }
-    Ok(())
+    Ok(false)
 }
 
 #[derive(Default)]
 struct TopLevel {
     var: bool,
+    functions: bool,
     lexical: bool,
     returns: bool,
 }
@@ -102,7 +113,10 @@ impl TopLevel {
     fn note<'s, 'a>(&mut self, statement: &'s Statement<'a>, work: &mut Vec<&'s Statement<'a>>) {
         match statement {
             Statement::VariableDeclaration(decl) => self.var |= is_var(decl),
-            Statement::FunctionDeclaration(_) => self.var = true,
+            Statement::FunctionDeclaration(_) => {
+                self.var = true;
+                self.functions = true;
+            }
             Statement::ReturnStatement(_) => self.returns = true,
             Statement::BlockStatement(block) => work.extend(block.body.iter()),
             Statement::IfStatement(node) => {

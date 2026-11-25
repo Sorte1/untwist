@@ -50,10 +50,11 @@ pub fn verdict(
     form: LayerForm,
     program: &Program<'_>,
     unsafe_transforms: bool,
-) -> Result<(), Refusal> {
+    shared: bool,
+) -> Result<bool, Refusal> {
     match form {
-        LayerForm::Eval | LayerForm::Packer => eval::verdict(program, unsafe_transforms),
-        _ => Ok(()),
+        LayerForm::Eval | LayerForm::Packer => eval::verdict(program, unsafe_transforms, shared),
+        _ => Ok(false),
     }
 }
 
