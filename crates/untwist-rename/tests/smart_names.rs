@@ -198,3 +198,9 @@ fn the_property_a_value_is_stored_under_beats_its_declared_name() {
     );
     assert_has(&code, &["var owner = this", "var cursor = "]);
 }
+
+#[test]
+fn an_entry_of_caches_is_a_cache() {
+    let code = smart("function f(_0x1) { const _0x2 = _0x1.caches.get('a'); return _0x2; }");
+    assert_has(&code, &["const cache = "]);
+}

@@ -10,11 +10,11 @@ use crate::base_name::{base_name, structural_base, Context, FALLBACK_BASE};
 use crate::collect::{BindingInfo, BindingRole, Collected, InitKind};
 use crate::evidence::{collect_evidence, Evidence};
 use crate::evidence_namer::EvidenceNamer;
-use crate::generate::{lower_camel, to_identifier, uid_candidates};
+use crate::generate::{lower_camel, strip_accessor_prefix, to_identifier, uid_candidates};
 use crate::human::looks_human_written;
 use crate::oracle::{NameOracle, OuterRule};
 use crate::plan::{run_mode, HazardNote, RenamePlan};
-use crate::shapes::shape_word;
+use crate::shapes::{shape_word, NUMBER};
 use crate::simple::{is_renameable, unit_roots};
 use crate::text_reads::{text_read_bindings_with, SelfReads, TextReads};
 use crate::usage::{collect_naming_usage, Usage};
@@ -26,8 +26,6 @@ const SHORT_NAME: usize = 2;
 
 const HEX_TOKEN: usize = 16;
 
-const STRUCTURAL_FUNCTION: &str = "fn";
-
 const CALL_RESULT: &str = "result";
 
 const CONSTRUCTED: &str = "instance";
@@ -38,7 +36,21 @@ const PREDICATE: &str = "predicate";
 
 const BOOLEAN: &str = "bool";
 
-const UNNAMED_CALLABLES: [&str; 2] = ["fn", "cb"];
+const UNNAMED_CALLABLES: [&str; 4] = ["fn", "cb", "callback", "result"];
+
+const UNNAMED_FUNCTIONS: [&str; 2] = ["fn", "cb"];
+
+const CALLBACK: &str = "callback";
+
+fn is_constructed_value(info: &BindingInfo, cx: &Context<'_>) -> bool {
+    match &info.role {
+        BindingRole::Param => cx.usage.constructed.contains(&info.symbol),
+        BindingRole::Variable(shape) => {
+            shape.kind == InitKind::Call && cx.usage.is_only_constructed(info.symbol)
+        }
+        _ => false,
+    }
+}
 
 fn is_call_result(info: &BindingInfo) -> bool {
     matches!(&info.role, BindingRole::Variable(shape) if shape.kind == InitKind::Call)
@@ -137,14 +149,13 @@ pub fn smart_base(info: &BindingInfo, cx: &Context<'_>, evidence: &Evidence) -> 
         .flatten()
         .map(to_identifier)
         .filter(|name| !name.is_empty() && name != "_");
+    let constructor = evidence.is_constructor(info.symbol) || is_constructed_value(info, cx);
     let base = evidenced
+        .filter(|name| !(constructor && name == CALLBACK))
         .or_else(|| instance_base(info, cx, evidence))
         .unwrap_or_else(|| {
-            let derived = derived_base(info, cx);
-            let constructor = evidence.is_constructor(info.symbol)
-                || (info.role == BindingRole::Param && cx.usage.is_only_constructed(info.symbol));
-            let unnamed_constructor = constructor && UNNAMED_CALLABLES.contains(&derived.as_str());
-            if unnamed_constructor {
+            let derived = derived_base(info, cx, evidence);
+            if constructor && UNNAMED_CALLABLES.contains(&derived.as_str()) {
                 return CONSTRUCTOR.to_string();
             }
             derived
@@ -198,16 +209,24 @@ fn shaped_base(info: &BindingInfo, cx: &Context<'_>) -> Option<String> {
         .map(str::to_string)
 }
 
-fn derived_base(info: &BindingInfo, cx: &Context<'_>) -> String {
+fn derived_base(info: &BindingInfo, cx: &Context<'_>, evidence: &Evidence) -> String {
     if let Some(base) = wrapper_value_base(info) {
         return base;
     }
-    let base = base_name(info, cx);
-    let unnamed_call = base == STRUCTURAL_FUNCTION && is_call_result(info);
+    let mut base = base_name(info, cx);
+    if evidence.is_rewritten(info.symbol) && is_raw_callee_name(info, &base, cx) {
+        let numeric = is_numeric_call(info).then_some(NUMBER);
+        base = numeric
+            .or_else(|| shape_word(cx.usage, info.symbol))
+            .unwrap_or(FALLBACK_BASE)
+            .to_string();
+    }
+    let unnamed = UNNAMED_FUNCTIONS.contains(&base.as_str());
+    let unnamed_call = unnamed && is_call_result(info);
     if unnamed_call || (base == FALLBACK_BASE && is_immediate_call(info)) {
         return CALL_RESULT.to_string();
     }
-    if base == STRUCTURAL_FUNCTION && is_constructed(info) {
+    if unnamed && is_constructed(info) {
         return CONSTRUCTED.to_string();
     }
     if base == PREDICATE && is_call_result(info) {
@@ -221,6 +240,51 @@ fn derived_base(info: &BindingInfo, cx: &Context<'_>) -> String {
         .filter(|structural| looks_human_written(structural))
         .or_else(|| shaped_base(info, cx))
         .unwrap_or_else(|| FALLBACK_BASE.to_string())
+}
+
+const NUMERIC_GLOBALS: [&str; 3] = ["parseInt", "parseFloat", "Number"];
+
+const NUMBER_PARSERS: [&str; 2] = ["parseInt", "parseFloat"];
+
+fn is_numeric_call(info: &BindingInfo) -> bool {
+    let BindingRole::Variable(shape) = &info.role else {
+        return false;
+    };
+    let Some(callee) = shape.callee.as_deref() else {
+        return false;
+    };
+    let name = callee.name.as_deref().unwrap_or_default();
+    match (callee.kind, callee.root.as_deref()) {
+        (InitKind::Identifier, _) => callee.symbol.is_none() && NUMERIC_GLOBALS.contains(&name),
+        (InitKind::Member, Some("Math")) => true,
+        (InitKind::Member, Some("Number")) => NUMBER_PARSERS.contains(&name),
+        _ => false,
+    }
+}
+
+fn is_raw_callee_name(info: &BindingInfo, base: &str, cx: &Context<'_>) -> bool {
+    let BindingRole::Variable(shape) = &info.role else {
+        return false;
+    };
+    if shape.kind != InitKind::Call || UNNAMED_CALLABLES.contains(&base) || base == FALLBACK_BASE {
+        return false;
+    }
+    let plain = Context {
+        collected: cx.collected,
+        usage: cx.usage,
+        namer: None,
+        config: cx.config,
+    };
+    let callee = shape
+        .symbol
+        .and_then(|symbol| cx.collected.by_symbol.get(&symbol))
+        .and_then(|index| cx.collected.bindings.get(*index))
+        .map(|callee| base_name(callee, &plain));
+    shape
+        .name
+        .iter()
+        .chain(callee.iter())
+        .any(|raw| strip_accessor_prefix(raw).is_none() && lower_camel(raw) == base)
 }
 
 pub fn decide(

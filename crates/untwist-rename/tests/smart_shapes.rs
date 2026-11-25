@@ -119,10 +119,14 @@ fn a_function_returning_a_named_local_takes_its_name() {
     assert_has(
         &code,
         &[
-            "function getDocumentFragment()",
-            "var documentFragment = getDocumentFragment()",
+            "function createDocumentFragment",
+            "var documentFragment = createDocumentFragment",
         ],
     );
+    let code = smart(
+        "function _0xa1(_0xe1) { var _0xd1 = _0xe1.fragment; return _0xd1; } var _0xb1 = _0xa1(document);",
+    );
+    assert_has(&code, &["function getFragment("]);
 }
 
 #[test]
@@ -168,4 +172,87 @@ fn a_constructed_parameter_is_not_named_obj() {
     let code = smart("function _0xa1(_0xb1, _0xc1) { return new _0xb1(_0xc1) + _0xb1.BYTES_PER_ELEMENT; } _0xa1(Array, 1);");
     assert_lacks(&code, &["(obj, "]);
     assert_has(&code, &["(Ctor, "]);
+}
+
+#[test]
+fn a_method_name_read_as_a_property_is_not_array_evidence() {
+    let code = smart(
+        "function _0xa1(_0xb1) { return _0xb1.map.spawns.length + _0xb1.map.size; } _0xa1({});",
+    );
+    assert_has(&code, &["(obj) {"]);
+    assert_lacks(&code, &["(arr)"]);
+}
+
+#[test]
+fn a_passed_name_that_the_value_use_contradicts_is_not_taken() {
+    let code = smart(
+        "function _0xa1() { function _0xb1(_0xc1) { return _0xc1 * 2; } function _0xd1(_0xe1) { return _0xe1.length + _0xe1.x + _0xb1(_0xe1); } return _0xd1('ab'); }",
+    );
+    assert_has(&code, &["(num) {"]);
+    assert_lacks(&code, &["(num2)", "num.length"]);
+}
+
+#[test]
+fn only_a_quiet_function_is_named_as_a_getter() {
+    let code = smart(
+        "function _0xa1() { function _0xb1(_0xc1) { _0xc1.count++; return _0xc1.total; } function _0xd1(_0xe1) { return _0xe1.total; } return _0xb1({}) + _0xd1({}); }",
+    );
+    assert_has(&code, &["function getTotal(obj) {\n    return obj.total;"]);
+    assert_lacks(
+        &code,
+        &["function getTotal(obj) {\n    obj.count++", "getTotal2"],
+    );
+}
+
+#[test]
+fn a_cached_property_getter_is_still_a_getter() {
+    let code = smart(
+        "function _0xa1() { function _0xb1(_0xc1) { if (!_0xc1.cache) _0xc1.cache = new Map(); return _0xc1.cache; } return _0xb1({}); }",
+    );
+    assert_has(&code, &["function getCache("]);
+}
+
+#[test]
+fn wrappers_of_one_function_are_told_apart_or_left_unnamed() {
+    let code = smart(
+        "function _0xa1() { function _0xa(_0xb) { return _0xb.items; } function _0xc(_0xd) { return _0xa(_0xd); } function _0xe(_0xf) { return _0xa(_0xf.inner); } function _0x5(_0x6) { return _0xa('logic', _0x6); } return [_0xc, _0xe, _0x5]; }",
+    );
+    assert_has(
+        &code,
+        &[
+            "function getItems(",
+            "function getItems2(",
+            "function getItemsLogic(",
+        ],
+    );
+    assert_lacks(&code, &["getItems3", "getItems4"]);
+}
+
+#[test]
+fn a_parameter_that_is_constructed_is_a_constructor_even_when_also_called() {
+    let code = smart(
+        "function _0xa1(_0xb1, _0xd1) { const _0xc1 = new _0xb1(1); if (_0xc1.ok) _0xb1(2); const _0xe1 = _0xd1(); return [_0xc1, _0xe1]; } _0xa1(function () {}, function () {});",
+    );
+    assert_has(
+        &code,
+        &[
+            "(Ctor, cb)",
+            "const instance = new Ctor(1)",
+            "const result = cb()",
+        ],
+    );
+    assert_lacks(&code, &["cb2", "cb3"]);
+}
+
+#[test]
+fn a_reassigned_call_result_does_not_keep_the_method_name() {
+    let code = smart(
+        "function _0xa1(_0xb1) { let _0x13 = _0xb1.get('a'); _0x13 = _0x13 || 0; let _0x14 = Math.round(_0xb1.x); if (_0x14) { _0x14 = 2; } let _0x15 = _0xb1.getSkin(); _0x15 = _0x15 || {}; return [_0x13, _0x14, _0x15]; } _0xa1(null);",
+    );
+    assert_has(&code, &["let num = Math.round", "let skin = "]);
+    assert_lacks(&code, &["let get = ", "let round = "]);
+    let code = smart(
+        "function _0xa1(_0xb1) { let _0x14 = Math.round(_0xb1.x); _0x14 = _0x14 * 2; let _0x15 = _0xb1.load(); _0x15 = _0xb1.load(); return [_0x14, _0x15]; } _0xa1(null);",
+    );
+    assert_has(&code, &["let round = ", "let load = "]);
 }
