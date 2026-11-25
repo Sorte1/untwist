@@ -13,6 +13,8 @@ pub struct SharedGlobals {
     pub observed_elsewhere: bool,
     pub named_elsewhere: FxHashSet<String>,
     pub names_read_elsewhere: bool,
+    pub every_lexical_elsewhere: bool,
+    pub lexical_elsewhere: FxHashSet<String>,
 }
 
 impl SharedGlobals {
@@ -25,6 +27,8 @@ impl SharedGlobals {
             && !self.observed_elsewhere
             && self.named_elsewhere.is_empty()
             && !self.names_read_elsewhere
+            && !self.every_lexical_elsewhere
+            && self.lexical_elsewhere.is_empty()
     }
 
     pub fn foreign_only(self) -> Self {
@@ -94,6 +98,14 @@ pub fn named_by_another_input(name: &str) -> bool {
         cell.borrow()
             .as_ref()
             .is_some_and(|shared| shared.named_elsewhere.contains(name))
+    })
+}
+
+pub fn declared_lexically_by_another_input(name: &str) -> bool {
+    SHARED_GLOBALS.with(|cell| {
+        cell.borrow().as_ref().is_some_and(|shared| {
+            shared.every_lexical_elsewhere || shared.lexical_elsewhere.contains(name)
+        })
     })
 }
 

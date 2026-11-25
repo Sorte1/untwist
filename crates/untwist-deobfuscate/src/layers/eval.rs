@@ -3,7 +3,7 @@ use oxc_ast::ast::{
     VariableDeclaration, VariableDeclarationKind,
 };
 use oxc_semantic::Scoping;
-use untwist_core::semantic::program_is_strict;
+use untwist_core::semantic::{declared_lexically_by_another_input, program_is_strict};
 
 use super::decode::{argument_refusal, fold_text, outer_call, refuse, sloppy_script};
 use super::model::{DecodeCx, Decoded, Layer, LayerForm, Refusal, Refused};
@@ -77,6 +77,13 @@ pub fn verdict(
     if !found.lexical && !found.var {
         return Ok(false);
     }
+    if found
+        .var_names
+        .iter()
+        .any(|name| declared_lexically_by_another_input(name))
+    {
+        return Err(Refusal::Shape);
+    }
     if unsafe_transforms {
         if shared && (program_is_strict(program) || found.lexical && found.functions) {
             return Err(Refusal::Shape);
@@ -92,6 +99,7 @@ pub fn verdict(
 #[derive(Default)]
 struct TopLevel {
     var: bool,
+    var_names: Vec<String>,
     functions: bool,
     lexical: bool,
     returns: bool,
@@ -112,8 +120,10 @@ impl TopLevel {
 
     fn note<'s, 'a>(&mut self, statement: &'s Statement<'a>, work: &mut Vec<&'s Statement<'a>>) {
         match statement {
-            Statement::VariableDeclaration(decl) => self.var |= is_var(decl),
-            Statement::FunctionDeclaration(_) => {
+            Statement::VariableDeclaration(decl) => self.note_var(decl),
+            Statement::FunctionDeclaration(function) => {
+                self.var_names
+                    .extend(function.id.iter().map(|id| id.name.to_string()));
                 self.var = true;
                 self.functions = true;
             }
@@ -125,16 +135,16 @@ impl TopLevel {
             }
             Statement::ForStatement(node) => {
                 if let Some(ForStatementInit::VariableDeclaration(decl)) = &node.init {
-                    self.var |= is_var(decl);
+                    self.note_var(decl);
                 }
                 work.push(&node.body);
             }
             Statement::ForInStatement(node) => {
-                self.var |= var_left(&node.left);
+                self.note_left(&node.left);
                 work.push(&node.body);
             }
             Statement::ForOfStatement(node) => {
-                self.var |= var_left(&node.left);
+                self.note_left(&node.left);
                 work.push(&node.body);
             }
             Statement::WhileStatement(node) => work.push(&node.body),
@@ -158,14 +168,29 @@ impl TopLevel {
             _ => {}
         }
     }
+
+    fn note_var(&mut self, decl: &VariableDeclaration<'_>) {
+        if !is_var(decl) {
+            return;
+        }
+        self.var = true;
+        let names = decl
+            .declarations
+            .iter()
+            .flat_map(|declarator| declarator.id.get_binding_identifiers())
+            .map(|id| id.name.to_string());
+        self.var_names.extend(names);
+    }
+
+    fn note_left(&mut self, left: &ForStatementLeft<'_>) {
+        if let ForStatementLeft::VariableDeclaration(decl) = left {
+            self.note_var(decl);
+        }
+    }
 }
 
 fn is_var(decl: &VariableDeclaration<'_>) -> bool {
     decl.kind == VariableDeclarationKind::Var
-}
-
-fn var_left(left: &ForStatementLeft<'_>) -> bool {
-    matches!(left, ForStatementLeft::VariableDeclaration(decl) if is_var(decl))
 }
 
 fn declares_lexically(statement: &Statement<'_>) -> bool {
