@@ -2,15 +2,13 @@ use std::cell::OnceCell;
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    Argument, BindingPattern, CallExpression, Expression, Function, IdentifierReference,
-    LogicalExpression, Program, Statement, StaticMemberExpression, ThisExpression,
-    VariableDeclarationKind,
+    Argument, BindingPattern, CallExpression, Expression, Function, LogicalExpression, Program,
+    Statement, VariableDeclarationKind,
 };
-use oxc_ast_visit::{walk, Visit};
 use oxc_semantic::Scoping;
 use oxc_span::Span;
 use oxc_syntax::operator::{BinaryOperator, LogicalOperator, UnaryOperator};
-use oxc_syntax::scope::ScopeFlags;
+use oxc_syntax::reference::ReferenceId;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
 use untwist_core::parse::parse_program;
@@ -104,7 +102,8 @@ impl<'p> Roots<'p> {
         if count != shape.reads || function.r#async || function.generator {
             return None;
         }
-        let free = Free::of(function, scoping, &self.data)?;
+        let text = function_text(function, false);
+        let free = closed_reads(function, scoping, &self.data, &text)?;
         let mut inits = Vec::new();
         for (symbol, reads) in free.reads {
             let (declared, init) = self.data.get(&symbol)?;
@@ -121,7 +120,7 @@ impl<'p> Roots<'p> {
         if !self.builtins_hold(scoping) {
             return None;
         }
-        let value = evaluate(&inits, free.arrays, function, shape.call)?;
+        let value = evaluate(&inits, free.arrays, &text, shape.call)?;
         Some(value == shape.expected)
     }
 
@@ -241,113 +240,84 @@ fn typeof_function(expr: &Expression<'_>, scoping: &Scoping) -> Option<SymbolId>
     resolved(id, scoping)
 }
 
-struct Free<'s, 'd, 'p> {
-    scoping: &'s Scoping,
-    data: &'d FxHashMap<SymbolId, (usize, &'p Expression<'p>)>,
-    inside: oxc_syntax::scope::ScopeId,
-    reads: FxHashMap<SymbolId, usize>,
-    globals: usize,
-    members: usize,
-    arrays: bool,
-    closed: bool,
-}
-
 struct Closed {
     reads: Vec<(SymbolId, usize)>,
     arrays: bool,
 }
 
-impl<'s, 'd, 'p> Free<'s, 'd, 'p> {
-    fn of(
-        function: &Function<'_>,
-        scoping: &'s Scoping,
-        data: &'d FxHashMap<SymbolId, (usize, &'p Expression<'p>)>,
-    ) -> Option<Closed> {
-        let mut free = Self {
-            scoping,
-            data,
-            inside: function.scope_id.get()?,
-            reads: FxHashMap::default(),
-            globals: 0,
-            members: 0,
-            arrays: false,
-            closed: true,
-        };
-        free.visit_function(function, ScopeFlags::Function);
-        if !free.closed || free.globals != free.members {
-            return None;
-        }
-        let mut reads: Vec<(SymbolId, usize)> = free.reads.into_iter().collect();
-        reads.sort_unstable_by_key(|(symbol, _)| *symbol);
-        Some(Closed {
-            reads,
-            arrays: free.arrays,
-        })
-    }
-
-    fn global_member(&mut self, object: &Expression<'_>, property: &str) {
-        let Expression::Identifier(id) = object else {
-            return;
-        };
-        if resolved(id, self.scoping).is_some() || !GLOBALS.contains(&id.name.as_str()) {
-            return;
-        }
-        self.members += 1;
-        match id.name.as_str() {
-            "Math" if property == "random" => self.closed = false,
-            "Array" if property == "isArray" => self.arrays = true,
-            "Array" => self.closed = false,
-            _ => {}
-        }
-    }
-
-    fn declared_inside(&self, symbol: SymbolId) -> bool {
-        let scope = self.scoping.symbol_scope_id(symbol);
-        self.scoping
+fn closed_reads(
+    function: &Function<'_>,
+    scoping: &Scoping,
+    data: &FxHashMap<SymbolId, (usize, &Expression<'_>)>,
+    text: &str,
+) -> Option<Closed> {
+    let inside = function.scope_id.get()?;
+    let within = |scope| {
+        scoping
             .scope_ancestors(scope)
-            .any(|ancestor| ancestor == self.inside)
-    }
-}
-
-impl<'a> Visit<'a> for Free<'_, '_, '_> {
-    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        match resolved(it, self.scoping) {
-            Some(symbol) if self.declared_inside(symbol) => {}
-            Some(symbol) if self.data.contains_key(&symbol) => {
-                *self.reads.entry(symbol).or_default() += 1;
-            }
-            Some(_) => self.closed = false,
+            .any(|ancestor| ancestor == inside)
+    };
+    let unresolved: FxHashMap<ReferenceId, &str> = scoping
+        .root_unresolved_references()
+        .iter()
+        .flat_map(|(name, ids)| ids.iter().map(move |id| (*id, name.as_str())))
+        .collect();
+    let mut reads: FxHashMap<SymbolId, usize> = FxHashMap::default();
+    for index in 0..scoping.references_len() {
+        let id = ReferenceId::from_usize(index);
+        let reference = scoping.get_reference(id);
+        if !within(reference.scope_id()) {
+            continue;
+        }
+        match reference.symbol_id() {
+            Some(symbol) if within(scoping.symbol_scope_id(symbol)) => {}
+            Some(symbol) if data.contains_key(&symbol) => *reads.entry(symbol).or_default() += 1,
+            Some(_) => return None,
             None => {
-                if GLOBALS.contains(&it.name.as_str()) {
-                    self.globals += 1;
-                } else {
-                    self.closed = false;
+                if !GLOBALS.contains(unresolved.get(&id)?) {
+                    return None;
                 }
             }
         }
     }
-
-    fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
-        self.global_member(&it.object, it.property.name.as_str());
-        walk::walk_static_member_expression(self, it);
+    if words(text, "this").next().is_some() {
+        return None;
     }
-
-    fn visit_this_expression(&mut self, _it: &ThisExpression) {
-        self.closed = false;
-    }
-
-    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
-        if !self.closed {
-            return;
+    let mut arrays = false;
+    for global in GLOBALS {
+        for after in words(text, global) {
+            let member = after.strip_prefix('.')?;
+            let end = member
+                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '$'))
+                .unwrap_or(member.len());
+            match (global, &member[..end]) {
+                ("Math", "random") | (_, "") => return None,
+                ("Array", "isArray") => arrays = true,
+                ("Array", _) => return None,
+                _ => {}
+            }
         }
-        walk::walk_function(self, it, flags);
     }
+    let mut reads: Vec<(SymbolId, usize)> = reads.into_iter().collect();
+    reads.sort_unstable_by_key(|(symbol, _)| *symbol);
+    Some(Closed { reads, arrays })
+}
+
+fn words<'t>(text: &'t str, word: &'t str) -> impl Iterator<Item = &'t str> + 't {
+    let is_name = |c: char| c.is_ascii_alphanumeric() || c == '_' || c == '$';
+    text.match_indices(word).filter_map(move |(at, _)| {
+        let before = text[..at].chars().next_back();
+        let after = &text[at + word.len()..];
+        let separate = before.is_none_or(|c| !is_name(c) && c != '.')
+            && after.chars().next().is_none_or(|c| !is_name(c));
+        separate.then_some(after)
+    })
 }
 
 fn evaluate(
     inits: &[(String, &Expression<'_>)],
     arrays: bool,
-    function: &Function<'_>,
+    function: &str,
     call: &Expression<'_>,
 ) -> Option<f64> {
     let mut text = String::new();
@@ -357,7 +327,7 @@ fn evaluate(
     for (name, init) in inits {
         text.push_str(&format!("var {name} = {};\n", expression_text(init)));
     }
-    text.push_str(&function_text(function, false));
+    text.push_str(function);
     text.push_str(&format!("\n{};\n", expression_text(call)));
     let alloc = Allocator::default();
     let parsed = parse_program(&alloc, &text);
