@@ -1,0 +1,10 @@
+github.com/qybaihe/bla at 8dcf9858f5c931e26c4d3526b29c8e10a97ec17f (MIT, LICENSE-bla)
+v5-crackme.cjs          challenge/archive/v5/bla-crackme.cjs
+v6-L1.cjs               challenge/archive/v6-tiered-protect/artifacts/L1.cjs
+v6-L2.cjs               challenge/archive/v6-tiered-protect/artifacts/L2.cjs
+v6-L3.cjs               challenge/archive/v6-tiered-protect/artifacts/L3.cjs
+v6-clean-template.cjs   challenge/archive/v6-tiered-protect/clean/target.template.cjs
+v7-core-expr.cjs        challenge/v7/hardened/core/expr.cjs
+v7-core-license.cjs     challenge/v7/hardened/core/license.cjs
+v7-core-stats.cjs       challenge/v7/hardened/core/stats.cjs
+v7-core-units.cjs       challenge/v7/hardened/core/units.cjs

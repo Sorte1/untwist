@@ -489,6 +489,7 @@ pub struct DeadCode<'a> {
     fresh_vars: FxHashSet<Span>,
     dropped: FxHashSet<ReferenceId>,
     drop: Option<DroppedBranch>,
+    known_bits: crate::known_bits::KnownBits,
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
@@ -518,10 +519,12 @@ impl<'a> DeadCode<'a> {
                 value,
                 literal: true,
             }),
-            None => opaque_test(expr).map(|value| Decision {
-                value,
-                literal: false,
-            }),
+            None => opaque_test(expr)
+                .or_else(|| self.known_bits.decide(expr, cx))
+                .map(|value| Decision {
+                    value,
+                    literal: false,
+                }),
         }
     }
 
@@ -1175,6 +1178,10 @@ impl<'a> Pass<'a> for DeadCode<'a> {
         self.unsafe_lane = cx.opts.unsafe_transforms;
         self.armed = 0;
         self.dropped.clear();
+        let with = &mut self.with;
+        self.known_bits.learn(node, cx, || {
+            *with.get_or_insert_with(|| has_with(cx.scoping()))
+        });
         let fresh = std::mem::take(&mut self.fresh_vars);
         self.kept_vars.extend(fresh);
     }
