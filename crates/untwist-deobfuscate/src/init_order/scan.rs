@@ -4,7 +4,7 @@ use oxc_ast_visit::VisitJs;
 use oxc_semantic::Scoping;
 use oxc_span::GetSpan;
 use oxc_syntax::symbol::SymbolId;
-use untwist_core::semantic::{scope_hazard, ScopeOwners};
+use untwist_core::semantic::{every_global_foreign, is_foreign_global, scope_hazard, ScopeOwners};
 
 use super::tables::{at, id, some, Sites, SpanSlots, SymbolSet, NONE};
 use super::{capacity_hint, record_lengths, with_slack, ScanLengths};
@@ -12,6 +12,10 @@ use super::{Frame, FunctionValue, InitOrder, StatementList, ValueOwner};
 use crate::fused::{Fused, Member, Walk};
 use crate::mutants::inert_statements_unchecked;
 use crate::stamp::reached_outside_its_block_by;
+
+const ARRAY: &str = "Array";
+
+const MAX_ARRAY_LENGTH: f64 = 4_294_967_295.0;
 
 pub(super) struct Scan<'s> {
     scoping: &'s Scoping,
@@ -25,6 +29,7 @@ pub(super) struct Scan<'s> {
     pending: Option<ValueOwner>,
     functions: u32,
     overflowed: bool,
+    entered: bool,
 }
 
 fn hoisted_symbol(stmt: &Statement<'_>) -> Option<SymbolId> {
@@ -81,6 +86,7 @@ impl<'s> Scan<'s> {
             pending: None,
             functions: 0,
             overflowed: false,
+            entered: false,
         }
     }
 
@@ -203,11 +209,21 @@ impl<'s> Scan<'s> {
         self.value = Some(current);
     }
 
+    fn fresh_arrays_allowed(&mut self, it: &AVec<'_, Statement<'_>>) -> Option<&'s Scoping> {
+        let top = !std::mem::replace(&mut self.entered, true);
+        let imports = it
+            .iter()
+            .any(|stmt| matches!(stmt, Statement::ImportDeclaration(_)));
+        let foreign = every_global_foreign() || is_foreign_global(ARRAY);
+        (top && !imports && !foreign).then_some(self.scoping)
+    }
+
     #[inline(always)]
     fn enter_list(&mut self, it: &AVec<'_, Statement<'_>>) {
+        let arrays = self.fresh_arrays_allowed(it);
         let leading = it
             .iter()
-            .take_while(|stmt| statement_cannot_call(stmt))
+            .take_while(|stmt| statement_cannot_call(stmt, arrays))
             .count();
         let (Some(start), Some(leading_inert)) =
             (self.fresh(self.order.slots.len()), self.fresh(leading))
@@ -384,12 +400,13 @@ impl<'a> Member<'a> for Scan<'_> {
     }
 }
 
-fn statement_cannot_call(stmt: &Statement<'_>) -> bool {
+fn statement_cannot_call(stmt: &Statement<'_>, arrays: Option<&Scoping>) -> bool {
     match stmt {
         Statement::FunctionDeclaration(_) | Statement::EmptyStatement(_) => true,
-        Statement::VariableDeclaration(declaration) => {
-            declaration.declarations.iter().all(declarator_cannot_call)
-        }
+        Statement::VariableDeclaration(declaration) => declaration
+            .declarations
+            .iter()
+            .all(|declarator| declarator_cannot_call(declarator, arrays)),
         Statement::ExpressionStatement(statement) => {
             inert_statements_unchecked() || expression_cannot_call(&statement.expression)
         }
@@ -397,18 +414,41 @@ fn statement_cannot_call(stmt: &Statement<'_>) -> bool {
             inert_statements_unchecked()
                 || block.body.iter().all(|inner| {
                     !matches!(inner, Statement::FunctionDeclaration(_))
-                        && statement_cannot_call(inner)
+                        && statement_cannot_call(inner, arrays)
                 })
         }
         _ => false,
     }
 }
 
-fn declarator_cannot_call(declarator: &VariableDeclarator<'_>) -> bool {
+fn declarator_cannot_call(declarator: &VariableDeclarator<'_>, arrays: Option<&Scoping>) -> bool {
     if !matches!(declarator.id, BindingPattern::BindingIdentifier(_)) {
         return false;
     }
-    declarator.init.as_ref().is_none_or(expression_cannot_call)
+    declarator.init.as_ref().is_none_or(|init| {
+        expression_cannot_call(init) || arrays.is_some_and(|scoping| is_fresh_array(init, scoping))
+    })
+}
+
+fn is_fresh_array(expr: &Expression<'_>, scoping: &Scoping) -> bool {
+    let Expression::NewExpression(new) = expr.without_parentheses() else {
+        return false;
+    };
+    let Expression::Identifier(callee) = new.callee.without_parentheses() else {
+        return false;
+    };
+    let unbound = callee
+        .reference_id
+        .get()
+        .is_some_and(|reference| scoping.get_reference(reference).symbol_id().is_none());
+    let length = match &new.arguments[..] {
+        [] => true,
+        [Argument::NumericLiteral(literal)] => {
+            literal.value.fract() == 0.0 && (0.0..=MAX_ARRAY_LENGTH).contains(&literal.value)
+        }
+        _ => false,
+    };
+    callee.name == ARRAY && unbound && length
 }
 
 fn expression_cannot_call(expr: &Expression<'_>) -> bool {

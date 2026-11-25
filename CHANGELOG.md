@@ -19,6 +19,16 @@ All notable changes to this project are documented in this file. The format is b
   top-level literal data (read nowhere else) and intact `Array.isArray`, `Math`, `String`,
   `Number` and `Object` members. On BLA this decides the remaining split-string predicates, so
   `merge-strings` turns each split string back into one literal.
+- The builtins scan follows a `const` alias of the global object (`globalThis`, `window`, `self`,
+  `global`, or `typeof globalThis !== "undefined" ? globalThis : {}`): the alias is judged like the
+  global object itself, so member reads and writes of names that are no built-in pass, and passing
+  it on still counts as an escape. `Object.defineProperty(globalThis, "key", ...)` as a statement
+  passes when the key names no built-in, global object, code runner or top-level binding.
+- The scan's numeric-key fixpoint drops a binding as soon as its evidence fails, so long chains of
+  bindings no longer exhaust the pass limit and turn every computed key into an unknown one.
+- `new Array(n)` (an integer literal) and `new Array()` count as code that cannot call user code at
+  the top of a file, when `Array` is the unbound global and no other input names it, so a
+  known-bits seed declared after one is not refused for that reason.
 
 ## [0.6.0] - 2026-11-24
 
