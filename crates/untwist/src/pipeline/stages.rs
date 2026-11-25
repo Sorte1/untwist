@@ -408,7 +408,14 @@ impl Pipeline {
             return (sem, PreparedSlot::default());
         }
         let started = self.begin("prepare");
-        let mut group = PassGroup::from_ctors(&prepare_ctors(), site.pass_opts.clone());
+        let mut ctors: Vec<PassCtor<'a>> = vec![
+            untwist_deobfuscate::js_confuser::locks_boxed,
+            untwist_deobfuscate::js_confuser::strings_boxed,
+            untwist_deobfuscate::js_confuser::globals_boxed,
+            untwist_deobfuscate::js_confuser::helpers_boxed,
+        ];
+        ctors.extend(prepare_ctors());
+        let mut group = PassGroup::from_ctors(&ctors, site.pass_opts.clone());
         let (sem, report, last) =
             run_to_fixpoint_noting_last(site.alloc, site.program, sem, &mut group);
         site.record("prepare", started, report);

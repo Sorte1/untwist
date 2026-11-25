@@ -1,5 +1,25 @@
 [
   {
+    "name": "remove-js-confuser-self-defending",
+    "stage": "prepare",
+    "unsafe": false
+  },
+  {
+    "name": "decode-js-confuser-strings",
+    "stage": "prepare",
+    "unsafe": false
+  },
+  {
+    "name": "inline-js-confuser-globals",
+    "stage": "prepare",
+    "unsafe": false
+  },
+  {
+    "name": "fold-js-confuser-helpers",
+    "stage": "prepare",
+    "unsafe": false
+  },
+  {
     "name": "block-statements",
     "stage": "prepare",
     "unsafe": false

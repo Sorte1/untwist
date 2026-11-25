@@ -8,6 +8,17 @@ All notable changes to this project are documented in this file. The format is b
 
 ### Added
 
+- js-confuser 2.x support (`fixtures/js-confuser`, `cargo xtask obf-options --dir fixtures/js-confuser`).
+  String concealing decodes: each `STR(start, length)` getter call whose decoder, getter and the
+  `getGlobal`/`bufferToString` prelude match js-confuser's templates (up to names, layout and its
+  own minify pass) is replaced by the string, read as UTF-8 the way `TextDecoder` reads it; a
+  string that is not well-formed UTF-8 or starts with a byte order mark is left as a call.
+  Global concealing calls of standard globals (`console`, `Math`, ...) become the global, the
+  calculator's `calc("key", 3, 4)` folds, the duplicate-literal array's constant reads become the
+  literals, `"key" in dummyFunction` opaque predicates fold to `false`, and `lock.selfDefending`'s
+  newline checks go when no checked function's source holds a newline. In the default lane each
+  needs the built-ins it reads unpatched, and the machinery is removed only when no code may
+  observe the global object's names.
 - `dead-code` folds int32 opaque predicates by tracking which bits of a `const` are known through
   `& | ^ ~ + - << >> >>>` and `Math.imul`, for example `(Math.imul(s | 1, (s | 1) + 1) & 1) === 0`
   when only some bits of `s` are known; a test that the low unknown bits decide is tried for every

@@ -16,6 +16,7 @@ own observables, so node must print the same thing before and after Untwist.
 | `eval/` | Decoder corpus over every array, rotator, decoder and encoding combination; do not hand-edit | `cargo xtask corpus`, `crates/untwist-eval/tests/` |
 | `generated/` | Large generated bundles, not committed | `cargo xtask corpus-bundle`, the big-bundle tests |
 | `js-confuser/` | js-confuser 2.1.3 output over every option alone (lock options one by one), pairs of string concealing, renaming, minify, AST scrambler, dispatcher and global concealing, and the three presets, from `tools/js-confuser/matrix.mjs` with `Math.random` seeded per file; `MANIFEST`, `EXPECT` and `BASELINE` describe each file | `cargo xtask obf-options --dir fixtures/js-confuser`, `xtask/tests/obf_options_drift.rs` |
+| `js-confuser-decode/` | js-confuser outputs that decode and near misses that must keep their machinery (packed string written, early getter call, altered decoder, a byte order mark, patched built-ins, unknown calculator key, a shadowed global), as programs that print | `crates/untwist/tests/js_confuser_decode.rs` |
 | `jsx/` | `createElement` and `jsx()` call shapes | `cargo xtask diff-jsx`, `crates/untwist-jsx/tests/fixtures.rs` |
 | `known-bits/` | Programs that print, an int32 predicate that known bits decide, or a near miss `dead-code` must keep | `crates/untwist/tests/known_bits_behaviour.rs` |
 | `layers/` | `eval`, `Function`, `atob` and p.a.c.k.e.r. layers, as classic scripts that print | `cargo xtask diff-layers`, `crates/untwist/tests/layers_*.rs` |
