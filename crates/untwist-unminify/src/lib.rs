@@ -1,4 +1,5 @@
 pub mod block_statements;
+pub mod callee_params;
 pub mod computed_properties;
 pub mod default_parameters;
 pub mod for_to_while;
