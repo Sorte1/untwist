@@ -1,4 +1,4 @@
-use std::cell::OnceCell;
+use std::cell::{OnceCell, RefCell};
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
@@ -6,25 +6,31 @@ use oxc_ast::ast::{
     Statement, VariableDeclarationKind,
 };
 use oxc_semantic::Scoping;
-use oxc_span::Span;
+use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::{BinaryOperator, LogicalOperator, UnaryOperator};
 use oxc_syntax::reference::ReferenceId;
 use oxc_syntax::symbol::SymbolId;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::parse::parse_program;
 use untwist_core::print::{expression_text, function_text};
 use untwist_core::semantic::builtins::{patched_by_another_input, scan, Reliance};
-use untwist_core::semantic::has_module_syntax;
+use untwist_core::semantic::{
+    has_module_syntax, is_constant_binding_in, observing_open, AnnexBWrites, Strictness,
+};
 use untwist_eval::closed_script_value;
 use untwist_eval::fold::Const;
 
 use super::resolved;
+use crate::bindings::reaches_a_script_global;
+use crate::calls::agnostic::names_reachable_from;
 use crate::pure_calls::literal_data;
 
 const FUEL: u64 = 5_000_000;
 const HEAP: u64 = 1 << 24;
 
 const GLOBALS: [&str; 5] = ["Array", "Math", "String", "Number", "Object"];
+
+const USE_STRICT: &str = "\"use strict\";\n";
 
 const IS_ARRAY: &str = "var Array = { isArray: function (value) { return Object.prototype.toString.call(value) === \"[object Array]\"; } };\n";
 
@@ -39,6 +45,8 @@ pub struct Roots<'p> {
     data: FxHashMap<SymbolId, (usize, &'p Expression<'p>)>,
     order: FxHashMap<Span, usize>,
     builtins: OnceCell<bool>,
+    annex_b: OnceCell<AnnexBWrites>,
+    decided: RefCell<FxHashMap<(Span, Span), Option<bool>>>,
     unsafe_lane: bool,
 }
 
@@ -50,6 +58,8 @@ impl<'p> Roots<'p> {
             data: FxHashMap::default(),
             order: FxHashMap::default(),
             builtins: OnceCell::new(),
+            annex_b: OnceCell::new(),
+            decided: RefCell::default(),
             unsafe_lane,
         };
         for (index, statement) in program.body.iter().enumerate() {
@@ -88,9 +98,22 @@ impl<'p> Roots<'p> {
     }
 
     pub fn decide(&self, test: &Expression<'_>, seed: Span, scoping: &Scoping) -> Option<bool> {
+        let key = (test.span(), seed);
+        if let Some(known) = self.decided.borrow().get(&key) {
+            return *known;
+        }
+        let decided = self.decide_afresh(test, seed, scoping);
+        self.decided.borrow_mut().insert(key, decided);
+        decided
+    }
+
+    fn decide_afresh(&self, test: &Expression<'_>, seed: Span, scoping: &Scoping) -> Option<bool> {
         let index = *self.order.get(&seed)?;
         let shape = Shape::of(test, scoping)?;
         let function = *self.functions.get(&shape.symbol)?;
+        if !self.fixed(shape.symbol, scoping) {
+            return None;
+        }
         let references = scoping.get_resolved_references(shape.symbol);
         let mut count = 0;
         for reference in references {
@@ -105,14 +128,17 @@ impl<'p> Roots<'p> {
         let text = function_text(function, false);
         let free = closed_reads(function, scoping, &self.data, &text)?;
         let mut inits = Vec::new();
+        let mut named: FxHashSet<SymbolId> = FxHashSet::default();
+        named.insert(shape.symbol);
         for (symbol, reads) in free.reads {
+            named.insert(symbol);
             let (declared, init) = self.data.get(&symbol)?;
             let total = scoping.get_resolved_references(symbol).count();
             if *declared >= index || total != reads {
                 return None;
             }
             let name = scoping.symbol_name(symbol);
-            if GLOBALS.contains(&name) {
+            if GLOBALS.contains(&name) || !self.fixed(symbol, scoping) {
                 return None;
             }
             inits.push((name.to_string(), *init));
@@ -120,8 +146,50 @@ impl<'p> Roots<'p> {
         if !self.builtins_hold(scoping) {
             return None;
         }
-        let value = evaluate(&inits, free.arrays, &text, shape.call)?;
+        if !self.unsafe_lane && self.reached_through_the_global_object(&named, scoping) {
+            return None;
+        }
+        let script = Script {
+            strict: self.is_strict(function),
+            arrays: free.arrays,
+            function: &text,
+        };
+        let value = evaluate(&inits, &script, shape.call)?;
         Some(value == shape.expected)
+    }
+
+    fn fixed(&self, symbol: SymbolId, scoping: &Scoping) -> bool {
+        let annex_b = self
+            .annex_b
+            .get_or_init(|| AnnexBWrites::of(self.program, scoping));
+        is_constant_binding_in(scoping, annex_b, symbol)
+    }
+
+    fn is_strict(&self, function: &Function<'_>) -> bool {
+        self.program.source_type.is_module()
+            || Strictness::of_program(self.program)
+                .in_function(function)
+                .is_strict()
+    }
+
+    fn reached_through_the_global_object(
+        &self,
+        symbols: &FxHashSet<SymbolId>,
+        scoping: &Scoping,
+    ) -> bool {
+        if self.program.source_type.is_module() || has_module_syntax(self.program) {
+            return false;
+        }
+        let mut names: Vec<&str> = symbols
+            .iter()
+            .map(|symbol| scoping.symbol_name(*symbol))
+            .collect();
+        names.sort_unstable();
+        names.dedup();
+        observing_open(|| {
+            names_reachable_from(self.program, scoping, &names)
+                || reaches_a_script_global(symbols, &[], self.program, scoping)
+        })
     }
 
     fn builtins_hold(&self, scoping: &Scoping) -> bool {
@@ -314,20 +382,28 @@ fn words<'t>(text: &'t str, word: &'t str) -> impl Iterator<Item = &'t str> + 't
     })
 }
 
+struct Script<'t> {
+    strict: bool,
+    arrays: bool,
+    function: &'t str,
+}
+
 fn evaluate(
     inits: &[(String, &Expression<'_>)],
-    arrays: bool,
-    function: &str,
+    script: &Script<'_>,
     call: &Expression<'_>,
 ) -> Option<f64> {
     let mut text = String::new();
-    if arrays {
+    if script.strict {
+        text.push_str(USE_STRICT);
+    }
+    if script.arrays {
         text.push_str(IS_ARRAY);
     }
     for (name, init) in inits {
         text.push_str(&format!("var {name} = {};\n", expression_text(init)));
     }
-    text.push_str(function);
+    text.push_str(script.function);
     text.push_str(&format!("\n{};\n", expression_text(call)));
     let alloc = Allocator::default();
     let parsed = parse_program(&alloc, &text);

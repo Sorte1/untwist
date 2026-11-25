@@ -170,8 +170,54 @@ fn rejected<'a>(host: &dyn Host<'a>, message: &str) -> Abrupt<'a> {
     )
 }
 
+thread_local! {
+    static REFUSED: Cell<bool> = const { Cell::new(false) };
+}
+
+struct Refusing {
+    previous: bool,
+}
+
+impl Drop for Refusing {
+    fn drop(&mut self) {
+        REFUSED.with(|flag| flag.set(self.previous));
+    }
+}
+
+pub(crate) fn refusing_regexps<R>(run: impl FnOnce() -> R) -> R {
+    let _refusing = Refusing {
+        previous: REFUSED.with(|flag| flag.replace(true)),
+    };
+    run()
+}
+
+fn has_named_group(pattern: &str) -> bool {
+    pattern
+        .match_indices("(?<")
+        .any(|(at, _)| !matches!(pattern.as_bytes().get(at + 3), Some(b'=' | b'!')))
+}
+
+fn has_word_escape(pattern: &str) -> bool {
+    ["\\w", "\\W", "\\b", "\\B"]
+        .iter()
+        .any(|escape| pattern.contains(escape))
+}
+
 fn refuse_unmodelled_pattern(pattern: &str, flag_text: &str) -> EvalResult<bool> {
+    if REFUSED.with(Cell::get) {
+        return Err(Bail::Unsupported(
+            &"a regular expression in a closed script",
+        ));
+    }
     let unicode = flag_text.contains('u') || flag_text.contains('v');
+    if has_named_group(pattern) {
+        return Err(Bail::Unsupported(&"a named capture group"));
+    }
+    if unicode && flag_text.contains('i') && has_word_escape(pattern) {
+        return Err(Bail::Unsupported(
+            &"a word escape in a case-insensitive unicode pattern",
+        ));
+    }
     if !unicode && pattern.contains("\\u{") {
         return Err(Bail::Unsupported(
             &"a braced unicode escape in a pattern without the u flag",

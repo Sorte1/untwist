@@ -300,7 +300,8 @@ pub fn closed_script_value(
     let mut interp = Interp::new(program.source_text, Budget::new(fuel));
     interp.set_heap(Some(HeapLedger::new(heap)));
     lexical::refuse_program_dead_zones(program).ok()?;
-    let value = run_script(&mut interp, program).ok()?;
+    let value =
+        crate::builtins::regexp::refusing_regexps(|| run_script(&mut interp, program)).ok()?;
     crate::fold::value_to_const(&value)
 }
 
