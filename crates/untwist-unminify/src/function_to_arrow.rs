@@ -11,6 +11,7 @@ use untwist_core::pass::{
 };
 use untwist_core::semantic::{is_constant_binding, scope_hazard};
 
+use crate::callee_params::{callee_of, parameter_at, Callee, CalleeParams};
 use crate::var_to_let::{is_text_read, Frozen};
 
 pub const PASS: &str = "function-to-arrow";
@@ -26,6 +27,7 @@ pub struct FunctionToArrow<'a> {
     callees: Vec<u64>,
     pending: Vec<u64>,
     frozen: Frozen,
+    callee_params: CalleeParams,
     spare: Option<Expression<'a>>,
 }
 
@@ -373,8 +375,21 @@ impl<'a> FunctionToArrow<'a> {
             return;
         }
         let skipped = receiver_arguments(&call.callee);
-        for argument in call.arguments.iter_mut().skip(skipped) {
+        let callee = match callee_of(&call.callee, cx.scoping()) {
+            Callee::Local(symbol, shift) => Some((symbol, shift)),
+            Callee::Unknown | Callee::Constructs => None,
+        };
+        for (position, argument) in call.arguments.iter_mut().enumerate().skip(skipped) {
             if !is_convertible_callback(argument, cx.scoping()) {
+                continue;
+            }
+            let may_construct = callee.is_some_and(|(symbol, shift)| {
+                parameter_at(position, shift).is_none_or(|parameter| {
+                    self.callee_params
+                        .may_construct(cx.scoping(), symbol, parameter)
+                })
+            });
+            if may_construct {
                 continue;
             }
             if convert_argument(argument, &mut self.spare, cx) {
@@ -447,6 +462,10 @@ impl<'a> Pass<'a> for FunctionToArrow<'a> {
         self.callees.clear();
         self.pending.clear();
         self.frozen.clear();
+        self.callee_params = match self.active && cx.opts.unsafe_transforms {
+            true => CalleeParams::of(program, cx.scoping()),
+            false => CalleeParams::default(),
+        };
         if self.active {
             self.callees
                 .resize(scoping.references_len().div_ceil(64), 0);

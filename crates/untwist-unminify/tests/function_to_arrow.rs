@@ -190,3 +190,101 @@ fn a_callback_using_this_stays() {
 fn a_constructed_callee_argument_stays() {
     assert_stays("  return new Thing(function () {});", true);
 }
+
+#[test]
+fn a_callback_a_local_callee_constructs_stays() {
+    assert_stays(
+        "  function q(a) {\n    return new a();\n  }\n  return q(function () {});",
+        true,
+    );
+}
+
+#[test]
+fn a_callback_whose_prototype_a_local_callee_reads_stays() {
+    assert_stays(
+        "  function q(a) {\n    return a.prototype;\n  }\n  return q(function () {});",
+        true,
+    );
+}
+
+#[test]
+fn a_callback_a_local_callee_stores_stays() {
+    assert_stays(
+        "  const q = (a) => {\n    r = a;\n  };\n  return q(function () {});",
+        true,
+    );
+}
+
+#[test]
+fn a_callback_a_local_callee_constructs_through_call_stays() {
+    assert_stays(
+        "  function q(a, b) {\n    return new b();\n  }\n  return q.call(null, 1, function () {});",
+        true,
+    );
+}
+
+#[test]
+fn a_callback_a_local_callee_reads_through_arguments_stays() {
+    assert_stays(
+        "  function q() {\n    return new arguments[0]();\n  }\n  return q(function () {});",
+        true,
+    );
+}
+
+#[test]
+fn a_callback_a_local_callee_only_calls_becomes_an_arrow() {
+    let body =
+        "  function q(a) {\n    return a();\n  }\n  return q(function () {\n    return 1;\n  });";
+    assert_eq!(
+        run_with(&in_function(body), true, true),
+        in_function(
+            "  function q(a) {\n    return a();\n  }\n  return q(() => {\n    return 1;\n  });"
+        )
+    );
+}
+
+#[test]
+fn a_callback_a_local_callee_hands_to_a_constructing_callee_stays() {
+    assert_stays(
+        "  function r(b) {\n    return new b();\n  }\n  function q(a) {\n    return r(a);\n  }\n  return q(function () {});",
+        true,
+    );
+}
+
+#[test]
+fn a_callback_a_local_callee_hands_to_unknown_code_becomes_an_arrow() {
+    let body = "  function q(a) {\n    return list.map(a);\n  }\n  return q(function () {\n    return 1;\n  });";
+    assert_eq!(
+        run_with(&in_function(body), true, true),
+        in_function(
+            "  function q(a) {\n    return list.map(a);\n  }\n  return q(() => {\n    return 1;\n  });"
+        )
+    );
+}
+
+#[test]
+fn a_callback_a_local_callee_hands_to_reflect_construct_stays() {
+    assert_stays(
+        "  function q(a) {\n    return Reflect.construct(a, []);\n  }\n  return q(function () {});",
+        true,
+    );
+}
+
+#[test]
+fn a_callback_whose_length_a_local_callee_reads_becomes_an_arrow() {
+    let body = "  function q(a) {\n    return a.length + a();\n  }\n  return q(function (x) {\n    return x;\n  });";
+    assert_eq!(
+        run_with(&in_function(body), true, true),
+        in_function(
+            "  function q(a) {\n    return a.length + a();\n  }\n  return q((x) => {\n    return x;\n  });"
+        )
+    );
+}
+
+#[test]
+fn a_callback_to_a_bound_constructing_callee_stays() {
+    assert_stays(
+        "  function q(a, b) {\n    return new b();\n  }\n  return q.bind(null, 1)(function () {});",
+        true,
+    );
+}

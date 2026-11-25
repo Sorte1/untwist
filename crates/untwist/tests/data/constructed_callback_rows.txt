@@ -1,0 +1,11 @@
+new-param|(function () { function q(a) { return new a(); } console.log(typeof q(function () {})); })();
+prototype-read|(function () { function q(a) { return typeof a.prototype; } console.log(q(function () {})); })();
+handed-on|(function () { function r(b) { return new b(); } function q(a) { return r(a); } console.log(typeof q(function () {})); })();
+reflect-construct|(function () { function q(a) { return Reflect.construct(a, []); } console.log(typeof q(function () {})); })();
+via-call|(function () { function q(a, b) { return new b(); } console.log(typeof q.call(null, 1, function () {})); })();
+via-bind|(function () { function q(a) { return new a(); } console.log(typeof q.bind(null)(function () {})); })();
+const-arrow|(function () { const q = (a) => new a(); console.log(typeof q(function () {})); })();
+arguments|(function () { function q() { return new arguments[0](); } console.log(typeof q(function () {})); })();
+is-constructor|(function () { function c(a) { try { Reflect.construct(String, [], a); return true; } catch (e) { return false; } } console.log(c(function () {})); })();
+stored|(function () { const box = {}; function q(a) { box.f = a; } q(function () {}); console.log(typeof new box.f()); })();
+only-called|(function () { function q(a) { return a.length + a(); } console.log(q(function () { return 1; })); })();
