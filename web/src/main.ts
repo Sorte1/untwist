@@ -42,6 +42,7 @@ import { mountShareLink } from './ui/share-link';
 import { mountSteps } from './ui/steps-view';
 import { mountStringsTab } from './ui/strings-tab';
 import { mountLibrariesTab } from './ui/libraries-tab';
+import { mountComponentsTab } from './ui/components-tab';
 import { mountLinks } from './ui/link-view';
 import { mountStatusBar } from './ui/status-bar';
 import { mountDetailsToggle } from './ui/details/toggle';
@@ -231,6 +232,7 @@ function main(): void {
   mountSplitBanner(store, start);
   mountStringsTab(store, inputView);
   mountLibrariesTab(store, outputView, libraries, run);
+  mountComponentsTab(store, run);
   mountLinks(store, inputView, outputView);
   mountDetailsToggle(store, () => flagsFrom(store.get().settings));
   mountPaletteKey(store, { run, pickExample });

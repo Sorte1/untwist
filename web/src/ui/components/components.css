@@ -1,0 +1,52 @@
+.components-panel {
+  padding: 8px 14px 12px;
+  border-top: 1px solid var(--border);
+}
+
+.diagnostics:has(.components-panel:not([hidden])) {
+  max-height: 64vh;
+}
+
+.comp-note {
+  margin: 0 0 8px;
+  font-size: 12px;
+  max-width: 70ch;
+}
+
+.comp-item {
+  border-bottom: 1px solid var(--border);
+  padding: 6px 0;
+}
+
+.comp-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.comp-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+
+.comp-code {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  max-height: 40vh;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.45;
+  tab-size: 2;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  white-space: pre;
+}
+
+.comp-kept {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+}

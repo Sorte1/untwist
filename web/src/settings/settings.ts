@@ -31,6 +31,7 @@ export interface Settings {
   readonly input: InputVisibility;
   readonly libs: boolean;
   readonly types: TypesChoice;
+  readonly svelte: boolean;
 }
 
 export const RENAME_MODES: readonly RenameMode[] = ['none', 'simple', 'smart', 'unique', 'mangle'];
@@ -64,9 +65,10 @@ export const DEFAULTS: Settings = {
   input: 'shown',
   libs: false,
   types: 'off',
+  svelte: true,
 };
 
-export const CLI_DEFAULTS: Settings = { ...DEFAULTS, unsafe: false, libs: true };
+export const CLI_DEFAULTS: Settings = { ...DEFAULTS, unsafe: false, libs: true, svelte: false };
 
 export const LIBRARY_PASSES: readonly string[] = ['library-names', 'library-rename'];
 
@@ -97,7 +99,7 @@ export function sameSettings(a: Settings, b: Settings): boolean {
   return (Object.keys(DEFAULTS) as Array<keyof Settings>).every((key) => a[key] === b[key]);
 }
 
-const PANEL_KEYS: ReadonlyArray<keyof Settings> = ['unpack', 'split', 'assume', 'jsx', 'libs', 'modern', 'rename', 'fuel', 'deob', 'unmin', 'human', 'iter', 'single', 'smap', 'imap', 'mem', 'time', 'off', 'wasm', 'types'];
+const PANEL_KEYS: ReadonlyArray<keyof Settings> = ['unpack', 'split', 'assume', 'jsx', 'libs', 'modern', 'rename', 'fuel', 'deob', 'unmin', 'human', 'iter', 'single', 'smap', 'imap', 'mem', 'time', 'off', 'wasm', 'types', 'svelte'];
 
 export function changedCount(settings: Settings): number {
   return PANEL_KEYS.filter((key) => settings[key] !== DEFAULTS[key]).length;

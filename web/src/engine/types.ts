@@ -23,6 +23,7 @@ export interface RunResult extends RunFields {
   readonly decodedCount?: number;
   readonly links?: string;
   readonly wasm?: string;
+  readonly svelte?: string;
   readonly wasmBytes?: readonly Uint8Array<ArrayBuffer>[];
   readonly tablesLoaded?: string;
   readonly libraryTables?: LibraryTablesUsed;

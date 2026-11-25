@@ -38,5 +38,6 @@ export function flagsFrom(settings: Settings): string {
   add(off !== '', '--disable', off);
   add(settings.wasm !== 'off', '--wasm-check', settings.wasm);
   add(settings.types !== 'off', '--types', settings.types);
+  add(settings.svelte, '--restore', 'svelte');
   return words.join(' ');
 }

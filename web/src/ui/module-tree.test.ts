@@ -63,4 +63,17 @@ describe('the zip download', () => {
     expect(Object.getPrototypeOf(plan.files)).toBeNull();
     expect(plan.refused).toEqual(['toString']);
   });
+
+  it('puts restored components beside the code, with or without a bundle', () => {
+    const plain = zipPlan(null, null, [], 'x();\n', [{ path: 'App.svelte', code: '<p>x</p>\n' }]);
+    expect(Object.keys(plan(plain)).sort()).toEqual(['App.svelte', 'deobfuscated.js']);
+    const bundle = { kind: 'rollup', modules: [{ id: '0', path: 'src/a.js', isEntry: true }] };
+    const tree = zipPlan('{}', bundle, ['a();'], '', [{ path: 'src/App.svelte', code: '' }, { path: 'src/a.js', code: '' }]);
+    expect(Object.keys(plan(tree)).sort()).toEqual(['bundle.json', 'deobfuscated.js', 'src/App.svelte', 'src/a.js']);
+    expect(tree.refused).toEqual(['src/a.js']);
+  });
 });
+
+function plan(zip: ReturnType<typeof zipPlan>): Record<string, unknown> {
+  return zip.files as Record<string, unknown>;
+}

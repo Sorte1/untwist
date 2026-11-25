@@ -98,6 +98,7 @@ function run(source: string, flags: string, refused: boolean, extras: string, wa
       decodedCount: output.decoded_count(),
       links: output.links_json(),
       wasm: wasmJson,
+      svelte: output.svelte_json(),
       wasmBytes: wasmBytesOf(output, wasmCount(wasmJson)),
       engineMs: performance.now() - started,
       memoryBytes: memory?.buffer.byteLength ?? 0,
