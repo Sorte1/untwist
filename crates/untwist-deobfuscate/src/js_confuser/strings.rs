@@ -694,6 +694,9 @@ impl<'a> Pass<'a> for DecodeStrings {
                 None,
             );
         }
+        if let Some(kept) = plan.kept {
+            cx.note(format!("js-confuser string machinery kept: {kept}"), None);
+        }
         if !apply(&plan, &removals, program, cx) {
             self.settled = true;
         }

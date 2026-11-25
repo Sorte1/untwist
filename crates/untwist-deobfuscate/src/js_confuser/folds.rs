@@ -385,9 +385,10 @@ fn analyse(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan 
         }
     }
     if refs.has_with || may_call_eval(scoping) {
-        plan.notes.push(format!(
+        plan.notes.push(
             "js-confuser helpers kept: the program has a with statement or may call eval"
-        ));
+                .to_string(),
+        );
         return plan;
     }
     let names: Vec<&str> = found
@@ -395,9 +396,8 @@ fn analyse(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan 
         .map(|h| scoping.symbol_name(h.symbol))
         .collect();
     if names.iter().any(|name| is_foreign_global(name)) {
-        plan.notes.push(format!(
-            "js-confuser helpers kept: another input names them"
-        ));
+        plan.notes
+            .push("js-confuser helpers kept: another input names them".to_string());
         return plan;
     }
     let fns: Vec<SymbolId> = found.iter().map(|h| h.symbol).collect();
@@ -415,16 +415,18 @@ fn analyse(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan 
         .collect();
     let reach = global_reach(program, scoping, (None, &excluded), watch);
     if reach.reach.is_some() || reach.reach_by_code.is_some() {
-        plan.notes.push(format!(
+        plan.notes.push(
             "js-confuser helpers kept: code may reach them through the global object or code text"
-        ));
+                .to_string(),
+        );
         return plan;
     }
     let removable = !names_observed(&reach);
     if !removable {
-        plan.notes.push(format!(
+        plan.notes.push(
             "js-confuser helpers folded but kept: code may observe the global object's names"
-        ));
+                .to_string(),
+        );
     }
     if removable && reach.outside_premise.is_some() {
         plan.notes.push(PREMISE_NOTE.to_string());
