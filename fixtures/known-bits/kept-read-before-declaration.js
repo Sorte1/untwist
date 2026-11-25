@@ -1,5 +1,5 @@
 function early() {
-  return (seed & 1) === 1 ? "one" : "zero";
+  return (Math.imul(seed | 2, (seed | 2) + 1) & 1) === 0 ? "even" : "odd";
 }
 try {
   console.log(early());

@@ -323,32 +323,73 @@ fn is_candidate(expr: &Expression<'_>, scoping: &Scoping) -> bool {
             is_candidate(&unary.argument, scoping)
         }
         Expression::BinaryExpression(binary) => {
-            reads_const_operand(&binary.left, scoping, 0)
-                || reads_const_operand(&binary.right, scoping, 0)
+            let mut reads = Vec::new();
+            let imul = const_reads(&binary.left, scoping, 0, &mut reads)
+                | const_reads(&binary.right, scoping, 0, &mut reads);
+            imul || reads
+                .iter()
+                .enumerate()
+                .any(|(index, symbol)| reads[..index].contains(symbol))
         }
         _ => false,
     }
 }
 
-fn reads_const_operand(expr: &Expression<'_>, scoping: &Scoping, depth: u32) -> bool {
+fn const_reads(
+    expr: &Expression<'_>,
+    scoping: &Scoping,
+    depth: u32,
+    reads: &mut Vec<SymbolId>,
+) -> bool {
     if depth > 8 {
         return false;
     }
     match expr.without_parentheses() {
         Expression::Identifier(id) => {
-            depth > 0
-                && resolved(id, scoping)
-                    .is_some_and(|symbol| scoping.symbol_flags(symbol).is_const_variable())
+            if let Some(symbol) = resolved(id, scoping)
+                .filter(|symbol| depth > 0 && scoping.symbol_flags(*symbol).is_const_variable())
+            {
+                reads.push(symbol);
+            }
+            false
         }
-        Expression::BinaryExpression(binary) => {
-            reads_const_operand(&binary.left, scoping, depth + 1)
-                || reads_const_operand(&binary.right, scoping, depth + 1)
+        Expression::BinaryExpression(binary) if is_int_operator(binary.operator) => {
+            const_reads(&binary.left, scoping, depth + 1, reads)
+                | const_reads(&binary.right, scoping, depth + 1, reads)
         }
-        Expression::CallExpression(call) if is_global_math_imul(&call.callee, scoping) => call
-            .arguments
-            .iter()
-            .filter_map(|argument| argument.as_expression())
-            .any(|argument| reads_const_operand(argument, scoping, depth + 1)),
+        Expression::UnaryExpression(unary)
+            if matches!(
+                unary.operator,
+                UnaryOperator::BitwiseNot | UnaryOperator::UnaryNegation
+            ) =>
+        {
+            const_reads(&unary.argument, scoping, depth + 1, reads)
+        }
+        Expression::CallExpression(call) if is_global_math_imul(&call.callee, scoping) => {
+            let before = reads.len();
+            for argument in call
+                .arguments
+                .iter()
+                .filter_map(|argument| argument.as_expression())
+            {
+                const_reads(argument, scoping, depth + 1, reads);
+            }
+            reads.len() > before
+        }
         _ => false,
     }
+}
+
+fn is_int_operator(operator: BinaryOperator) -> bool {
+    matches!(
+        operator,
+        BinaryOperator::BitwiseAnd
+            | BinaryOperator::BitwiseOR
+            | BinaryOperator::BitwiseXOR
+            | BinaryOperator::ShiftLeft
+            | BinaryOperator::ShiftRight
+            | BinaryOperator::ShiftRightZeroFill
+            | BinaryOperator::Addition
+            | BinaryOperator::Subtraction
+    )
 }
