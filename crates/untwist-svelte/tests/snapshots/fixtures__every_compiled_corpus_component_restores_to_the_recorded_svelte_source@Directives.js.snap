@@ -1,0 +1,16 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/Directives.js
+---
+==== Directives.svelte
+<script>
+	let active = $state(false);
+	let color = $state('blue');
+</script>
+
+<div class="" class:active class:big={!active} style:color>{active ? 'yes' : 'no'}</div>
+<button onclick={() => {
+		active = !active;
+		color = 'green';
+	}}>flip</button>

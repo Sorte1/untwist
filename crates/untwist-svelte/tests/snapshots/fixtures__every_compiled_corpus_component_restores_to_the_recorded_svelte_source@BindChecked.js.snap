@@ -1,0 +1,14 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/BindChecked.js
+---
+==== BindChecked.svelte
+<script>
+	let on = $state(false);
+</script>
+
+<label><input type="checkbox" bind:checked={on} /> toggle</label>
+{#if on}
+	<p>on</p>
+{/if}

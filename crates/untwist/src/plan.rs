@@ -13,6 +13,7 @@ pub(crate) enum Role {
     Listing,
     Module(usize),
     Declarations,
+    Svelte,
     Wasm,
     SourceMap,
 }
@@ -169,6 +170,7 @@ const OWNER_OUTPUT: &str = "the deobfuscated output is already planned at that p
 const OWNER_MODULE: &str = "an earlier module is already planned at that path";
 const OWNER_LISTING: &str = "the bundle listing is written at that path";
 const OWNER_WASM: &str = "a wasm module is already planned at that path";
+const OWNER_SVELTE: &str = "an earlier restored component is already planned at that path";
 const OWNER_MAP: &str = "a source map is already planned at that path";
 const OWNER_INSIDE: &str = "other files are already planned inside that path";
 const OWNER_ABOVE: &str = "a file is already planned at a parent of that path";
@@ -437,6 +439,22 @@ impl Planner<'_> {
         planned
     }
 
+    fn svelte(&mut self, dir: &Path, result: &Output) -> Vec<PlannedFile> {
+        let mut planned = Vec::with_capacity(result.svelte.len());
+        for file in &result.svelte {
+            planned.extend(self.admit(
+                dir,
+                Candidate {
+                    relative: file.path.clone(),
+                    contents: file.code.clone().into_bytes(),
+                    role: Role::Svelte,
+                    owner: OWNER_SVELTE,
+                },
+            ));
+        }
+        planned
+    }
+
     fn modules(&mut self, dir: &Path, result: &Output) -> Vec<PlannedFile> {
         let Some(bundle) = result.bundle.as_ref() else {
             return Vec::new();
@@ -514,6 +532,7 @@ fn single_file_plan(dir: &Path, result: &Output, inputs: &[PathBuf]) -> Plan {
         files.extend(planner.admit(dir, listing));
     }
     files.extend(planner.wasm(dir, result));
+    files.extend(planner.svelte(dir, result));
     Plan {
         files,
         refused: planner.refused,
@@ -543,6 +562,7 @@ fn plan_per_module(dir: &Path, result: &Output, inputs: &[PathBuf]) -> Plan {
     let listing = planner.listing(dir, result);
     let wasm = planner.wasm(dir, result);
     let modules = planner.modules(dir, result);
+    let svelte = planner.svelte(dir, result);
     let listing = listing.map(|file| PlannedFile {
         contents: listing_contents(result, &planner.unwritten_modules),
         ..file
@@ -553,6 +573,7 @@ fn plan_per_module(dir: &Path, result: &Output, inputs: &[PathBuf]) -> Plan {
             .chain(listing)
             .chain(modules)
             .chain(wasm)
+            .chain(svelte)
             .collect(),
         refused: planner.refused,
         unwritten_modules: planner.unwritten_modules,
@@ -596,6 +617,7 @@ mod tests {
             source_maps: Vec::new(),
             source_map_link: None,
             types: None,
+            svelte: Vec::new(),
         }
     }
 

@@ -1695,6 +1695,7 @@ dependencies = [
  "untwist-eval",
  "untwist-jsx",
  "untwist-rename",
+ "untwist-svelte",
  "untwist-testing",
  "untwist-types",
  "untwist-unminify",
@@ -1852,6 +1853,21 @@ dependencies = [
  "untwist-libraries-corejs",
  "untwist-rename",
  "untwist-testing",
+]
+
+[[package]]
+name = "untwist-svelte"
+version = "0.6.0"
+dependencies = [
+ "insta",
+ "oxc_allocator",
+ "oxc_ast",
+ "oxc_ast_visit",
+ "oxc_semantic",
+ "oxc_span",
+ "oxc_syntax",
+ "rustc-hash",
+ "untwist-core",
 ]
 
 [[package]]

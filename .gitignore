@@ -4,6 +4,8 @@
 /target/
 /fixtures/generated/
 /tools/corpus/node_modules/
+/tools/svelte-restore/node_modules/
+/tools/svelte-restore/work/
 /tools/bundlers/node_modules/
 /tools/rolldown/node_modules/
 /tools/rollup-es/node_modules/

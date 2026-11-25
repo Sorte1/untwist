@@ -276,6 +276,17 @@ pub struct Args {
     )]
     pub types: Option<TypesArg>,
     #[arg(
+        long,
+        value_enum,
+        value_name = "FRAMEWORK",
+        value_delimiter = ',',
+        help = "opt-in: also write each compiled component of FRAMEWORK (svelte: Svelte 5 client \
+                output) back as source, one <Name>.svelte beside the file that holds it; a view \
+                for reading, the JavaScript output is unchanged, and a component with any part \
+                untwist cannot map is left out with a note; needs --output"
+    )]
+    pub restore: Vec<RestoreArg>,
+    #[arg(
         long = "list-passes",
         help = "print every pass the engine can run, with its stage, and exit"
     )]
@@ -325,6 +336,11 @@ fn fuel_steps(word: &str) -> Result<u64, String> {
 pub enum ReportFormat {
     Text,
     Json,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum RestoreArg {
+    Svelte,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -425,6 +441,7 @@ impl Args {
             wasm_check: self.wasm_check.check(),
             source_map: self.source_map.is_some(),
             types: self.types.map(TypesArg::mode),
+            svelte: self.restore.contains(&RestoreArg::Svelte),
             ..untwist::Options::default()
         }
     }

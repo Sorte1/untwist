@@ -127,6 +127,7 @@ Common flags:
 | `--unsafe` | Use the unsafe lane (see below). |
 | `--modern BASELINE` | Opt-in: remove core-js polyfills of features that are native in `BASELINE` (see [Modern mode](#modern-mode)). |
 | `--types[=jsdoc\|ts]` | Experimental, opt-in: annotate only types that hold for every value on every run, as JSDoc (the default) or TypeScript (see [Proven types](#proven-types)). |
+| `--restore svelte` | Opt-in, needs `-o`: also write each compiled Svelte 5 component back as a `.svelte` file (see [Svelte restore](#svelte-restore)). |
 | `--rename MODE` | `none` (default), `mangle`, `simple`, `smart` or `unique`. `-m` is short for `--rename mangle`. |
 | `--no-deobfuscate`, `--no-unminify`, `--no-unpack`, `--no-jsx` | Skip a stage. |
 | `--split-hoisted` | Also split Rollup/Vite scope-hoisted bundles, when the split provably keeps behaviour. |
@@ -462,6 +463,30 @@ renaming JavaScript to `.ts` (in a `.ts` file every parameter is required, an ob
 fixed shape, and so on), not from the annotations, so they do not touch the promise that every
 written type holds. JSDoc mode keeps `.js` and has none of them, which is why a bare `--types` and
 the playground's first choice are JSDoc.
+
+## Svelte restore
+
+`--restore svelte -o DIR` reads the final output (each input, or each unpacked module) for components
+compiled by Svelte 5 for the client, as the compiler emits them (`import * as $ from
+'svelte/internal/client'`) or scope-hoisted into a Rollup or Vite bundle that is not minified, and
+writes each one as `<Name>.svelte` beside the file that holds it. It is a view for reading: the
+JavaScript output is the same with or without the flag.
+
+The markup is rebuilt from the template strings and the node walk (`first_child`, `child`,
+`sibling`), with text, attributes, `class:` and `style:` directives, events, `bind:` (value, checked,
+group, this and component props), `{#if}`, `{#each}` (keyed, indexed, destructured, `{:else}`),
+`{#key}`, `{#await}`, `{@html}`, `{@const}`, snippets and `{@render}`, child components with
+children, and `<svelte:window>`/`<svelte:document>` events. The script gets its runes back (`$state`,
+`$state.raw`, `$derived`, `$derived.by`, `$effect`, `$effect.pre`, `$props` with defaults and
+`$bindable`), and the component's scoped CSS comes back in `<style>` without the `svelte-HASH`
+classes (a selector part that was global is written as `:global(...)`).
+
+A component with any statement, call or reference that has no Svelte spelling is left out with a
+note (`svelte: Name kept as JS: reason`); nothing is guessed. Legacy (non-runes) components,
+minified bundles (Terser inlines and renames the runtime) and `{...spread}` props are not restored
+yet. The round trip is checked by `tools/svelte-restore/harness.mjs`: every component in its corpus
+is compiled, optionally bundled, restored, compiled again and rendered in jsdom beside the
+original under the same props and clicks, and the DOM, console output and styles must match.
 
 ## Playground
 

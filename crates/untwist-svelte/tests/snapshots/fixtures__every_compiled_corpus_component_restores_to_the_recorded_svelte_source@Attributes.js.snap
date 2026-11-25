@@ -1,0 +1,14 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/Attributes.js
+---
+==== Attributes.svelte
+<script>
+	let { href = '/home', disabled = false } = $props();
+	let title = $state('tip');
+</script>
+
+<a class="link" {href} {title}>link</a>
+<button aria-label="Action" {disabled} onclick={() => (title = 'changed')}>act</button>
+<img src="/a.png" alt="" />

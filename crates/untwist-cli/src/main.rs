@@ -365,6 +365,9 @@ fn check_source_map_target(args: &Args) -> Result<()> {
             "--source-map file needs --output DIR; use --source-map inline to append the map to stdout"
         );
     }
+    if !args.restore.is_empty() && args.output.is_none() {
+        anyhow::bail!("--restore needs --output DIR, where the restored components are written beside the code");
+    }
     Ok(())
 }
 

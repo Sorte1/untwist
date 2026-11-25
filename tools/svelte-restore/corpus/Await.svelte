@@ -1,0 +1,12 @@
+<script>
+  let { value = 'done', fail = false } = $props();
+  let promise = $state(new Promise((resolve, reject) => setTimeout(() => (fail ? reject(new Error('bad')) : resolve(value)), 5)));
+</script>
+
+{#await promise}
+  <p>loading</p>
+{:then result}
+  <p>got {result}</p>
+{:catch error}
+  <p>error {error.message}</p>
+{/await}

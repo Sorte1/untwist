@@ -1,0 +1,17 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/Events.js
+---
+==== Events.svelte
+<script>
+	let log = $state('');
+
+	function onInput(event) {
+		log = 'input ' + event.target.value;
+	}
+</script>
+
+<input oninput={onInput} />
+<button onclick={() => (log = 'clicked')} onmouseenter={() => (log = 'hover')}>go</button>
+<p>{log}</p>

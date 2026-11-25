@@ -1,0 +1,14 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/EachPlain.js
+---
+==== EachPlain.svelte
+<script>
+	let words = $state(['alpha', 'beta']);
+</script>
+
+{#each words as word}
+	<span>{word}</span>
+{/each}
+<button onclick={() => words.push('gamma')}>add</button>

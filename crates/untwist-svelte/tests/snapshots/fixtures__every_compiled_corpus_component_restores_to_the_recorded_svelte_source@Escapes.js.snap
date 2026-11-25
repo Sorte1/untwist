@@ -1,0 +1,12 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/Escapes.js
+---
+==== Escapes.svelte
+<script>
+	let a = 1;
+</script>
+
+<p>braces &#123;1&#125; &amp; &lt;tag> done</p>
+<pre>  keep   spaces  </pre>

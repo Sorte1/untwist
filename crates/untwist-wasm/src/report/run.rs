@@ -28,12 +28,17 @@ pub struct RunReport {
     links: String,
     wasm: String,
     wasm_bytes: Vec<Vec<u8>>,
+    svelte: String,
 }
 
 #[wasm_bindgen]
 impl RunReport {
     pub fn wasm_json(&self) -> String {
         self.wasm.clone()
+    }
+
+    pub fn svelte_json(&self) -> String {
+        self.svelte.clone()
     }
 
     pub fn wasm_bytes(&self, index: u32) -> Option<Vec<u8>> {
@@ -137,6 +142,7 @@ fn report_with(source: &str, options: Options, wasm: &WasmFiles, maps: MapFlags)
         .bundle
         .as_ref()
         .map(untwist::BundleOutput::bundle_json);
+    let svelte = serde_json::to_string(&result.svelte).unwrap_or_default();
     let modules = result
         .bundle
         .take()
@@ -177,6 +183,7 @@ fn report_with(source: &str, options: Options, wasm: &WasmFiles, maps: MapFlags)
         links,
         wasm,
         wasm_bytes,
+        svelte,
     }
 }
 
@@ -264,6 +271,7 @@ fn report_for_with(
             links: String::new(),
             wasm: String::new(),
             wasm_bytes: Vec::new(),
+            svelte: String::new(),
         },
     }
 }

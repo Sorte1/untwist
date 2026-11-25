@@ -1,0 +1,8 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/Static.js
+---
+==== Static.svelte
+<header><nav><a href="/">home</a> | <a href="/about">about</a></nav></header>
+<main><article><h2>Title</h2> <p>Some <strong>static</strong> text.</p></article></main>

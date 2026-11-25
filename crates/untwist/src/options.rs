@@ -117,6 +117,7 @@ pub struct Options {
     pub module_goal: bool,
     pub types: Option<TypesMode>,
     pub script_goal: bool,
+    pub svelte: bool,
 }
 
 impl Default for Options {
@@ -158,6 +159,7 @@ impl Default for Options {
             module_goal: false,
             types: None,
             script_goal: false,
+            svelte: false,
         }
     }
 }
