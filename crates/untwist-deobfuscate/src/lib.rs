@@ -24,6 +24,7 @@ pub mod fold_chains;
 pub mod fused;
 mod inert_vars;
 pub mod init_order;
+pub mod known_bits;
 pub mod layers;
 mod lazy_decoder;
 pub mod legacy_reach;

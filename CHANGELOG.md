@@ -6,6 +6,15 @@ All notable changes to this project are documented in this file. The format is b
 
 ## [Unreleased]
 
+### Added
+
+- `dead-code` folds int32 opaque predicates by tracking which bits of a `const` are known through
+  `& | ^ ~ + - << >> >>>` and `Math.imul`, for example `(Math.imul(s | 1, (s | 1) + 1) & 1) === 0`
+  when only some bits of `s` are known; a test that the low unknown bits decide is tried for every
+  value of them. Every read of the `const` must come after its declaration, and `Math.imul` must be
+  unpatched (in the default lane also never reached through an alias of the global object).
+  BLA (bla-agents) samples are in `fixtures/bla/`.
+
 ## [0.6.0] - 2026-11-24
 
 There is no 0.5.1: the readability work planned for it ships in this release, together with

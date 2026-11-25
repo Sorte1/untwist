@@ -7,6 +7,7 @@ own observables, so node must print the same thing before and after Untwist.
 |---|---|---|
 | `behaviour/` | Programs that print, one string-array, rotator or decoder hazard each; `.mjs` files run as modules | `cargo xtask diff-behaviour`, `crates/untwist/tests/decode_behaviour.rs` |
 | `bundle-matrix/` | Two small apps (CommonJS deps, a CommonJS cycle, JSON, a dynamic import; core-js polyfills from Babel `useBuiltIns`) built by every bundler, version and runtime-shaping option in `tools/bundle-matrix/`, then minified or obfuscated; `MANIFEST`, `SHA256SUMS`, `EXPECT` and `expected/` describe each cell, `DROPPED` lists the cells whose own output does not run | `cargo xtask bundle-matrix` (local and release check), `xtask/tests/bundle_matrix_drift.rs` |
+| `bla/` | BLA (bla-agents, MIT, `LICENSE-bla`) challenge samples, v5, v6 L1-L3 with the clean template and v7 core; `SOURCE` names each file and commit, `EXPECT` the opaque predicates left per lane. They read the filesystem, spawn and fetch, and carry decoy text aimed at LLM agents: data only, never run them | `crates/untwist/tests/bla_fixtures.rs` |
 | `browserify-preludes/` | One small CommonJS app packed by browser-pack 0.9, 2, 3, 5, 6.0 and 6.1 (plain, two entries, `--standalone`, `hasExports`) and minified by terser, uglify-js, esbuild and swc, from `tools/browserify-preludes/gen.mjs`; `expected/` holds each cell's stdout | `crates/untwist-cli/tests/browserify_preludes.rs`, the recorded forms in `crates/untwist-unpack/src/browserify/forms.rs` |
 | `builtin-replaced/` | Programs that print, a string-array unit beside a write to a built-in | `crates/untwist/tests/builtin_replaced_behaviour.rs` |
 | `corpus-npm/` | Generated npm-style modules obfuscated with several decoder shapes | `cargo xtask corpus-npm`, `crates/untwist-deobfuscate/tests/corpus_npm.rs` |
@@ -15,6 +16,7 @@ own observables, so node must print the same thing before and after Untwist.
 | `eval/` | Decoder corpus over every array, rotator, decoder and encoding combination; do not hand-edit | `cargo xtask corpus`, `crates/untwist-eval/tests/` |
 | `generated/` | Large generated bundles, not committed | `cargo xtask corpus-bundle`, the big-bundle tests |
 | `jsx/` | `createElement` and `jsx()` call shapes | `cargo xtask diff-jsx`, `crates/untwist-jsx/tests/fixtures.rs` |
+| `known-bits/` | Programs that print, an int32 predicate that known bits decide, or a near miss `dead-code` must keep | `crates/untwist/tests/known_bits_behaviour.rs` |
 | `layers/` | `eval`, `Function`, `atob` and p.a.c.k.e.r. layers, as classic scripts that print | `cargo xtask diff-layers`, `crates/untwist/tests/layers_*.rs` |
 | `modern/` | Babel preset-env + core-js 3.39 builds (usage and entry, targets ie 11) through Rollup, webpack and esbuild from `tools/modern-fixtures/build.mjs`, as programs that print; `MANIFEST` lists each | `crates/untwist/tests/modern_fixtures.rs` |
 | `obfuscated/` | javascript-obfuscator output from `tools/obfuscated/gen.mjs`; `MANIFEST` and `EXPECT` describe each file | `cargo xtask obf-matrix` |
@@ -40,7 +42,7 @@ own observables, so node must print the same thing before and after Untwist.
 | `write-tree/` | Multi-file bundler output (an entry with a lazy chunk) copied from the `bundle-matrix/` cells of the same name, `tools/bundle-matrix/`; `expected/` holds what the original prints | `crates/untwist-cli/tests/write_tree.rs`, which runs the `-o` tree in node |
 
 Third-party inputs keep their licence beside them: `LICENSE-reference`,
-`LICENSE-javascript-obfuscator`, `obfuscators/licenses/`, `unpack-bundlers/licenses/`, `unpack-rolldown/licenses/`, `bundle-matrix/licenses/`, `webpack-eval/LICENSE-webpack`, `webpack-soundness/LICENSE-webpack` and `write-tree/licenses/`.
+`LICENSE-javascript-obfuscator`, `bla/LICENSE-bla`, `obfuscators/licenses/`, `unpack-bundlers/licenses/`, `unpack-rolldown/licenses/`, `bundle-matrix/licenses/`, `webpack-eval/LICENSE-webpack`, `webpack-soundness/LICENSE-webpack` and `write-tree/licenses/`.
 
 Not every sample in `reference/deobfuscate/` comes from the reference deobfuscator.
 `obfuscator.io-site-memo-reset.js` is the obfuscator.io website's output for `console.log("")`.
