@@ -1,4 +1,4 @@
-use oxc_ast::ast::{Function, Program};
+use oxc_ast::ast::{Expression, Function, Program};
 use oxc_codegen::{Codegen, CodegenOptions, CommentOptions, Context, Gen, IndentChar};
 
 use std::path::PathBuf;
@@ -83,6 +83,15 @@ pub fn function_text(function: &Function<'_>, minify: bool) -> String {
             ..CodegenOptions::default()
         },
     )
+}
+
+pub fn expression_text(expr: &Expression<'_>) -> String {
+    let mut codegen = Codegen::new().with_options(CodegenOptions {
+        comments: CommentOptions::disabled(),
+        ..CodegenOptions::default()
+    });
+    codegen.print_expression(expr);
+    codegen.into_source_text()
 }
 
 pub fn pretty_function_text(function: &Function<'_>) -> String {

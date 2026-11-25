@@ -292,6 +292,18 @@ impl<'a> Interp<'a> {
     }
 }
 
+pub fn closed_script_value(
+    program: &Program<'_>,
+    fuel: u64,
+    heap: u64,
+) -> Option<crate::fold::Const> {
+    let mut interp = Interp::new(program.source_text, Budget::new(fuel));
+    interp.set_heap(Some(HeapLedger::new(heap)));
+    lexical::refuse_program_dead_zones(program).ok()?;
+    let value = run_script(&mut interp, program).ok()?;
+    crate::fold::value_to_const(&value)
+}
+
 #[cfg_attr(not(feature = "value-api"), allow(dead_code))]
 pub fn eval_script_in<'a, R>(
     program: &'a Program<'a>,

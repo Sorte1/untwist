@@ -39,3 +39,5 @@ pub mod template;
 pub mod test_hooks;
 pub mod unmodelled;
 pub mod value;
+
+pub use interp::closed_script_value;

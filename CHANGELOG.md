@@ -14,6 +14,11 @@ All notable changes to this project are documented in this file. The format is b
   value of them. Every read of the `const` must come after its declaration, and `Math.imul` must be
   unpatched (in the default lane also never reached through an alias of the global object).
   BLA (bla-agents) samples are in `fixtures/bla/`.
+- A known-bits seed may take its low bit from a checksum: `typeof f === "function" && f(0) === K`
+  is evaluated when `f` is a top-level function called nowhere else whose only outside names are
+  top-level literal data (read nowhere else) and intact `Array.isArray`, `Math`, `String`,
+  `Number` and `Object` members. On BLA this decides the remaining split-string predicates, so
+  `merge-strings` turns each split string back into one literal.
 
 ## [0.6.0] - 2026-11-24
 

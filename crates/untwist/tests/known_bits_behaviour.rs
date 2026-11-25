@@ -22,7 +22,7 @@ fn unsafe_lane(source: &str) -> String {
 
 fn fixtures() -> Vec<(String, String)> {
     let fixtures = js_files_in("fixtures/known-bits");
-    assert_eq!(fixtures.len(), 7);
+    assert_eq!(fixtures.len(), 11);
     fixtures
 }
 
@@ -36,22 +36,27 @@ fn every_known_bits_fixture_prints_what_node_prints_in_both_lanes() {
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
+fn is_folded(label: &str) -> bool {
+    label
+        .rsplit('/')
+        .next()
+        .is_some_and(|name| name.starts_with("folded"))
+}
+
 #[test]
 fn predicates_decided_by_known_bits_fold_in_both_lanes() {
-    let (label, source) = fixtures()
-        .into_iter()
-        .find(|(label, _)| label.ends_with("folded.js"))
-        .expect("folded.js");
-    for code in [default_lane(&source), unsafe_lane(&source)] {
-        assert!(!code.contains("Math.imul"), "{label}:\n{code}");
-        assert!(!code.contains(") === "), "{label}:\n{code}");
+    for (label, source) in fixtures().into_iter().filter(|(label, _)| is_folded(label)) {
+        for code in [default_lane(&source), unsafe_lane(&source)] {
+            assert!(!code.contains("Math.imul(seed"), "{label}:\n{code}");
+            assert!(!code.contains(" ? \""), "{label}:\n{code}");
+        }
     }
 }
 
 #[test]
 fn predicates_known_bits_cannot_decide_stay_in_the_default_lane() {
     for (label, source) in fixtures() {
-        if label.ends_with("folded.js") {
+        if is_folded(&label) {
             continue;
         }
         let code = default_lane(&source);

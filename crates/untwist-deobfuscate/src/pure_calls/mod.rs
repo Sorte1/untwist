@@ -1,4 +1,5 @@
 mod eval;
+pub(crate) use eval::literal_data;
 mod plan;
 mod scan;
 mod stateful;
