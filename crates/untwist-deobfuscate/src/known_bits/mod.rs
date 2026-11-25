@@ -5,10 +5,7 @@ mod value;
 #[cfg(test)]
 mod tests;
 
-use oxc_ast::ast::{
-    Expression, IdentifierReference, Program, VariableDeclaration, VariableDeclarationKind,
-};
-use oxc_ast_visit::{walk, Visit};
+use oxc_ast::ast::{Expression, IdentifierReference, Program, Statement, VariableDeclarationKind};
 use oxc_semantic::Scoping;
 use oxc_span::Span;
 use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
@@ -251,47 +248,36 @@ impl Leaves for Lax<'_, '_> {
 }
 
 fn seeds(program: &Program<'_>, scoping: &Scoping) -> FxHashMap<SymbolId, (Span, Val)> {
-    let mut collector = Collector {
-        scoping,
-        computed: FxHashMap::default(),
-    };
-    collector.visit_program(program);
-    collector.computed
-}
-
-struct Collector<'s> {
-    scoping: &'s Scoping,
-    computed: FxHashMap<SymbolId, (Span, Val)>,
-}
-
-impl<'a> Visit<'a> for Collector<'_> {
-    fn visit_variable_declaration(&mut self, it: &VariableDeclaration<'a>) {
-        if it.kind == VariableDeclarationKind::Const {
-            for declarator in &it.declarations {
-                let (Some(id), Some(init)) =
-                    (declarator.id.get_binding_identifier(), &declarator.init)
-                else {
-                    continue;
-                };
-                let Some(symbol) = id.symbol_id.get() else {
-                    continue;
-                };
-                if !is_seed_shape(init) || written(symbol, self.scoping) {
-                    continue;
-                }
-                let lax = Lax {
-                    computed: &self.computed,
-                    scoping: self.scoping,
-                };
-                if let Some(value) =
-                    abstract_value(init, &lax).filter(|value| value.bits.known() != 0)
-                {
-                    self.computed.insert(symbol, (it.span, value));
-                }
+    let mut computed = FxHashMap::default();
+    for statement in &program.body {
+        let Statement::VariableDeclaration(declaration) = statement else {
+            continue;
+        };
+        if declaration.kind != VariableDeclarationKind::Const {
+            continue;
+        }
+        for declarator in &declaration.declarations {
+            let (Some(id), Some(init)) = (declarator.id.get_binding_identifier(), &declarator.init)
+            else {
+                continue;
+            };
+            let Some(symbol) = id.symbol_id.get() else {
+                continue;
+            };
+            if !is_seed_shape(init) || written(symbol, scoping) {
+                continue;
+            }
+            let lax = Lax {
+                computed: &computed,
+                scoping,
+            };
+            if let Some(value) = abstract_value(init, &lax).filter(|value| value.bits.known() != 0)
+            {
+                computed.insert(symbol, (declaration.span, value));
             }
         }
-        walk::walk_variable_declaration(self, it);
     }
+    computed
 }
 
 fn written(symbol: SymbolId, scoping: &Scoping) -> bool {
