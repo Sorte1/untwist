@@ -515,6 +515,7 @@ struct LazyFacts {
     decoders: FxHashMap<SymbolId, bool>,
     blocked: FxHashSet<SymbolId>,
     member_callees: FxHashSet<Span>,
+    holders: Vec<SymbolId>,
 }
 
 impl LazyFacts {
@@ -555,6 +556,7 @@ impl LazyFacts {
             .chain(reads.copies.iter().filter_map(|(to, _)| *to))
             .collect();
         let uses = callee_uses(program, scoping, &candidates, &reads.discarded);
+        let holders = decoder_holders(&candidates, &uses);
         let held_objects: Vec<&ObjectAlias> = objects
             .iter()
             .filter(|object| decoders.contains_key(&object.source))
@@ -580,6 +582,7 @@ impl LazyFacts {
             decoders,
             blocked,
             member_callees: uses.member_callees,
+            holders,
         }
     }
 
@@ -592,6 +595,16 @@ impl LazyFacts {
                 .any(|member| !self.member_callees.contains(member)),
         }
     }
+}
+
+fn decoder_holders(candidates: &FxHashSet<SymbolId>, uses: &CalleeUses) -> Vec<SymbolId> {
+    let mut holders: Vec<SymbolId> = candidates
+        .iter()
+        .flat_map(|symbol| uses.reach(*symbol))
+        .collect();
+    holders.sort_unstable();
+    holders.dedup();
+    holders
 }
 
 fn read_by_another_input(
@@ -975,7 +988,13 @@ fn variable_alias_plan<'a>(
     #[cfg(debug_assertions)]
     record_alias_facts(&sites, &facts);
     choose_aliases(&sites, &targets, &facts, cx.scoping(), &mut plan);
-    if refuse_globally_reached(program, cx, &forms.objects, &mut targets, &mut plan) {
+    if refuse_globally_reached(
+        program,
+        cx,
+        (&forms.objects, &facts.lazy.holders),
+        &mut targets,
+        &mut plan,
+    ) {
         choose_aliases(&sites, &targets, &facts, cx.scoping(), &mut plan);
     }
 
@@ -1090,7 +1109,7 @@ fn choose_aliases<'a>(
 fn refuse_globally_reached<'a>(
     program: &Program<'_>,
     cx: &Cx<'a, '_>,
-    objects: &[ObjectAlias],
+    (objects, holders): (&[ObjectAlias], &[SymbolId]),
     targets: &mut FxHashMap<SymbolId, Ident<'a>>,
     plan: &mut VariablePlan<'a>,
 ) -> bool {
@@ -1098,12 +1117,15 @@ fn refuse_globally_reached<'a>(
         .iter()
         .filter(|object| known_target(object.source, targets, plan).is_some())
         .map(|object| object.symbol);
-    let bindings: Vec<SymbolId> = plan
+    let mut bindings: Vec<SymbolId> = plan
         .chosen
         .iter()
         .map(|(symbol, _, _)| *symbol)
         .chain(objects)
         .collect();
+    if !bindings.is_empty() {
+        bindings.extend_from_slice(holders);
+    }
     let wanted: Vec<SymbolId> = targets.keys().copied().collect();
     let Some(reached) = reached_roots(program, cx, &wanted, &bindings) else {
         return false;
