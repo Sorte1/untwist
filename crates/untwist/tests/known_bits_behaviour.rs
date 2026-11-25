@@ -22,8 +22,17 @@ fn unsafe_lane(source: &str) -> String {
 
 fn fixtures() -> Vec<(String, String)> {
     let fixtures = js_files_in("fixtures/known-bits");
-    assert_eq!(fixtures.len(), 11);
+    assert_eq!(fixtures.len(), 21);
     fixtures
+}
+
+const UNSAFE_PREMISE: [&str; 2] = [
+    "kept-checksum-global-call.js",
+    "kept-checksum-global-write.js",
+];
+
+fn under_unsafe_premise(label: &str) -> bool {
+    UNSAFE_PREMISE.iter().any(|name| label.ends_with(name))
 }
 
 #[test]
@@ -31,8 +40,14 @@ fn every_known_bits_fixture_prints_what_node_prints_in_both_lanes() {
     let Some(node) = node_or_skip() else {
         return;
     };
+    let (premise, both): (Vec<_>, Vec<_>) = fixtures()
+        .into_iter()
+        .partition(|(label, _)| under_unsafe_premise(label));
+    assert_eq!(premise.len(), UNSAFE_PREMISE.len());
     let runs: [Mode<'_>; 2] = [("default", &default_lane), ("unsafe", &unsafe_lane)];
-    let wrong = node_rows::mismatches(&node, &fixtures(), &runs);
+    let mut wrong = node_rows::mismatches(&node, &both, &runs);
+    let default_only: [Mode<'_>; 1] = [("default", &default_lane)];
+    wrong.extend(node_rows::mismatches(&node, &premise, &default_only));
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 

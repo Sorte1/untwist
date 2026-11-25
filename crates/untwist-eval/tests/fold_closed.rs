@@ -62,3 +62,15 @@ fn a_closed_value_that_reads_an_unknown_global_does_not_fold() {
     let source = "someHostValue | 0;";
     assert_eq!(closed(source), None);
 }
+
+#[test]
+fn a_closed_value_that_builds_a_regular_expression_does_not_fold() {
+    assert_eq!(closed("/a/.test(\"a\") ? 1 : 2;"), None);
+    assert_eq!(closed("\"a\".match(\"a\") ? 1 : 2;"), None);
+}
+
+#[test]
+fn a_closed_value_runs_strict_under_a_use_strict_directive() {
+    let source = "\"use strict\";\nfunction f() { try { \"abc\".x = 1; return 2; } catch (e) { return 1; } }\nf();";
+    assert_eq!(closed(source), Some(Const::Num(1.0)));
+}

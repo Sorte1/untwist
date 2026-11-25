@@ -132,3 +132,13 @@ fn a_catastrophic_regexp_is_left_unfolded() {
     let source = format!("'{}c'.replace(/^(a+)+b$/, 'x')", "a".repeat(43));
     assert!(fold_with(&source, &options).is_none());
 }
+
+#[test]
+fn refuses_named_groups_and_word_escapes_under_iu_it_does_not_model() {
+    assert_eq!(
+        fold("'2020-01'.replace(/(?<y>\\d+)-(?<m>\\d+)/, '$<m>/$<y>')"),
+        None
+    );
+    assert_eq!(fold("/[\\W]/iu.test('S')"), None);
+    assert_eq!(fold("/\\bs/iu.test('S')"), None);
+}

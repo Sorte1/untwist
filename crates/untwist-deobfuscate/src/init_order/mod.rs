@@ -228,6 +228,32 @@ impl InitOrder {
         })
     }
 
+    fn symbol_is_read_after_its_initialiser(
+        &self,
+        declaration: DeclarationSlot,
+        symbol: SymbolId,
+        initialiser_is_inert: bool,
+    ) -> bool {
+        if self.hazard || self.reentrant {
+            return false;
+        }
+        let nothing_runs_before = self.roots_cannot_call(declaration)
+            || (initialiser_is_inert && self.prefix_cannot_call(declaration));
+        self.sites.of_symbol(symbol).all(|site| {
+            let (Some(record), Some(entry)) = (
+                self.sites.get(site),
+                self.site_frame(site, declaration.list),
+            ) else {
+                return false;
+            };
+            let after = entry.index > declaration.index;
+            match some(record.value) {
+                None => after && entry.hoisted.is_none(),
+                Some(_) => (after && entry.hoisted.is_none()) || nothing_runs_before,
+            }
+        })
+    }
+
     fn site_is_initialised_before_use(&self, declaration: DeclarationSlot, site: u32) -> bool {
         let Some(record) = self.sites.get(site) else {
             return false;
@@ -553,6 +579,28 @@ pub(crate) fn read_before_declaration(
             })
         })
         .map(|(_, symbol)| *symbol)
+        .collect()
+}
+
+pub(crate) fn read_during_initialiser(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    bound: &[(Span, SymbolId, bool)],
+) -> FxHashSet<SymbolId> {
+    if bound.is_empty() {
+        return FxHashSet::default();
+    }
+    let order = try_scan_init_order(program, scoping);
+    bound
+        .iter()
+        .filter(|(statement, symbol, inert)| {
+            !order.as_ref().is_some_and(|order| {
+                order.declaration_slot(*statement).is_some_and(|slot| {
+                    order.symbol_is_read_after_its_initialiser(slot, *symbol, *inert)
+                })
+            })
+        })
+        .map(|(_, symbol, _)| *symbol)
         .collect()
 }
 
