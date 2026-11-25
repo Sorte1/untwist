@@ -474,10 +474,21 @@ impl Pipeline {
             .notes
             .extend(super::notes::vm_interpreter_notes(&parsed.program));
         let unsafe_transforms = self.options.unsafe_transforms;
-        if let Some(Err(reason)) =
-            form.map(|form| verdict(form, &parsed.program, unsafe_transforms))
-        {
-            return Step::Kept(reason);
+        let shared = reservation.shared.is_some();
+        match form.map(|form| verdict(form, &parsed.program, unsafe_transforms, shared)) {
+            Some(Err(reason)) => return Step::Kept(reason),
+            Some(Ok(true)) => {
+                return match room.as_ref() {
+                    Some(room) => Step::Peel(Peeled {
+                        text: format!("{{\n{text}\n}}"),
+                        room: RoomSeed::of(room),
+                        form: LayerForm::InlineStmt,
+                        scoped,
+                    }),
+                    None => Step::Kept(Refusal::Shape),
+                }
+            }
+            _ => {}
         }
         *fallback = None;
         if errors == 0 {
