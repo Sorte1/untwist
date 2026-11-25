@@ -458,7 +458,6 @@ impl Pipeline {
             fresh_tree_state(room.as_ref());
         }
         self.options.progress(Progress::StageBegins("parse"));
-        let mut blocked = String::new();
         let alloc = Allocator::default();
         let mut parsed = match (first, reservation.module_named, reservation.script_named) {
             (true, true, _) => parse_named_module(&alloc, text),
@@ -479,15 +478,18 @@ impl Pipeline {
         match form.map(|form| verdict(form, &parsed.program, unsafe_transforms, shared)) {
             Some(Err(reason)) => return Step::Kept(reason),
             Some(Ok(true)) => {
-                blocked = format!("{{\n{text}\n}}");
-                parsed = parse_with(&alloc, &blocked, SourceType::script());
-                if let Err(step) = parse_outcome(&blocked, &parsed, false, result) {
-                    return step;
+                return match room.as_ref() {
+                    Some(room) => Step::Peel(Peeled {
+                        text: format!("{{\n{text}\n}}"),
+                        room: RoomSeed::of(room),
+                        form: LayerForm::InlineStmt,
+                        scoped,
+                    }),
+                    None => Step::Kept(Refusal::Shape),
                 }
             }
             _ => {}
         }
-        let text = if blocked.is_empty() { text } else { &blocked };
         *fallback = None;
         if errors == 0 {
             let site = InlineSite {
