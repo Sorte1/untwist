@@ -19,9 +19,7 @@ impl<'a, 's> Cx<'a, 's> {
         self.rw.forbid(render);
         let mut branches: Vec<(Option<Span>, &'a Expression<'a>)> = Vec::new();
         match (arrow.get_expression(), arrow_statements(arrow)) {
-            (None, [Statement::IfStatement(stmt)]) => {
-                self.branches(stmt, render, &mut branches)?
-            }
+            (None, [Statement::IfStatement(stmt)]) => self.branches(stmt, render, &mut branches)?,
             (None, [Statement::ExpressionStatement(stmt)]) => {
                 self.ternary(&stmt.expression, render, &mut branches)?
             }
