@@ -1,0 +1,21 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/EffectPre.js
+---
+==== EffectPre.svelte
+<script>
+	let count = $state(0);
+
+	$effect.pre(() => {
+		console.log('before', count);
+	});
+
+	$effect(() => {
+		console.log('after', count);
+	
+		return () => console.log('cleanup', count);
+	});
+</script>
+
+<button onclick={() => (count = count + 2)}>{count}</button>

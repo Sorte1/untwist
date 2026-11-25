@@ -1,0 +1,11 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/Greeting.js
+---
+==== Greeting.svelte
+<script>
+	let { name = 'world', excited = false } = $props();
+</script>
+
+<h1>Hello {name}{excited ? '!' : '.'}</h1>

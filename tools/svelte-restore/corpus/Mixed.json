@@ -1,0 +1,1 @@
+{ "props": { "items": ["apple", "pear", "plum"] }, "steps": [{ "input": ["input", "p"] }, { "input": ["input", "zz"] }] }

@@ -1,0 +1,15 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/Select.js
+---
+==== Select.svelte
+<script>
+	let picked = $state('b');
+	let options = ['a', 'b', 'c'];
+</script>
+
+<p>picked {picked}</p>
+{#each options as option}
+	<label><input type="radio" value={option} bind:group={picked} /> {option}</label>
+{/each}

@@ -1,0 +1,20 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/Script.js
+---
+==== Script.svelte
+<script>
+	let { start = 0 } = $props();
+	const LIMIT = 3;
+	let value = $state(start);
+	let capped = $derived(Math.min(value, LIMIT));
+
+	function step(by) {
+		value = value + by;
+	}
+</script>
+
+<button onclick={() => step(1)}>up</button>
+<button onclick={() => step(-1)}>down</button>
+<output>{capped} of 3</output>

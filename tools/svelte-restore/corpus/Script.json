@@ -1,0 +1,1 @@
+{ "props": { "start": 2 }, "steps": [{ "click": "button" }, { "click": "button" }, { "click": "button:nth-of-type(2)" }] }

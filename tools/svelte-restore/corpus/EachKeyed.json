@@ -1,0 +1,1 @@
+{ "props": { "items": [{ "id": 1, "name": "a" }, { "id": 2, "name": "b" }] }, "steps": [{ "click": "button" }, { "click": "button" }] }

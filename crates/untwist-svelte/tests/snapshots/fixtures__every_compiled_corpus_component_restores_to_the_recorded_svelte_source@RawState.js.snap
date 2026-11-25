@@ -1,0 +1,13 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/RawState.js
+---
+==== RawState.svelte
+<script>
+	let items = $state.raw([1, 2]);
+	let pushed = [1];
+</script>
+
+<button class="replace" onclick={() => (items = [...items, items.length + 1])}>{items.length}</button>
+<button class="push" onclick={() => pushed.push(2)}>{pushed.length}</button>

@@ -1,0 +1,12 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/Window.js
+---
+==== Window.svelte
+<script>
+	let key = $state('');
+</script>
+
+<svelte:window onkeydown={(event) => (key = event.key)} />
+<p>{key}</p>

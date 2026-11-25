@@ -4,8 +4,9 @@ use untwist::{MapLink, Options, Output, RenameMode, TypesMode, WasmCheck};
 
 pub const DEFAULT_MAX_MEMORY: u64 = 1 << 30;
 
-const VALUE_FLAGS: [&str; 11] = [
+const VALUE_FLAGS: [&str; 12] = [
     "--modern",
+    "--restore",
     "--types",
     "--rename",
     "--wasm-check",
@@ -147,6 +148,14 @@ fn valued(mut options: Options, flag: &str, word: &str) -> Result<Options, Strin
                 "jsdoc" => TypesMode::Jsdoc,
                 other => return Err(format!("unknown types mode {other} (ts or jsdoc)")),
             });
+        }
+        "--restore" => {
+            for framework in word.split(',') {
+                match framework {
+                    "svelte" => options.svelte = true,
+                    other => return Err(format!("unknown framework {other} (svelte)")),
+                }
+            }
         }
         "--max-iterations" => options.max_iterations = Some(number(word, flag)?),
         "--fuel" => options.fuel = Some(fuel(word)?),

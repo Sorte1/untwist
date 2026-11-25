@@ -1,0 +1,12 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/Textarea.js
+---
+==== Textarea.svelte
+<script>
+	let text = $state('hello');
+</script>
+
+<textarea bind:value={text}></textarea>
+<p>{text.length}</p>

@@ -28,12 +28,17 @@ pub struct RunReport {
     links: String,
     wasm: String,
     wasm_bytes: Vec<Vec<u8>>,
+    svelte: String,
 }
 
 #[wasm_bindgen]
 impl RunReport {
     pub fn wasm_json(&self) -> String {
         self.wasm.clone()
+    }
+
+    pub fn svelte_json(&self) -> String {
+        self.svelte.clone()
     }
 
     pub fn wasm_bytes(&self, index: u32) -> Option<Vec<u8>> {
@@ -137,6 +142,7 @@ fn report_with(source: &str, options: Options, wasm: &WasmFiles, maps: MapFlags)
         .bundle
         .as_ref()
         .map(untwist::BundleOutput::bundle_json);
+    let svelte = svelte_json(&result);
     let modules = result
         .bundle
         .take()
@@ -177,7 +183,28 @@ fn report_with(source: &str, options: Options, wasm: &WasmFiles, maps: MapFlags)
         links,
         wasm,
         wasm_bytes,
+        svelte,
     }
+}
+
+#[derive(serde::Serialize)]
+struct SvelteJson<'a> {
+    files: &'a [untwist::SvelteFile],
+    kept: Vec<&'a str>,
+}
+
+fn svelte_json(result: &untwist::Output) -> String {
+    let kept = result
+        .notes
+        .iter()
+        .filter(|note| note.pass == untwist::SVELTE_PASS && note.message.contains(" kept as JS: "))
+        .map(|note| note.message.as_str())
+        .collect();
+    serde_json::to_string(&SvelteJson {
+        files: &result.svelte,
+        kept,
+    })
+    .unwrap_or_default()
 }
 
 #[wasm_bindgen]
@@ -264,6 +291,7 @@ fn report_for_with(
             links: String::new(),
             wasm: String::new(),
             wasm_bytes: Vec::new(),
+            svelte: String::new(),
         },
     }
 }
@@ -574,6 +602,32 @@ mod tests {
         let out = run_report_staged(DECODED, "", false, "refusals");
         assert_eq!(out.decoded_count(), 0);
         assert_eq!(out.decoded_strings_json(), "");
+    }
+
+    const COUNTER: &str = include_str!("../../../untwist-svelte/tests/fixtures/Counter.js");
+
+    #[test]
+    fn restore_svelte_lists_the_component_and_leaves_the_code_alone() {
+        let plain = run_report(COUNTER, "", false);
+        let restored = run_report(COUNTER, "--restore svelte", false);
+        assert_eq!(plain.stdout(), restored.stdout());
+        let json: serde_json::Value = serde_json::from_str(&restored.svelte_json()).unwrap();
+        assert_eq!(json["files"][0]["path"], "Counter.svelte");
+        assert!(json["files"][0]["code"]
+            .as_str()
+            .unwrap()
+            .contains("$state(0)"));
+        assert_eq!(json["kept"], serde_json::json!([]));
+        let none: serde_json::Value = serde_json::from_str(&plain.svelte_json()).unwrap();
+        assert_eq!(none["files"], serde_json::json!([]));
+    }
+
+    #[test]
+    fn an_unknown_framework_is_a_usage_error() {
+        assert_eq!(
+            run_report(COUNTER, "--restore vue", false).code(),
+            crate::USAGE_ERROR
+        );
     }
 
     fn same(source: &str, flags: &str, refused: bool) {

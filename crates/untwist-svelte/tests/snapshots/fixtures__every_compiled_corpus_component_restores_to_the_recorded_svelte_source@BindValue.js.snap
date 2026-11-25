@@ -1,0 +1,12 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/BindValue.js
+---
+==== BindValue.svelte
+<script>
+	let text = $state('start');
+</script>
+
+<input bind:value={text} />
+<p>{text.toUpperCase()}</p>

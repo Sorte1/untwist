@@ -1,0 +1,1 @@
+{ "steps": [{ "click": "button.replace" }, { "click": "button.push" }] }

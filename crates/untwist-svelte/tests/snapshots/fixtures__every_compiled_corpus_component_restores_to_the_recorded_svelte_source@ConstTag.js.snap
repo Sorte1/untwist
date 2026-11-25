@@ -1,0 +1,14 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/ConstTag.js
+---
+==== ConstTag.svelte
+<script>
+	let values = $state([1, 2]);
+</script>
+
+{#each values as value}
+	{@const double = value * 2}
+	<i>{double}</i>
+{/each}

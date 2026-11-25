@@ -1,0 +1,26 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/bundle.iife.js
+---
+==== Badge.svelte
+<script>
+	let { tone = 'info', children, label, onpick } = $props();
+</script>
+
+<span class="badge {tone}">
+	{label} {@render children?.()}
+	<button onclick={() => onpick?.(label)}>pick</button>
+</span>
+==== Parent.svelte
+<script>
+	import Badge from './Badge.svelte';
+
+	let picked = $state('none');
+	let count = $state(1);
+</script>
+
+<Badge label="first" onpick={(value) => (picked = value)}>inner {count}</Badge>
+<Badge label="second" tone="warn" />
+<p>picked {picked}</p>
+<button class="more" onclick={() => count++}>more</button>

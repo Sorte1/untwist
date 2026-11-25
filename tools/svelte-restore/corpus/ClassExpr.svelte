@@ -1,0 +1,9 @@
+<script>
+  let active = $state(false);
+  let color = $state('red');
+</script>
+
+<div class={active ? 'on' : 'off'}>a</div>
+<div class={['base', active && 'lit']}>b</div>
+<p style="color: {color}; margin: 0">c</p>
+<button onclick={() => { active = !active; color = 'blue'; }}>go</button>

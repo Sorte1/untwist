@@ -1,0 +1,14 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/EachDestructure.js
+---
+==== EachDestructure.svelte
+<script>
+	let rows = $state([{ id: 1, name: 'a' }, { id: 2, name: 'b' }]);
+</script>
+
+{#each rows as { id, name } (id)}
+	<p>{id}: {name}</p>
+{/each}
+<button onclick={() => rows.reverse()}>flip</button>
