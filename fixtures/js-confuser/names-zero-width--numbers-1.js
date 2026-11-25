@@ -1,0 +1,1 @@
+function do‌(do‌,if‌){return do‌*if‌}var if‌=[3,4,5];var of‌=if‌[0]+if‌[1]+if‌[if‌["length"]-1];console["log"]("area",do‌(3,4),3*4,10/4,7-9,1+2);console["log"]("perimeter",of‌,of‌/2);console["log"]("mixed",2*3+4,(8-3)*(2+1),100/8-0.5);

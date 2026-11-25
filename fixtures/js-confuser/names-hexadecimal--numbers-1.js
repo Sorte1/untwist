@@ -1,0 +1,1 @@
+function _0xCDD2869(_0xCDD2869,_0x6BD9BD){return _0xCDD2869*_0x6BD9BD}var _0x6BD9BD=[3,4,5];var _0xB8BB77B=_0x6BD9BD[0]+_0x6BD9BD[1]+_0x6BD9BD[_0x6BD9BD["length"]-1];console["log"]("area",_0xCDD2869(3,4),3*4,10/4,7-9,1+2);console["log"]("perimeter",_0xB8BB77B,_0xB8BB77B/2);console["log"]("mixed",2*3+4,(8-3)*(2+1),100/8-0.5);

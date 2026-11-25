@@ -1,0 +1,1 @@
+if((new Date).getTime()>4070908800000){while(true){}}function greet(name){if(Date.now()>4070908800000){while(true){}}return"hello, "+name}var guests=["ada","grace","linus"];for(var i=0;i<guests["length"];i++){console["log"](greet(guests[i]))}console["log"]("done with "+guests["length"]+" guests");

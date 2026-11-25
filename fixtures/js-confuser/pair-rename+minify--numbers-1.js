@@ -1,0 +1,1 @@
+function dchQ_1h(dchQ_1h,xZui4t){return dchQ_1h*xZui4t}var xZui4t=[3,4,5],quc6d0i=xZui4t[0]+xZui4t[1]+xZui4t[xZui4t.length-1];console.log("area",dchQ_1h(3,4),3*4,10/4,7-9,1+2);console.log("perimeter",quc6d0i,quc6d0i/2);console.log("mixed",2*3+4,(8-3)*(2+1),100/8-0.5);

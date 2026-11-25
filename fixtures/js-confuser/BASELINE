@@ -1,0 +1,74 @@
+# obfuscator-io option matrix baseline, written by cargo xtask obf-options --baseline
+# safe, unsafe and webcrack count fixtures that are perfect: they run, keep no obfuscator machinery, simplify every expression back and print what the original prints
+# cell	fixtures	safe	unsafe	webcrack	parity-gaps	causes (lane runs)
+ast-scrambler	9	9/9	9/9	-	0	-
+calculator	9	8/9	8/9	-	0	jsc-calculator (2)
+cff-05	9	5/9	5/9	-	0	jsc-cff (8)
+cff-1	9	1/9	1/9	-	0	jsc-cff (16)
+compact-false	9	9/9	9/9	-	0	-
+dead-code	9	0/9	0/9	-	0	jsc-opaque-predicates (18)
+dispatcher	9	2/9	2/9	-	0	jsc-dispatcher (14)
+dispatcher-no-length	9	2/9	2/9	-	0	jsc-dispatcher (14)
+duplicate-literals	9	4/9	4/9	-	0	jsc-duplicate-literals (10)
+flatten	9	2/9	2/9	-	0	jsc-flatten (14)
+global-concealing	9	0/9	0/9	-	0	jsc-global-getter (18)
+hex-numbers	9	9/9	9/9	-	0	-
+lock-anti-debug	9	0/9	0/9	-	0	jsc-anti-debug (18)
+lock-domain	9	9/9	9/9	-	0	-
+lock-end-date	9	9/9	9/9	-	0	-
+lock-integrity	9	0/9	0/9	-	0	jsc-integrity (18)
+lock-self-defending	9	0/9	0/9	-	0	jsc-self-defending (18)
+lock-start-date	9	9/9	9/9	-	0	-
+lock-tamper	9	0/9	0/9	-	0	jsc-tamper (18)
+minify	9	9/9	9/9	-	0	-
+moved-declarations	9	9/9	9/9	-	0	-
+names-chinese	9	9/9	9/9	-	0	-
+names-hexadecimal	9	9/9	9/9	-	0	-
+names-mangled	9	9/9	9/9	-	0	-
+names-number	9	9/9	9/9	-	0	-
+names-zero-width	9	9/9	9/9	-	0	-
+object-extraction	9	9/9	9/9	-	0	-
+opaque-predicates	9	2/9	2/9	-	0	jsc-opaque-predicates (14)
+pack	9	9/9	9/9	-	0	-
+pair-dispatcher+globals	9	0/9	0/9	-	0	jsc-dispatcher (14), jsc-global-getter (4)
+pair-minify+dispatcher	9	2/9	2/9	-	0	jsc-dispatcher (14)
+pair-minify+globals	9	0/9	0/9	-	0	jsc-global-getter (18)
+pair-minify+scrambler	9	9/9	9/9	-	0	-
+pair-rename+dispatcher	9	2/9	2/9	-	0	jsc-dispatcher (14)
+pair-rename+globals	9	0/9	0/9	-	0	jsc-global-getter (18)
+pair-rename+minify	9	9/9	9/9	-	0	-
+pair-rename+scrambler	9	9/9	9/9	-	0	-
+pair-scrambler+dispatcher	9	2/9	2/9	-	0	jsc-dispatcher (14)
+pair-scrambler+globals	9	0/9	0/9	-	0	jsc-global-getter (18)
+pair-strings+dispatcher	9	0/9	0/9	-	0	jsc-string-concealing (18)
+pair-strings+globals	9	0/9	0/9	-	0	jsc-string-concealing (18)
+pair-strings+minify	9	0/9	0/9	-	0	jsc-string-concealing (18)
+pair-strings+rename	9	0/9	0/9	-	0	jsc-string-concealing (18)
+pair-strings+scrambler	9	0/9	0/9	-	0	jsc-string-concealing (18)
+preset-high	9	0/9	0/9	-	0	jsc-cff (18)
+preset-low	9	0/9	0/9	-	0	jsc-string-concealing (18)
+preset-medium	9	0/9	0/9	-	0	jsc-cff (18)
+rename-globals	9	9/9	9/9	-	0	-
+rename-labels	9	9/9	9/9	-	0	-
+rename-variables	9	9/9	9/9	-	0	-
+rgf	9	9/9	9/9	-	0	-
+string-concealing	9	0/9	0/9	-	0	jsc-string-concealing (18)
+string-concealing-05	9	0/9	0/9	-	0	jsc-string-concealing (18)
+string-custom-encoding	9	0/9	0/9	-	0	jsc-string-concealing (18)
+string-encoding	9	9/9	9/9	-	0	-
+string-splitting	9	9/9	9/9	-	0	-
+variable-masking	9	1/9	1/9	-	0	jsc-variable-masking (16)
+# cause	cells	fixtures	lane-runs	parity-gap-cells	reason
+jsc-string-concealing	9	81	162	0	stringConcealing's base91 decoders over one packed string (UTF-8 through TextDecoder, Buffer or a fallback picked from the global object) are not decoded
+jsc-dispatcher	6	42	84	0	dispatcher's name/flag/return-type function table and payload variable are not inlined back
+jsc-global-getter	5	38	76	0	the getGlobal template (globalThis, global, window, Function("return this")) is left
+jsc-cff	4	30	60	0	controlFlowFlattening's state-vector dispatcher (while (sum(states) !== end) switch (sum(states))) is not undone
+jsc-opaque-predicates	2	16	32	0	opaquePredicates' "key" in emptyFunction tests are not folded
+jsc-anti-debug	1	9	18	0	lock.antiDebug's debugger statements are kept
+jsc-integrity	1	9	18	0	lock.integrity hashes each protected function's source text (cyrb53 over toString() with spaces and punctuation removed) and hangs on a mismatch; the check is not proven against the input text, so it is kept, and a reformatted output may hang
+jsc-self-defending	1	9	18	0	lock.selfDefending tests its own function source for a newline and hangs when it finds one; the check is not proven against the input text, so it is kept
+jsc-tamper	1	9	18	0	lock.tamperProtection's native-function check and strict-mode probe are not recognised
+jsc-variable-masking	1	8	16	0	variableMasking's rest-array parameters (args[0], args.length = n) are not turned back into named parameters and locals
+jsc-flatten	1	7	14	0	flatten's (object, [params]) bodies and getter/setter scope objects are not inlined back
+jsc-duplicate-literals	1	5	10	0	duplicateLiteralsRemoval's literal array read by constant index is not inlined
+jsc-calculator	1	1	2	0	calculator's operator switch function is not inlined

@@ -1,0 +1,1 @@
+function C_G2B4(C_G2B4){return"hello, "+C_G2B4}var gf2W3_=["ada","grace","linus"];for(var qQzJ2O=0;qQzJ2O<gf2W3_["length"];qQzJ2O++){console["log"](C_G2B4(gf2W3_[qQzJ2O]))}console["log"]("done with "+gf2W3_["length"]+" guests");

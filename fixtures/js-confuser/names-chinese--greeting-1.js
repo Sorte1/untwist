@@ -1,0 +1,1 @@
+function 赮杝昡篶諁飢(赮杝昡篶諁飢){return"hello, "+赮杝昡篶諁飢}var 毂弤婡糇鵐癆冸=["ada","grace","linus"];for(var 峽癞脸鈒棤厶跩=0;峽癞脸鈒棤厶跩<毂弤婡糇鵐癆冸["length"];峽癞脸鈒棤厶跩++){console["log"](赮杝昡篶諁飢(毂弤婡糇鵐癆冸[峽癞脸鈒棤厶跩]))}console["log"]("done with "+毂弤婡糇鵐癆冸["length"]+" guests");

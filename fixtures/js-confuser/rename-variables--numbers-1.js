@@ -1,0 +1,1 @@
+function ddaXReF(ddaXReF,eey8VK){return ddaXReF*eey8VK}var eey8VK=[3,4,5];var zhSWQ6v=eey8VK[0]+eey8VK[1]+eey8VK[eey8VK["length"]-1];console["log"]("area",ddaXReF(3,4),3*4,10/4,7-9,1+2);console["log"]("perimeter",zhSWQ6v,zhSWQ6v/2);console["log"]("mixed",2*3+4,(8-3)*(2+1),100/8-0.5);

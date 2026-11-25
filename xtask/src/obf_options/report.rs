@@ -340,13 +340,13 @@ fn cause_lines(judged: &[Judged], oracle: &BTreeMap<String, Row>) -> Vec<String>
 }
 
 pub fn write_baseline(
-    path: &Path,
+    (path, title): (&Path, &str),
     rows: &[CellRow],
     judged: &[Judged],
     oracle: &BTreeMap<String, Row>,
 ) -> Result<()> {
     let mut lines = vec![
-        "# obfuscator-io option matrix baseline, written by cargo xtask obf-options --baseline".to_string(),
+        format!("# {title} option matrix baseline, written by cargo xtask obf-options --baseline"),
         "# safe, unsafe and webcrack count fixtures that are perfect: they run, keep no obfuscator machinery, simplify every expression back and print what the original prints".to_string(),
     ];
     if !oracle.is_empty() {

@@ -1,0 +1,1 @@
+const __p_HttV_dlrArray=["log","length"];function greet(name){return"hello, "+name}var guests=["ada","grace","linus"];for(var i=0;i<guests[__p_HttV_dlrArray[1]];i++){console[__p_HttV_dlrArray[0]](greet(guests[i]))}console[__p_HttV_dlrArray[0]]("done with "+guests[__p_HttV_dlrArray[1]]+" guests");

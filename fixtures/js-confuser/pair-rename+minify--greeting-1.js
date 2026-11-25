@@ -1,0 +1,1 @@
+function TXhbZGI(TXhbZGI){return"hello, "+TXhbZGI}var afqd7BF=["ada","grace","linus"];for(var LAJUIu=0;LAJUIu<afqd7BF.length;LAJUIu++)console.log(TXhbZGI(afqd7BF[LAJUIu]));console.log("done with "+afqd7BF.length+" guests");

@@ -1,0 +1,1 @@
+function OPXKEjB(OPXKEjB){return"hello, "+OPXKEjB}var o2fu8KD=["ada","grace","linus"];for(var LRg6k9g=0;LRg6k9g<o2fu8KD["length"];LRg6k9g++){console["log"](OPXKEjB(o2fu8KD[LRg6k9g]))}console["log"]("done with "+o2fu8KD["length"]+" guests");

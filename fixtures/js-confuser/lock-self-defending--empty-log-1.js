@@ -1,0 +1,1 @@
+(function(){var namedFunction=function(){const test=function(){const regExp=new RegExp("\n");return regExp["test"](namedFunction)};if(test()){while(true){}}};return namedFunction()})();console["log"]("");

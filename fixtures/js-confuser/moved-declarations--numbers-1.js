@@ -1,0 +1,1 @@
+var sides,perimeter;function area(width,height){return width*height}sides=[3,4,5];perimeter=sides[0]+sides[1]+sides[sides["length"]-1];console["log"]("area",area(3,4),3*4,10/4,7-9,1+2);console["log"]("perimeter",perimeter,perimeter/2);console["log"]("mixed",2*3+4,(8-3)*(2+1),100/8-0.5);

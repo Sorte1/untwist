@@ -1,0 +1,1 @@
+function DC83Th(DC83Th,u5_v97k){return DC83Th*u5_v97k}var u5_v97k=[3,4,5];var aCxh8w_=u5_v97k[0]+u5_v97k[1]+u5_v97k[u5_v97k["length"]-1];console["log"]("area",DC83Th(3,4),3*4,10/4,7-9,1+2);console["log"]("perimeter",aCxh8w_,aCxh8w_/2);console["log"]("mixed",2*3+4,(8-3)*(2+1),100/8-0.5);

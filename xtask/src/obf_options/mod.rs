@@ -17,7 +17,9 @@ use sha2::{Digest, Sha256};
 use crate::obf_matrix::expect::{self, judge, Verdict};
 use crate::obf_matrix::{pool, runner};
 use lanes::{observe_untwist, LaneRun, UNTWIST_LANES};
-use machinery::{measure, MACHINERY, OUTPUT_ONLY, SIMPLIFY};
+use machinery::{
+    all_machinery, measure, measure_in, CONFUSER, CONFUSER_DIR, MACHINERY, OUTPUT_ONLY, SIMPLIFY,
+};
 use manifest::{Entry, DIR};
 
 pub const EXPECT: &str = "fixtures/obfuscator-io/EXPECT";
@@ -29,7 +31,7 @@ pub struct Request {
     #[arg(
         long,
         default_value = DIR,
-        help = "the generated fixture dir: fixtures/obfuscator-io or fixtures/obfuscator-versions"
+        help = "the generated fixture dir: fixtures/obfuscator-io, fixtures/obfuscator-versions or fixtures/js-confuser"
     )]
     pub dir: String,
     #[arg(long)]
@@ -96,11 +98,16 @@ fn verify(root: &Path, entries: &[Entry]) -> Result<Vec<String>> {
         }
     }
     let sources: BTreeSet<&str> = entries.iter().map(|e| e.source.as_str()).collect();
-    let classes: Vec<&str> = MACHINERY.iter().chain(SIMPLIFY.iter()).copied().collect();
+    let dir = entries.first().map_or(DIR, |e| e.dir.as_str());
+    let simplify: &[&'static str] = if dir == CONFUSER_DIR { &[] } else { &SIMPLIFY };
+    let classes: Vec<&str> = all_machinery()
+        .into_iter()
+        .chain(simplify.iter().copied())
+        .collect();
     for source in sources {
         let text =
             std::fs::read_to_string(root.join(source)).with_context(|| source.to_string())?;
-        let found = measure(&text);
+        let found = measure_in(dir, &text);
         if !found.parses || !found.present(&classes).is_empty() {
             problems.push(format!(
                 "the original {source} measures {} (parses {}); the meter must read it as clean",
@@ -117,15 +124,14 @@ fn unmeasured(root: &Path, entry: &Entry) -> bool {
     measure(&text).present(&MACHINERY).is_empty()
 }
 
-fn blind_detectors(root: &Path, entries: &[Entry]) -> Vec<&'static str> {
+fn blind_detectors(root: &Path, entries: &[Entry], classes: &[&'static str]) -> Vec<&'static str> {
     let mut seen = BTreeSet::new();
     for entry in entries {
-        let found = measure(&std::fs::read_to_string(entry.path(root)).unwrap_or_default());
-        seen.extend(found.counts.keys().copied());
+        let text = std::fs::read_to_string(entry.path(root)).unwrap_or_default();
+        seen.extend(measure_in(&entry.dir, &text).counts.keys().copied());
     }
-    MACHINERY
+    classes
         .iter()
-        .chain(SIMPLIFY.iter())
         .copied()
         .filter(|c| !seen.contains(c) && !OUTPUT_ONLY.contains(c))
         .collect()
@@ -243,9 +249,14 @@ fn selected(root: &Path, request: &Request) -> Result<Vec<Entry>> {
 
 fn harness_problems(root: &Path, request: &Request, entries: &mut [Entry]) -> Result<Vec<String>> {
     let mut problems = verify(root, entries)?;
-    if request.dir == DIR {
+    let watched: Option<Vec<&'static str>> = match request.dir.as_str() {
+        DIR => Some(MACHINERY.iter().chain(SIMPLIFY.iter()).copied().collect()),
+        CONFUSER_DIR => Some(CONFUSER.to_vec()),
+        _ => None,
+    };
+    if let Some(classes) = watched {
         if request.only.is_none() {
-            for class in blind_detectors(root, entries) {
+            for class in blind_detectors(root, entries, &classes) {
                 problems.push(format!(
                     "no fixture input shows {class}, so its detector is untested"
                 ));
@@ -293,7 +304,11 @@ fn write_outputs(
     oracle: &BTreeMap<String, oracle::Row>,
 ) -> Result<()> {
     if let Some(path) = &request.baseline {
-        report::write_baseline(path, cells, judged, oracle)?;
+        let title = Path::new(&request.dir)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("obfuscator-io");
+        report::write_baseline((path, title), cells, judged, oracle)?;
     }
     if let Some(path) = &request.draft_expect {
         report::write_draft(path, judged, outcomes)?;
