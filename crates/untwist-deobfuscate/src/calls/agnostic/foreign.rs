@@ -18,6 +18,47 @@ const GLOBAL_OBJECTS: [&str; 7] = [
     "global",
 ];
 
+const COERCING_GLOBALS: [&str; 13] = [
+    "String",
+    "Number",
+    "Boolean",
+    "parseInt",
+    "parseFloat",
+    "isNaN",
+    "isFinite",
+    "encodeURIComponent",
+    "encodeURI",
+    "decodeURIComponent",
+    "decodeURI",
+    "escape",
+    "unescape",
+];
+
+const MATH_METHODS: [&str; 36] = [
+    "abs", "acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh", "cbrt", "ceil", "clz32",
+    "cos", "cosh", "exp", "expm1", "floor", "fround", "hypot", "imul", "log", "log10", "log1p",
+    "log2", "max", "min", "pow", "random", "round", "sign", "sin", "sinh", "sqrt", "tan", "tanh",
+    "trunc", "f16round",
+];
+
+const NUMBER_METHODS: [&str; 6] = [
+    "isNaN",
+    "isFinite",
+    "isInteger",
+    "isSafeInteger",
+    "parseInt",
+    "parseFloat",
+];
+
+const OBJECT_METHODS: [&str; 6] = [
+    "keys",
+    "getOwnPropertyNames",
+    "is",
+    "isFrozen",
+    "isSealed",
+    "isExtensible",
+];
+
 pub(super) fn sourced(program: &Program<'_>, scoping: &Scoping) -> bool {
     if !untwist_core::semantic::other_inputs_given() {
         return false;
@@ -189,6 +230,7 @@ impl<'s, 'a> Sites<'s, 'a> {
         self.foreign_sourced
             && !self.user_callee(callee)
             && !self.console_method(callee)
+            && !self.coerced_only(callee, arguments)
             && !arguments
                 .iter()
                 .all(|argument| self.argument_local(argument, LOCAL_DEPTH))
@@ -200,6 +242,65 @@ impl<'s, 'a> Sites<'s, 'a> {
         };
         matches!(member.object.without_parentheses(), Expression::Identifier(id)
             if id.name == "console" && self.native_root(id))
+    }
+
+    fn coerced_only(&self, callee: &Expression<'a>, arguments: &[Argument<'a>]) -> bool {
+        self.coercing_builtin(callee, arguments.len())
+            && arguments.iter().all(|argument| {
+                !matches!(argument, Argument::SpreadElement(_))
+                    && argument.as_expression().is_some_and(|expr| {
+                        self.value_local(expr, LOCAL_DEPTH) || self.foreign_held(expr, LOCAL_DEPTH)
+                    })
+            })
+    }
+
+    fn coercing_builtin(&self, callee: &Expression<'a>, count: usize) -> bool {
+        match callee.without_parentheses() {
+            Expression::Identifier(id) => {
+                self.native_root(id) && COERCING_GLOBALS.contains(&id.name.as_str())
+            }
+            Expression::StaticMemberExpression(member) => {
+                let Expression::Identifier(object) = member.object.without_parentheses() else {
+                    return false;
+                };
+                let method = member.property.name.as_str();
+                self.native_root(object)
+                    && match object.name.as_str() {
+                        "Math" => MATH_METHODS.contains(&method),
+                        "Number" => NUMBER_METHODS.contains(&method),
+                        "Object" => OBJECT_METHODS.contains(&method),
+                        "Array" => method == "isArray",
+                        "JSON" => method == "stringify" && count == 1,
+                        _ => false,
+                    }
+            }
+            _ => false,
+        }
+    }
+
+    fn foreign_held(&self, expr: &Expression<'a>, depth: u8) -> bool {
+        let Some(next) = depth.checked_sub(1) else {
+            return false;
+        };
+        match expr.without_parentheses() {
+            Expression::Identifier(id) if self.fresh.symbol(id).is_none() => {
+                foreign_name(id.name.as_str()) && !GLOBAL_OBJECTS.contains(&id.name.as_str())
+            }
+            Expression::Identifier(id) => self.local_defs(id).is_some_and(|defs| {
+                defs.func.is_none()
+                    && !defs.inits.is_empty()
+                    && defs
+                        .inits
+                        .iter()
+                        .chain(defs.writes.iter())
+                        .all(|value| value.is_some_and(|value| self.foreign_held(value, next)))
+            }),
+            Expression::StaticMemberExpression(member) => self.foreign_held(&member.object, next),
+            Expression::ComputedMemberExpression(member) => self.foreign_held(&member.object, next),
+            Expression::CallExpression(call) => self.foreign_held(&call.callee, next),
+            Expression::NewExpression(new) => self.foreign_held(&new.callee, next),
+            _ => false,
+        }
     }
 
     fn user_callee(&self, callee: &Expression<'a>) -> bool {
