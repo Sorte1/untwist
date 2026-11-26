@@ -25,6 +25,16 @@
     "unsafe": false
   },
   {
+    "name": "inline-js-confuser-dispatcher",
+    "stage": "prepare",
+    "unsafe": false
+  },
+  {
+    "name": "inline-js-confuser-flatten",
+    "stage": "prepare",
+    "unsafe": false
+  },
+  {
     "name": "block-statements",
     "stage": "prepare",
     "unsafe": false
