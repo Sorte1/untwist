@@ -494,6 +494,12 @@ impl<'a, 's> Cx<'a, 's> {
     }
 
     pub(super) fn attr_value(&self, name: &str, expr: &Expression<'_>) -> R<String> {
+        if let Some(value) = string(expr) {
+            return Ok(format!(
+                "{name}=\"{}\"",
+                braces(&value.replace('&', "&amp;").replace('"', "&quot;"))
+            ));
+        }
         let Expression::TemplateLiteral(template) = expr.without_parentheses() else {
             return Ok(attr(name, &self.code(expr)?));
         };
