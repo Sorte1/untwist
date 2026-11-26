@@ -34,6 +34,30 @@ pub struct Facts {
     pub states: FxHashSet<SymbolId>,
     pub aliases: FxHashMap<SymbolId, SymbolId>,
     pub handlers: FxHashSet<SymbolId>,
+    pub written: FxHashSet<SymbolId>,
+    pub state_kinds: FxHashMap<u32, StateKind>,
+    pub renames: Vec<(SymbolId, String)>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StateKind {
+    Deep,
+    Raw,
+    Unknown,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Proxyable {
+    Yes,
+    No,
+    Unknown,
+}
+
+#[derive(Default)]
+struct Writes {
+    deep: bool,
+    raw: bool,
+    unknown: bool,
 }
 
 pub fn binding(pattern: &BindingPattern<'_>) -> Option<SymbolId> {
@@ -129,11 +153,90 @@ struct Classify<'f> {
     facts: Facts,
     arrows: FxHashMap<SymbolId, Vec<SymbolId>>,
     hoisted: Vec<(SymbolId, Vec<SymbolId>)>,
+    inits: Vec<(SymbolId, u32, Option<Proxyable>)>,
+    writes: FxHashMap<SymbolId, Writes>,
+    binds: Vec<Span>,
 }
 
 impl<'f> Classify<'f> {
     fn rt(&self, expr: &Expression<'_>) -> Option<Rt> {
         self.runtime.resolve(expr, self.scoping)
+    }
+
+    fn proxyable(&self, expr: &Expression<'_>) -> Proxyable {
+        match expr.without_parentheses() {
+            Expression::NumericLiteral(_)
+            | Expression::StringLiteral(_)
+            | Expression::BooleanLiteral(_)
+            | Expression::NullLiteral(_)
+            | Expression::BigIntLiteral(_)
+            | Expression::RegExpLiteral(_)
+            | Expression::TemplateLiteral(_)
+            | Expression::ArrowFunctionExpression(_)
+            | Expression::FunctionExpression(_)
+            | Expression::UnaryExpression(_)
+            | Expression::BinaryExpression(_) => Proxyable::No,
+            Expression::Identifier(ident) if ident.name == "undefined" => Proxyable::No,
+            Expression::ObjectExpression(_)
+            | Expression::ArrayExpression(_)
+            | Expression::NewExpression(_) => Proxyable::Yes,
+            Expression::CallExpression(call) => {
+                let known = self.rt(&call.callee).is_some()
+                    || matches!(call.callee.without_parentheses(), Expression::Identifier(ident) if symbol_of(ident, self.scoping).is_some_and(|symbol| self.facts.classes.contains_key(&symbol)));
+                match known {
+                    true => Proxyable::Unknown,
+                    false => Proxyable::Yes,
+                }
+            }
+            _ => Proxyable::Unknown,
+        }
+    }
+
+    fn on_write(&mut self, call: &CallExpression<'_>) {
+        let Some(Expression::Identifier(ident)) = arg(call, 0).map(Expression::without_parentheses)
+        else {
+            return;
+        };
+        let Some(symbol) = symbol_of(ident, self.scoping) else {
+            return;
+        };
+        self.facts.written.insert(symbol);
+        if self.rt(&call.callee) != Some(Rt::Set) {
+            return;
+        }
+        let deep = arg(call, 2).is_some_and(is_true);
+        let in_bind = self
+            .binds
+            .iter()
+            .any(|bind| bind.start <= call.span.start && call.span.end <= bind.end);
+        let value = match arg(call, 1) {
+            Some(Expression::Identifier(_)) if in_bind => Proxyable::No,
+            Some(value) => self.proxyable(value),
+            None => Proxyable::Unknown,
+        };
+        let entry = self.writes.entry(symbol).or_default();
+        match (deep, value) {
+            (true, _) => entry.deep = true,
+            (false, Proxyable::Yes) => entry.raw = true,
+            (false, Proxyable::Unknown) => entry.unknown = true,
+            (false, Proxyable::No) => {}
+        }
+    }
+
+    fn settle_states(&mut self) {
+        for (symbol, start, init) in std::mem::take(&mut self.inits) {
+            let writes = self.writes.remove(&symbol).unwrap_or_default();
+            let deep = writes.deep || init.is_none();
+            let raw = writes.raw || init == Some(Proxyable::Yes);
+            let kind = match (deep, raw) {
+                (true, true) => StateKind::Unknown,
+                (true, false) => StateKind::Deep,
+                (false, true) => StateKind::Raw,
+                (false, false) if !writes.unknown && init == Some(Proxyable::No) => StateKind::Deep,
+                (false, false) => StateKind::Raw,
+            };
+            self.facts.state_kinds.insert(start, kind);
+        }
     }
 
     fn mark_params(&mut self, expr: Option<&Expression<'_>>, picks: &[(usize, Class)]) {
@@ -167,6 +270,16 @@ impl<'f> Classify<'f> {
                         self.facts.classes.insert(symbol, Class::Signal);
                         if self.rt(&call.callee) == Some(Rt::State) {
                             self.facts.states.insert(symbol);
+                            let init = match arg(call, 0) {
+                                None => Some(Proxyable::No),
+                                Some(Expression::CallExpression(proxy))
+                                    if self.rt(&proxy.callee) == Some(Rt::Proxy) =>
+                                {
+                                    None
+                                }
+                                Some(value) => Some(self.proxyable(value)),
+                            };
+                            self.inits.push((symbol, call.span.start, init));
                         }
                     }
                     Some(Rt::Proxy) => {
@@ -309,6 +422,10 @@ impl<'f> Classify<'f> {
 
     fn on_call_expression<'a>(&mut self, call: &CallExpression<'a>) {
         match self.rt(&call.callee) {
+            Some(Rt::Set | Rt::Update | Rt::UpdatePre) => self.on_write(call),
+            Some(Rt::BindValue | Rt::BindChecked | Rt::BindGroup | Rt::BindThis) => {
+                self.binds.push(call.span)
+            }
             Some(Rt::Each) => {
                 let flags = arg(call, 1).and_then(number).unwrap_or(0);
                 let mut picks = Vec::new();
@@ -450,25 +567,25 @@ impl<'f> Sites<'f> {
                     _ => site(vec![lit(op), target]),
                 }
             }
-            Rt::State if call.arguments.is_empty() => site(vec![lit("$state()")]),
-            Rt::State if call.arguments.len() == 1 => {
-                let value = arg(call, 0)?;
-                match value.without_parentheses() {
+            Rt::State if call.arguments.len() <= 1 => {
+                let rune = match self.facts.state_kinds.get(&span.start)? {
+                    StateKind::Deep => "$state(",
+                    StateKind::Raw => "$state.raw(",
+                    StateKind::Unknown => return None,
+                };
+                let Some(value) = arg(call, 0) else {
+                    return site(vec![lit(rune), lit(")")]);
+                };
+                let value = match value.without_parentheses() {
                     Expression::CallExpression(proxy)
                         if self.runtime.resolve(&proxy.callee, self.scoping) == Some(Rt::Proxy)
                             && proxy.arguments.len() == 1 =>
                     {
-                        site(vec![
-                            lit("$state("),
-                            Piece::Src(arg(proxy, 0)?.span()),
-                            lit(")"),
-                        ])
+                        arg(proxy, 0)?
                     }
-                    other if is_primitive(other) => {
-                        site(vec![lit("$state("), Piece::Src(value.span()), lit(")")])
-                    }
-                    _ => site(vec![lit("$state.raw("), Piece::Src(value.span()), lit(")")]),
-                }
+                    _ => value,
+                };
+                site(vec![lit(rune), Piece::Src(value.span()), lit(")")])
             }
             Rt::Derived if call.arguments.len() == 1 => match arg(call, 0)?.without_parentheses() {
                 Expression::ArrowFunctionExpression(arrow)
@@ -536,7 +653,9 @@ impl<'f> Sites<'f> {
 impl<'f> Sites<'f> {
     fn on_variable_declaration<'a>(&mut self, declaration: &VariableDeclaration<'a>) {
         let holds_state = declaration.declarations.iter().any(|declarator| {
-            binding(&declarator.id).is_some_and(|symbol| self.facts.states.contains(&symbol))
+            binding(&declarator.id).is_some_and(|symbol| {
+                self.facts.states.contains(&symbol) || self.facts.written.contains(&symbol)
+            })
         });
         if holds_state && declaration.kind == VariableDeclarationKind::Const {
             self.sites.push(Site {
@@ -545,6 +664,20 @@ impl<'f> Sites<'f> {
             });
         }
         for declarator in &declaration.declarations {
+            if let BindingPattern::BindingIdentifier(ident) = &declarator.id {
+                let symbol = ident.symbol_id();
+                if self
+                    .facts
+                    .renames
+                    .iter()
+                    .any(|(renamed, _)| *renamed == symbol)
+                {
+                    self.sites.push(Site {
+                        span: ident.span,
+                        pieces: vec![Piece::Name(symbol, ident.name.to_string())],
+                    });
+                }
+            }
             let Some(Expression::CallExpression(call)) = declarator
                 .init
                 .as_ref()
@@ -710,10 +843,15 @@ pub fn collect(program: &Program<'_>, runtime: &Runtime, scoping: &Scoping) -> C
         facts: Facts::default(),
         arrows: FxHashMap::default(),
         hoisted: Vec::new(),
+        inits: Vec::new(),
+        writes: FxHashMap::default(),
+        binds: Vec::new(),
     };
     Pass::Classify(&mut classify).visit_program(program);
     classify.settle_hoisted();
-    let facts = classify.facts;
+    classify.settle_states();
+    let mut facts = classify.facts;
+    facts.renames = temporaries(&facts, scoping);
     let mut sites = Sites {
         runtime,
         scoping,
@@ -736,17 +874,51 @@ pub fn collect(program: &Program<'_>, runtime: &Runtime, scoping: &Scoping) -> C
     }
 }
 
-pub fn is_primitive(expr: &Expression<'_>) -> bool {
+fn temporaries(facts: &Facts, scoping: &Scoping) -> Vec<(SymbolId, String)> {
+    let mut symbols: Vec<SymbolId> = facts
+        .classes
+        .iter()
+        .filter(|(symbol, class)| {
+            **class == Class::Signal && scoping.symbol_name(**symbol).starts_with('$')
+        })
+        .map(|(symbol, _)| *symbol)
+        .collect();
+    symbols.sort();
+    let mut taken: FxHashSet<String> = scoping
+        .symbol_ids()
+        .map(|symbol| scoping.symbol_name(symbol).to_string())
+        .chain(
+            scoping
+                .root_unresolved_references()
+                .keys()
+                .map(|name| name.to_string()),
+        )
+        .collect();
+    let mut out = Vec::new();
+    for symbol in symbols {
+        let trimmed = scoping.symbol_name(symbol).trim_start_matches('$');
+        let base = match trimmed.starts_with(|c: char| c.is_ascii_alphabetic() || c == '_') {
+            true => trimmed.to_string(),
+            false => "value".to_string(),
+        };
+        let mut name = base.clone();
+        let mut counter = 1;
+        while taken.contains(&name) {
+            counter += 1;
+            name = format!("{base}{counter}");
+        }
+        taken.insert(name.clone());
+        out.push((symbol, name));
+    }
+    out
+}
+
+fn is_true(expr: &Expression<'_>) -> bool {
     match expr.without_parentheses() {
-        Expression::NumericLiteral(_)
-        | Expression::StringLiteral(_)
-        | Expression::BooleanLiteral(_)
-        | Expression::NullLiteral(_)
-        | Expression::BigIntLiteral(_) => true,
-        Expression::TemplateLiteral(template) => template.expressions.is_empty(),
-        Expression::Identifier(ident) => ident.name == "undefined",
+        Expression::BooleanLiteral(literal) => literal.value,
         Expression::UnaryExpression(unary) => {
-            matches!(unary.operator.as_str(), "-" | "+" | "void") && is_primitive(&unary.argument)
+            unary.operator.as_str() == "!"
+                && matches!(unary.argument.without_parentheses(), Expression::NumericLiteral(n) if n.value == 0.0)
         }
         _ => false,
     }
