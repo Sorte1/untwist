@@ -9,7 +9,7 @@ use crate::budget::Budget;
 use crate::env::read_binding;
 use crate::heap::HeapLedger;
 use crate::interp::Interp;
-use crate::object::lookup_property;
+use crate::object::{self, lookup_property};
 use crate::value::{Closure, Eval, FnCode, JsString, NativeId, ObjKind, ObjRef, PropKey, Value};
 
 const FUNCTION_HEAD: &str = "function anonymous(";
@@ -40,6 +40,8 @@ const OUTSIDE_POOL: &str = "a Function text outside the sink pool";
 const CONFINED_NATIVE: &str = "a native that may write, called in the sink region";
 
 const CONFINED_CLOSURE: &str = "a function from outside the sink region, called in it";
+
+const KEYED_CLOSURE: &str = "a function run while an object becomes a property key";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Watch {
@@ -89,6 +91,7 @@ pub(crate) struct SinkState<'a> {
     readers: FxHashSet<NativeId>,
     old: FxHashSet<usize>,
     dirty: bool,
+    keying: bool,
 }
 
 pub fn function_text(texts: &[String]) -> String {
@@ -100,12 +103,19 @@ pub fn function_text(texts: &[String]) -> String {
 
 pub fn run_sink<'a>(script: SinkScript<'a, 'a>, fuel: u64, heap: u64) -> SinkRun {
     let ledger = HeapLedger::new(heap);
-    let mut interp = Interp::new(script.program.source_text, Budget::new(fuel));
+    let mut interp = Interp::new_for_decode(script.program.source_text, Budget::new(fuel));
     interp.set_heap(Some(ledger.clone()));
+    object::set_tracing(true);
+    crate::unmodelled::set_sink_misses(true);
     let outcome = sunk(&mut interp, &script);
+    crate::unmodelled::set_sink_misses(false);
+    object::set_tracing(false);
+    object::take_trace();
+    object::take_builtin_roots();
     let prefix_clean = interp.sink.as_ref().is_some_and(|state| !state.dirty);
     let steps = interp.budget.steps_used();
     drop(interp);
+    object::reset_root_table();
     SinkRun {
         outcome,
         prefix_clean,
@@ -224,6 +234,7 @@ impl<'a> SinkState<'a> {
             readers,
             old: FxHashSet::default(),
             dirty: false,
+            keying: false,
         }
     }
 
@@ -331,11 +342,27 @@ impl<'a> Interp<'a> {
             FnCode::Function(function) => function.span().start,
             FnCode::Arrow(arrow) => arrow.span().start,
         };
-        let inside = self
-            .sink
-            .as_ref()
-            .is_some_and(|state| start >= state.region);
+        let (inside, keying) = self.sink.as_ref().map_or((false, false), |state| {
+            (start >= state.region, state.keying)
+        });
+        if keying {
+            return Err(Bail::Unsupported(&KEYED_CLOSURE).into());
+        }
         self.watched(inside, &CONFINED_CLOSURE)
+    }
+
+    #[cold]
+    #[inline(never)]
+    pub(crate) fn sink_key(&mut self, value: &Value<'a>) -> Eval<'a, PropKey> {
+        let set = |interp: &mut Self, on: bool| {
+            if let Some(state) = interp.sink.as_mut() {
+                state.keying = on;
+            }
+        };
+        set(self, true);
+        let key = crate::ops::to_property_key(value, self);
+        set(self, false);
+        key
     }
 
     #[cold]

@@ -412,6 +412,8 @@ const ROOT_RUNNERS: &str =
     "the compiled evaluator: a statement or an expression run at the program root";
 const INTERPRETER: &str = "the interpreter: the root frame, its hoist and the closures made there";
 const CALL_PATH: &str = "the call path: a compiled frame's arguments object";
+const SINK: &str =
+    "the sink run: the root frame, the prefix hoist and the pooled Function closures";
 const NAME_READS: &str = "session entry: name reads into closure scopes";
 const HOLDER: &str = "holder of an environment";
 const REALM: &str = "the realm: scope registry, install, new_env";
@@ -504,6 +506,9 @@ const INVENTORY: [(&str, &str, usize, &str); 76] = [
     ("interp/mod.rs", "hoist(", 2, INTERPRETER),
     ("interp/mod.rs", "make_closure(", 2, INTERPRETER),
     ("interp/mod.rs", "new_env(", 1, INTERPRETER),
+    ("interp/sink.rs", "global_env(", 3, SINK),
+    ("interp/sink.rs", "hoist(", 1, SINK),
+    ("interp/sink.rs", "make_closure(", 1, SINK),
     ("native_body/base64.rs", "FrameRef<'", 6, NATIVE_LOOPS),
     ("native_body/exec.rs", "FrameRef<'", 7, NATIVE_LOOPS),
     ("native_body/mod.rs", "FrameRef<'", 1, NATIVE_LOOPS),

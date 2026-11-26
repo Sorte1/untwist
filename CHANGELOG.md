@@ -43,8 +43,10 @@ All notable changes to this project are documented in this file. The format is b
 - Loader layers: a script whose last statement hands a computed text to `Function` or `eval`
   (JSFuck, JScrewIt, jjencode, aaencode, or a loader that builds the text through a callback)
   is peeled when the evaluator can run the statements before it and the text-building part
-  without observable effects; `Function` calls on the way are modelled exactly. Generated
-  fixtures for every encoder are in `fixtures/encoders/` (`tools/encoders/matrix.mjs`).
+  without observable effects; `Function` calls on the way run exactly. The default lane keeps
+  the encoder's setup statements; `--unsafe` drops them when the decoded code does not name
+  them. Generated fixtures for each encoder are in `fixtures/encoders/`
+  (`tools/encoders/matrix.mjs`), with an EXPECT ratchet for `cargo xtask obf-options`.
 
 ## [0.6.0] - 2026-11-24
 

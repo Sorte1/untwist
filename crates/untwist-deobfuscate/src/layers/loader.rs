@@ -1,6 +1,7 @@
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    Argument, AssignmentTarget, CallExpression, Class, Expression, Function, Program,
+    Argument, ArrowFunctionExpression, AssignmentTarget, BindingIdentifier, CallExpression, Class,
+    Expression, ForInStatement, ForOfStatement, Function, IdentifierReference, Program,
     SimpleAssignmentTarget, Statement, UnaryExpression, WithStatement,
 };
 use oxc_ast_visit::{walk, Visit};
@@ -104,7 +105,11 @@ fn site<'p, 'a>(program: &'p Program<'a>) -> Option<Site<'p, 'a>> {
         return None;
     };
     let prefix = &program.body[..index];
-    if call.optional || prefix.iter().any(has_function_syntax) {
+    if call.optional
+        || prefix
+            .iter()
+            .any(|statement| Syntax::of_statement(statement, false).functions)
+    {
         return None;
     }
     Some(Site {
@@ -136,7 +141,9 @@ fn parts<'p, 'a>(call: &'p CallExpression<'a>, shape: Shape) -> Option<Parts<'p,
         }
     };
     plain(kept)?;
-    if expression_has_function_syntax(callee) {
+    let mut callee_syntax = Syntax::default();
+    callee_syntax.visit_expression(callee);
+    if callee_syntax.functions {
         return None;
     }
     Some(Parts {
@@ -286,13 +293,13 @@ fn pool_functions<'p, 'a>(last: &'p Statement<'a>) -> Option<Vec<&'p Function<'a
 }
 
 fn stays_inside(program: &Program<'_>, region: u32) -> bool {
-    let mut writes = Writes::default();
+    let mut writes = Syntax::default();
     for statement in &program.body {
         if statement.span().start >= region {
             writes.visit_statement(statement);
         }
     }
-    if writes.outside {
+    if writes.writes_out {
         return false;
     }
     let built = SemanticBuilder::new().with_build_nodes(true).build(program);
@@ -324,64 +331,87 @@ fn bindings_stay_inside(semantic: &Semantic<'_>, region: u32) -> bool {
 }
 
 #[derive(Default)]
-struct Writes {
-    outside: bool,
+struct Syntax {
+    functions: bool,
+    writes_out: bool,
+    unwatched: bool,
+    names: Option<Vec<String>>,
 }
 
-impl<'a> Visit<'a> for Writes {
+impl Syntax {
+    fn of_statement(statement: &Statement<'_>, named: bool) -> Self {
+        let mut syntax = Syntax {
+            names: named.then(Vec::new),
+            ..Syntax::default()
+        };
+        syntax.visit_statement(statement);
+        syntax
+    }
+
+    fn name(&mut self, name: &str) {
+        if let Some(names) = self.names.as_mut() {
+            names.push(name.to_string());
+        }
+    }
+}
+
+impl<'a> Visit<'a> for Syntax {
+    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        self.functions = true;
+        walk::walk_function(self, it, flags);
+    }
+
+    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+        self.functions = true;
+        walk::walk_arrow_function_expression(self, it);
+    }
+
+    fn visit_class(&mut self, it: &Class<'a>) {
+        self.functions = true;
+        self.writes_out = true;
+        walk::walk_class(self, it);
+    }
+
     fn visit_assignment_target(&mut self, it: &AssignmentTarget<'a>) {
-        self.outside |= it.as_member_expression().is_some();
+        self.writes_out |= it.as_member_expression().is_some();
         walk::walk_assignment_target(self, it);
     }
 
     fn visit_simple_assignment_target(&mut self, it: &SimpleAssignmentTarget<'a>) {
-        self.outside |= it.as_member_expression().is_some();
+        self.writes_out |= it.as_member_expression().is_some();
         walk::walk_simple_assignment_target(self, it);
     }
 
     fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
-        self.outside |= it.operator == UnaryOperator::Delete;
+        let deletes = it.operator == UnaryOperator::Delete;
+        self.writes_out |= deletes;
+        self.unwatched |= deletes;
         walk::walk_unary_expression(self, it);
     }
 
-    fn visit_with_statement(&mut self, _: &WithStatement<'a>) {
-        self.outside = true;
+    fn visit_with_statement(&mut self, it: &WithStatement<'a>) {
+        self.writes_out = true;
+        self.unwatched = true;
+        walk::walk_with_statement(self, it);
     }
 
-    fn visit_class(&mut self, _: &Class<'a>) {
-        self.outside = true;
-    }
-}
-
-#[derive(Default)]
-struct FunctionSyntax {
-    found: bool,
-}
-
-impl<'a> Visit<'a> for FunctionSyntax {
-    fn visit_function(&mut self, _: &Function<'a>, _: ScopeFlags) {
-        self.found = true;
+    fn visit_for_in_statement(&mut self, it: &ForInStatement<'a>) {
+        self.unwatched = true;
+        walk::walk_for_in_statement(self, it);
     }
 
-    fn visit_arrow_function_expression(&mut self, _: &oxc_ast::ast::ArrowFunctionExpression<'a>) {
-        self.found = true;
+    fn visit_for_of_statement(&mut self, it: &ForOfStatement<'a>) {
+        self.unwatched = true;
+        walk::walk_for_of_statement(self, it);
     }
 
-    fn visit_class(&mut self, _: &Class<'a>) {
-        self.found = true;
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.name(&it.name);
     }
-}
 
-fn has_function_syntax(statement: &Statement<'_>) -> bool {
-    let mut found = FunctionSyntax::default();
-    found.visit_statement(statement);
-    found.found
-}
-
-fn expression_has_function_syntax(expr: &Expression<'_>) -> bool {
-    let mut found = FunctionSyntax::default();
-    found.visit_expression(expr);
-    found.found
+    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+        self.name(&it.name);
+    }
 }
 
 fn peeled_text(
@@ -415,19 +445,25 @@ fn kept_prefix<'s>(
     parts: &Parts<'_, '_>,
     texts: &[String],
 ) -> &'s str {
-    if other_inputs_given() || site.prefix.iter().any(|statement| !droppable(statement)) {
-        return prefix;
-    }
-    let mut written = Mentions::default();
+    let mut written = Syntax {
+        names: Some(Vec::new()),
+        ..Syntax::default()
+    };
     for statement in site.prefix {
         written.visit_statement(statement);
     }
-    let mut read: Vec<String> = Vec::new();
-    for kept in parts.kept {
-        let mut mentions = Mentions::default();
-        mentions.visit_argument(kept);
-        read.extend(mentions.names);
+    if other_inputs_given() || written.unwatched {
+        return prefix;
     }
+    let mut read = Syntax {
+        names: Some(Vec::new()),
+        ..Syntax::default()
+    };
+    for kept in parts.kept {
+        read.visit_argument(kept);
+    }
+    let written = written.names.unwrap_or_default();
+    let mut read = read.names.unwrap_or_default();
     let decoded = match parts.shape {
         Shape::Called => texts
             .split_last()
@@ -440,7 +476,7 @@ fn kept_prefix<'s>(
     read.extend(names);
     let touches = read
         .iter()
-        .any(|name| written.names.contains(name) || REFLECTIVE.contains(&name.as_str()));
+        .any(|name| written.contains(name) || REFLECTIVE.contains(&name.as_str()));
     match touches {
         true => prefix,
         false => "",
@@ -461,60 +497,15 @@ const REFLECTIVE: [&str; 11] = [
     "setInterval",
 ];
 
-fn droppable(statement: &Statement<'_>) -> bool {
-    let mut found = Unwatched::default();
-    found.visit_statement(statement);
-    !found.found
-}
-
-#[derive(Default)]
-struct Unwatched {
-    found: bool,
-}
-
-impl<'a> Visit<'a> for Unwatched {
-    fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
-        self.found |= it.operator == UnaryOperator::Delete;
-        walk::walk_unary_expression(self, it);
-    }
-
-    fn visit_for_in_statement(&mut self, _: &oxc_ast::ast::ForInStatement<'a>) {
-        self.found = true;
-    }
-
-    fn visit_for_of_statement(&mut self, _: &oxc_ast::ast::ForOfStatement<'a>) {
-        self.found = true;
-    }
-
-    fn visit_with_statement(&mut self, _: &WithStatement<'a>) {
-        self.found = true;
-    }
-}
-
-#[derive(Default)]
-struct Mentions {
-    names: Vec<String>,
-}
-
-impl<'a> Visit<'a> for Mentions {
-    fn visit_identifier_reference(&mut self, it: &oxc_ast::ast::IdentifierReference<'a>) {
-        self.names.push(it.name.to_string());
-    }
-
-    fn visit_binding_identifier(&mut self, it: &oxc_ast::ast::BindingIdentifier<'a>) {
-        self.names.push(it.name.to_string());
-    }
-}
-
 fn outside_names(text: &str) -> Option<Vec<String>> {
     let alloc = Allocator::default();
     let parsed = parse_with(&alloc, text, SourceType::script());
     if has_error(&parsed.diagnostics) {
         return None;
     }
-    let mut with = Unwatched::default();
+    let mut with = Syntax::default();
     with.visit_program(&parsed.program);
-    if with.found {
+    if with.unwatched {
         return None;
     }
     let built = SemanticBuilder::new().build(&parsed.program);

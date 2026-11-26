@@ -157,3 +157,23 @@ fn a_callee_that_is_no_code_runner_is_refused() {
     let found = outcome("", "[String, 'x']", &[]);
     assert_eq!(found, SinkOutcome::Refused);
 }
+
+#[test]
+fn a_region_that_reads_the_host_is_refused() {
+    let rows = ["[eval, typeof location]", "[eval, Math.SQRT2 + '']", "[eval, String.name]"];
+    for region in rows {
+        assert_eq!(outcome("", region, &[]), SinkOutcome::Refused, "{region}");
+    }
+}
+
+#[test]
+fn an_array_key_and_a_built_in_text_are_what_node_computes() {
+    let found = outcome("", "[eval, [][[]] + ([].filter + '').slice(9, 16)]", &[]);
+    assert_eq!(
+        found,
+        SinkOutcome::Reached {
+            callee: SinkCallee::Eval,
+            texts: pooled(&["undefinedfilter("]),
+        }
+    );
+}

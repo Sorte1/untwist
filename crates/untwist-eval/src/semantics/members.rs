@@ -36,6 +36,9 @@ impl<'a> Interp<'a> {
             return Ok(crate::ops::number_key(*n));
         }
         if value.as_object().is_some() && object::decoding() {
+            if self.watch == crate::interp::sink::Watch::Confine {
+                return self.sink_key(value);
+            }
             return Err(Bail::Unsupported(&NON_PRIMITIVE_KEY).into());
         }
         to_property_key(value, self)
