@@ -33,7 +33,7 @@ impl Attached {
         ids
     }
 
-    fn fetch(&mut self, package: usize) {
+    fn fetch(&mut self, package: usize, base: &Table) {
         self.tried.insert(package);
         let Some(source) = &self.source else {
             return;
@@ -49,7 +49,8 @@ impl Attached {
                 .and_then(|bytes| shard_table(shard, &bytes));
             match table {
                 Ok(table) => {
-                    self.loaded.insert((package, index), table);
+                    self.loaded
+                        .insert((package, index), table.into_collection(base));
                 }
                 Err(error) => self.failures.push(error.to_string()),
             }
@@ -195,7 +196,7 @@ pub fn wanting(loose: &FxHashSet<u32>) -> Arc<Table> {
         }
         let before = attached.loaded.len();
         for package in wanted {
-            attached.fetch(package);
+            attached.fetch(package, &loaded.base);
         }
         if attached.loaded.len() != before {
             loaded.rebuild();
@@ -238,7 +239,7 @@ pub fn load_shard(bytes: &[u8]) -> Result<String, CollectionError> {
             .iter()
             .position(|known| known == shard)
             .unwrap_or_default();
-        let table = shard_table(shard, bytes)?;
+        let table = shard_table(shard, bytes)?.into_collection(&loaded.base);
         let id = attached.collection.packages()[package].id.clone();
         let fresh = attached.loaded.insert((package, index), table).is_none();
         if fresh {

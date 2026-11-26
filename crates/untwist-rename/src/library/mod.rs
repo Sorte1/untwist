@@ -23,6 +23,8 @@ use table::{Role, Table};
 pub const SHAPE_EPOCH: u32 = 1;
 pub const STRONG_LENGTH: u32 = 60;
 pub const STRONG_SPECIFIC: u32 = 2;
+pub const CLUSTER_HITS: usize = 3;
+pub const SHARED_PACKAGES: usize = 3;
 
 pub type Ranges = Vec<(String, String)>;
 
@@ -87,6 +89,7 @@ struct Group {
     label: String,
     ranges: Ranges,
     modules: Vec<String>,
+    collection: bool,
 }
 
 impl Group {
@@ -276,22 +279,36 @@ fn merge_slots(into: &mut Vec<Slot>, from: &[Option<&str>]) {
 
 type Windows = FxHashMap<String, Ranges>;
 
-fn add_to_group(groups: &mut Vec<Group>, label: &str, ranges: Ranges, module: String) {
+fn add_to_group(
+    groups: &mut Vec<Group>,
+    (label, collection): (&str, bool),
+    ranges: Ranges,
+    module: String,
+) {
     let Some(group) = groups.iter_mut().find(|group| group.label == label) else {
         groups.push(Group {
             label: label.to_string(),
             ranges,
             modules: vec![module],
+            collection,
         });
         return;
     };
+    group.collection &= collection;
     if !group.modules.contains(&module) {
         group.modules.push(module);
     }
     group.ranges = union_ranges(&group.ranges, &ranges);
 }
 
-fn merge_rows(table: &Table, shape: &ExactShape, windows: Option<&Windows>) -> Option<Merged> {
+type Excluded = rustc_hash::FxHashSet<String>;
+
+fn merge_rows(
+    table: &Table,
+    shape: &ExactShape,
+    windows: Option<&Windows>,
+    excluded: &Excluded,
+) -> Option<Merged> {
     let loose = table::loose_key(shape.loose);
     let mut merged: Option<Merged> = None;
     for row in table.rows_for(table::exact_key(shape.exact)) {
@@ -299,6 +316,9 @@ fn merge_rows(table: &Table, shape: &ExactShape, windows: Option<&Windows>) -> O
             continue;
         }
         let label = table.label(row);
+        if row.collection && excluded.contains(label) {
+            continue;
+        }
         let mut ranges = parse_ranges(table.versions(row));
         if let Some(window) = windows.and_then(|windows| windows.get(label)) {
             ranges = intersect_ranges(&ranges, window);
@@ -314,7 +334,7 @@ fn merge_rows(table: &Table, shape: &ExactShape, windows: Option<&Windows>) -> O
             inner: Vec::new(),
             outer: Vec::new(),
         });
-        add_to_group(&mut current.groups, label, ranges, module);
+        add_to_group(&mut current.groups, (label, row.collection), ranges, module);
         current.role = current.role.min(row.role);
         current.own.merge(table.own(row));
         merge_slots(&mut current.inner, &table.inner(row));
@@ -322,6 +342,14 @@ fn merge_rows(table: &Table, shape: &ExactShape, windows: Option<&Windows>) -> O
     }
     let mut merged = merged?;
     if merged.own == Slot::Conflict && merged.groups.len() == 1 {
+        return None;
+    }
+    let shared = merged
+        .groups
+        .iter()
+        .filter(|group| group.collection)
+        .count();
+    if shared >= SHARED_PACKAGES {
         return None;
     }
     for group in &mut merged.groups {
@@ -426,11 +454,12 @@ fn candidates(
     table: &Table,
     probes: &[(usize, ExactShape)],
     windows: Option<&Windows>,
+    excluded: &Excluded,
 ) -> Vec<Candidate> {
     probes
         .iter()
         .filter_map(|(unit_index, shape)| {
-            let merged = merge_rows(table, shape, windows)?;
+            let merged = merge_rows(table, shape, windows, excluded)?;
             let strong = shape.loose.0 >= STRONG_LENGTH && shape.specific >= STRONG_SPECIFIC;
             Some(Candidate {
                 unit_index: *unit_index,
@@ -677,19 +706,88 @@ pub fn match_with(table: &Table, program: &Program<'_>, scoping: &Scoping) -> Li
     match_shaped(table, &shaped, scoping)
 }
 
-fn match_shaped(table: &Table, shaped: &shape::Shaped<'_, '_>, scoping: &Scoping) -> LibraryNames {
-    let probes = probes(table, &shaped.units, shaped, scoping);
-    let first = candidates(table, &probes, None);
+fn sparse_labels(candidates: &[Candidate], accepted: &[(usize, bool)]) -> Excluded {
+    let mut hits: FxHashMap<&str, usize> = FxHashMap::default();
+    let mut whole: rustc_hash::FxHashSet<&str> = rustc_hash::FxHashSet::default();
+    for (index, _) in accepted {
+        let candidate = &candidates[*index];
+        for group in candidate
+            .merged
+            .groups
+            .iter()
+            .filter(|group| group.collection)
+        {
+            *hits.entry(&group.label).or_default() += 1;
+            if candidate.merged.role == Role::Module {
+                whole.insert(&group.label);
+            }
+        }
+    }
+    hits.into_iter()
+        .filter(|(label, count)| *count < CLUSTER_HITS && !whole.contains(label))
+        .map(|(label, _)| label.to_string())
+        .collect()
+}
+
+struct Settled {
+    found: Vec<Candidate>,
+    accepted: Vec<(usize, bool)>,
+    offers: Offers,
+}
+
+fn settle_once(
+    table: &Table,
+    probes: &[(usize, ExactShape)],
+    units: &[Unit<'_, '_>],
+    excluded: &Excluded,
+) -> Option<Settled> {
+    let first = candidates(table, probes, None, excluded);
     if first.is_empty() {
-        return LibraryNames::default();
+        return None;
     }
     let windows = windows(&first);
     let found = match windows.is_empty() {
         true => first,
-        false => candidates(table, &probes, Some(&windows)),
+        false => candidates(table, probes, Some(&windows), excluded),
     };
-    let found = inlined::settle(found, &shaped.units);
-    let (accepted, offers) = accept(&shaped.units, &found);
+    let found = inlined::settle(found, units);
+    let (accepted, offers) = accept(units, &found);
+    Some(Settled {
+        found,
+        accepted,
+        offers,
+    })
+}
+
+fn settle_clusters(
+    table: &Table,
+    probes: &[(usize, ExactShape)],
+    units: &[Unit<'_, '_>],
+) -> Option<Settled> {
+    let mut excluded = Excluded::default();
+    loop {
+        let settled = settle_once(table, probes, units, &excluded)?;
+        if !table.has_collection_rows() {
+            return Some(settled);
+        }
+        let sparse = sparse_labels(&settled.found, &settled.accepted);
+        if sparse.is_empty() {
+            return Some(settled);
+        }
+        excluded.extend(sparse);
+    }
+}
+
+fn match_shaped(table: &Table, shaped: &shape::Shaped<'_, '_>, scoping: &Scoping) -> LibraryNames {
+    let probes = probes(table, &shaped.units, shaped, scoping);
+    let Some(Settled {
+        found,
+        accepted,
+        offers,
+    }) = settle_clusters(table, &probes, &shaped.units)
+    else {
+        return LibraryNames::default();
+    };
     let mut conflicts: Vec<(SymbolId, Vec<String>)> = offers
         .names
         .iter()

@@ -78,6 +78,7 @@ pub struct Row {
     inner: u32,
     outer: u32,
     pub specific: u32,
+    pub collection: bool,
 }
 
 #[derive(Default)]
@@ -122,6 +123,7 @@ pub struct Table {
     pub rows: Vec<Row>,
     loose: rustc_hash::FxHashSet<u32>,
     exact: FxHashMap<u64, (u32, u32)>,
+    collection: bool,
 }
 
 impl Table {
@@ -141,6 +143,7 @@ impl Table {
                 inner: interner.list(&row.inner),
                 outer: interner.list(&row.outer),
                 specific: row.specific,
+                collection: false,
             })
             .collect();
         Self::assemble(interner.strings, interner.lists, compact)
@@ -156,6 +159,7 @@ impl Table {
         };
         table.loose.reserve(table.rows.len());
         table.exact.reserve(table.rows.len());
+        table.collection = table.rows.iter().any(|row| row.collection);
         for (index, row) in table.rows.iter().enumerate() {
             table.loose.insert(row.loose);
             let index = u32::try_from(index).unwrap_or(u32::MAX);
@@ -197,6 +201,27 @@ impl Table {
 
     pub fn is_empty(&self) -> bool {
         self.rows.is_empty()
+    }
+
+    pub fn has_collection_rows(&self) -> bool {
+        self.collection
+    }
+
+    pub fn has_exact(&self, exact: u64) -> bool {
+        self.exact.contains_key(&exact)
+    }
+
+    pub fn into_collection(self, known: &Table) -> Self {
+        let rows = self
+            .rows
+            .into_iter()
+            .filter(|row| !known.has_exact(row.exact))
+            .map(|row| Row {
+                collection: true,
+                ..row
+            })
+            .collect();
+        Self::assemble(self.strings, self.lists, rows)
     }
 
     pub fn has_loose(&self, key: u32) -> bool {
@@ -359,6 +384,7 @@ fn parse_row(line: &str) -> Option<Row> {
         inner: number(inner)?,
         outer: number(outer)?,
         specific: number(specific)?,
+        collection: false,
     })
 }
 
