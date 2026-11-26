@@ -225,6 +225,7 @@ pub struct Runtime {
 
 impl Runtime {
     pub fn of(program: &Program<'_>, scoping: &Scoping, nodes: &AstNodes<'_>) -> Self {
+        let source = program.source_text;
         let mut runtime = Runtime::default();
         for statement in &program.body {
             let Statement::ImportDeclaration(import) = statement else {
@@ -253,20 +254,25 @@ impl Runtime {
         if runtime.namespaces.is_empty() && runtime.symbols.is_empty() {
             runtime.hoisted(scoping, nodes);
         }
-        if runtime.is_empty() && runtime.ambiguous.is_empty() {
-            runtime.fingerprinted(scoping, nodes);
+        if runtime.imports_svelte {
+            return runtime;
         }
-        if !runtime.imports_svelte && !runtime.is_empty() {
-            runtime.exported(scoping, nodes);
+        let marks = crate::fingerprint::Marks::of(nodes, scoping);
+        let prints = bound_functions(source, &marks, scoping, nodes);
+        if runtime.is_empty() && runtime.ambiguous.is_empty() {
+            runtime.fingerprinted(source, &marks, &prints, scoping, nodes);
+        }
+        if !runtime.is_empty() {
+            runtime.exported(&prints);
         }
         runtime
     }
 
-    fn exported(&mut self, scoping: &Scoping, nodes: &AstNodes<'_>) {
+    fn exported(&mut self, prints: &[(SymbolId, crate::fingerprint::Print)]) {
         let mut found: FxHashMap<u8, Vec<SymbolId>> = FxHashMap::default();
-        for (symbol, print) in bound_functions(scoping, nodes) {
+        for (symbol, print) in prints {
             if let Some(Rt::Export(at)) = crate::fingerprints::lookup(print.hash) {
-                found.entry(at).or_default().push(symbol);
+                found.entry(at).or_default().push(*symbol);
             }
         }
         for (at, symbols) in found {
@@ -276,12 +282,19 @@ impl Runtime {
         }
     }
 
-    fn fingerprinted(&mut self, scoping: &Scoping, nodes: &AstNodes<'_>) {
+    fn fingerprinted(
+        &mut self,
+        source: &str,
+        marks: &crate::fingerprint::Marks,
+        prints: &[(SymbolId, crate::fingerprint::Print)],
+        scoping: &Scoping,
+        nodes: &AstNodes<'_>,
+    ) {
         let mut found: FxHashMap<Rt, Vec<SymbolId>> = FxHashMap::default();
-        for (symbol, print) in bound_functions(scoping, nodes) {
+        for (symbol, print) in prints {
             match crate::fingerprints::lookup(print.hash) {
                 Some(Rt::Export(_)) | None => {}
-                Some(rt) => found.entry(rt).or_default().push(symbol),
+                Some(rt) => found.entry(rt).or_default().push(*symbol),
             }
         }
         if !found.contains_key(&Rt::FromHtml) {
@@ -294,7 +307,7 @@ impl Runtime {
             let Expression::FunctionExpression(function) = call.callee.without_parentheses() else {
                 continue;
             };
-            if let Some(rt) = crate::fingerprint::function(function, scoping)
+            if let Some(rt) = crate::fingerprint::function(source, marks, function, scoping)
                 .and_then(|print| crate::fingerprints::lookup(print.hash))
             {
                 self.inline.insert(function.span.start, rt);
@@ -393,6 +406,8 @@ impl Runtime {
 }
 
 pub fn bound_functions(
+    source: &str,
+    marks: &crate::fingerprint::Marks,
     scoping: &Scoping,
     nodes: &AstNodes<'_>,
 ) -> Vec<(SymbolId, crate::fingerprint::Print)> {
@@ -406,17 +421,19 @@ pub fn bound_functions(
             continue;
         }
         let print = match nodes.kind(scoping.symbol_declaration(symbol)) {
-            AstKind::Function(function) => crate::fingerprint::function(function, scoping),
+            AstKind::Function(function) => {
+                crate::fingerprint::function(source, marks, function, scoping)
+            }
             AstKind::VariableDeclarator(declarator) => match declarator
                 .init
                 .as_ref()
                 .map(Expression::without_parentheses)
             {
                 Some(Expression::FunctionExpression(function)) => {
-                    crate::fingerprint::function(function, scoping)
+                    crate::fingerprint::function(source, marks, function, scoping)
                 }
                 Some(Expression::ArrowFunctionExpression(arrow)) => {
-                    crate::fingerprint::arrow(arrow, scoping)
+                    crate::fingerprint::arrow(source, marks, arrow, scoping)
                 }
                 _ => None,
             },

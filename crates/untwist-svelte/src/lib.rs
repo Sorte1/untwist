@@ -74,7 +74,8 @@ pub fn fingerprint_rows(code: &str) -> Vec<FingerprintRow> {
                 _ => None,
             })
             .collect();
-    runtime::bound_functions(scoping, nodes)
+    let marks = fingerprint::Marks::of(nodes, scoping);
+    runtime::bound_functions(program.source_text, &marks, scoping, nodes)
         .into_iter()
         .map(|(symbol, print)| {
             let used_by_component = scoping.get_resolved_references(symbol).any(|reference| {
