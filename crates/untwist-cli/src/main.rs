@@ -2,6 +2,7 @@ pub(crate) mod args;
 pub(crate) mod budget;
 pub(crate) mod channel;
 pub(crate) mod hooks;
+pub(crate) mod libraries;
 mod output;
 mod preflight;
 pub(crate) mod reruns;
@@ -373,6 +374,7 @@ fn check_source_map_target(args: &Args) -> Result<()> {
 
 fn run(args: &Args, session: &mut Session<'_>) -> Result<u8> {
     check_source_map_target(args)?;
+    libraries::configure(&args.libraries, session.err)?;
     if session.preflight {
         preflight_warning(args, session.err)?;
     }
@@ -404,6 +406,7 @@ fn run_on(args: &Args, session: &mut Session<'_>, sources: &[String]) -> Result<
     wasm_supply::settle(args, &mut result, err)?;
     report_diagnostics(err, &result).context(STDERR)?;
     report_wasm(err, &result).context(STDERR)?;
+    libraries::warn_failures(err).context(STDERR)?;
 
     let report = args
         .report

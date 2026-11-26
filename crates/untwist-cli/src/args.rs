@@ -114,6 +114,16 @@ pub struct Args {
                 --unsafe does not turn this on"
     )]
     pub modern: Option<untwist::ModernBaseline>,
+    #[arg(
+        long = "libraries",
+        value_name = "SRC",
+        value_parser = crate::libraries::source,
+        help = "library fingerprints to match against (repeatable): builtin (the default, \
+                compiled in), none (drop the built-in tables), a directory holding a \
+                collection.json with its shards, or a single .table.gz; a collection loads only \
+                the packages whose bloom filter the program's shapes hit, and never uses the network"
+    )]
+    pub libraries: Vec<crate::libraries::Source>,
     #[cfg(feature = "test-hooks")]
     #[arg(long = "conservative", hide = true)]
     pub conservative: bool,

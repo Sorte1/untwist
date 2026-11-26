@@ -32,6 +32,9 @@ oxc_str.workspace = true
 oxc_syntax.workspace = true
 rustc-hash.workspace = true
 miniz_oxide = "0.9.1"
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
 untwist-libraries-core = { path = "../untwist-libraries-core", version = "0.6.0", optional = true }
 untwist-libraries-corejs = { path = "../untwist-libraries-corejs", version = "0.6.0", optional = true }
 

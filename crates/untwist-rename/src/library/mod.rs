@@ -1,9 +1,11 @@
 pub mod annotate;
 pub mod cache;
+pub mod collection;
 mod guard;
 pub mod hash;
 mod inlined;
 pub mod pass;
+pub mod registry;
 pub mod rename;
 pub mod shape;
 pub mod table;
@@ -713,7 +715,28 @@ fn match_shaped(table: &Table, shaped: &shape::Shaped<'_, '_>, scoping: &Scoping
 }
 
 pub fn match_program(program: &Program<'_>, scoping: &Scoping) -> Arc<LibraryNames> {
-    match_cached(&table::current(), program, scoping)
+    if !registry::pending() {
+        return match_cached(&table::current(), program, scoping);
+    }
+    cache::matched_with(
+        |shaped| registry::wanting(&loose_keys(shaped, scoping)),
+        program,
+        scoping,
+        match_shaped,
+    )
+}
+
+fn loose_keys(shaped: &shape::Shaped<'_, '_>, scoping: &Scoping) -> rustc_hash::FxHashSet<u32> {
+    shaped
+        .units
+        .iter()
+        .map(|unit| table::loose_key(unit.loose_key(&shaped.prefix)))
+        .chain(inlined::expanded_loose(shaped, scoping))
+        .collect()
+}
+
+pub fn program_loose_keys(program: &Program<'_>, scoping: &Scoping) -> rustc_hash::FxHashSet<u32> {
+    loose_keys(&shape_program(program, scoping), scoping)
 }
 
 pub fn match_cached(

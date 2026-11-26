@@ -1,0 +1,86 @@
+{
+ "schema": "untwist.library-collection/1",
+ "version": "2026.11.0-test",
+ "shape_epoch": 1,
+ "untwist": ">=0.7.0",
+ "packages": [
+  {
+   "id": "eventemitter3",
+   "label": "eventemitter3",
+   "versions": [],
+   "shards": [
+    {
+     "file": "shards/ce7f3e726ce9eecfc4217c238e1022a6b197f34ce79c0027f2743096e8e1ac85.utl",
+     "bytes": 1143,
+     "sha256": "ce7f3e726ce9eecfc4217c238e1022a6b197f34ce79c0027f2743096e8e1ac85",
+     "versions": "",
+     "rows": 30
+    }
+   ],
+   "keys": [
+    "The listener must be a function",
+    "function",
+    "undefined",
+    "use strict"
+   ]
+  },
+  {
+   "id": "events",
+   "label": "events",
+   "versions": [],
+   "shards": [
+    {
+     "file": "shards/8b64df531a9bb9307950d6cfccf3318f8da42d6b82515365a68c7c469091e503.utl",
+     "bytes": 2282,
+     "sha256": "8b64df531a9bb9307950d6cfccf3318f8da42d6b82515365a68c7c469091e503",
+     "versions": "",
+     "rows": 61
+    }
+   ],
+   "keys": [
+    " listeners added. Use emitter.setMaxListeners() to increase limit",
+    "MaxListenersExceededWarning",
+    "Possible EventEmitter memory leak detected. ",
+    "The \"emitter\" argument must be of type EventEmitter. Received type ",
+    "The \"listener\" argument must be of type Function. Received type ",
+    "The value of \"defaultMaxListeners\" is out of range. It must be a non-negative number. Received ",
+    "The value of \"n\" is out of range. It must be a non-negative number. Received ",
+    "Unhandled error.",
+    "defaultMaxListeners",
+    "function",
+    "newListener",
+    "number",
+    "object",
+    "removeListener",
+    "use strict"
+   ]
+  },
+  {
+   "id": "punycode",
+   "label": "punycode",
+   "versions": [],
+   "shards": [
+    {
+     "file": "shards/2c50ca0b8cac742302661ae7b96c1426afe0587f7821888bbab20739afb328be.utl",
+     "bytes": 1479,
+     "sha256": "2c50ca0b8cac742302661ae7b96c1426afe0587f7821888bbab20739afb328be",
+     "versions": "",
+     "rows": 42
+    }
+   ],
+   "keys": [
+    "Illegal input >= 0x80 (not a basic code point)",
+    "Invalid input",
+    "Overflow: input needs wider integers to process",
+    "invalid-input",
+    "not-basic",
+    "overflow"
+   ]
+  }
+ ],
+ "filters": {
+  "file": "shards/c8bcdbb0a55fa3b210081404ec8bafd47062a6d6b6b168732e03f241c0f58713.bloom",
+  "sha256": "c8bcdbb0a55fa3b210081404ec8bafd47062a6d6b6b168732e03f241c0f58713",
+  "bytes": 222
+ }
+}

@@ -176,3 +176,31 @@ pub fn load_library_table(bytes: &[u8]) -> bool {
 pub fn library_tables() -> String {
     untwist::libraries::loaded_ids().join(",")
 }
+
+#[wasm_bindgen]
+pub fn load_library_collection(index: &str, filters: &[u8]) -> String {
+    let mut collection = match untwist::libraries::Collection::parse(index) {
+        Ok(collection) => collection,
+        Err(error) => return error.to_string(),
+    };
+    let message = match filters.is_empty() {
+        true => String::new(),
+        false => collection
+            .attach_filters(filters)
+            .err()
+            .map(|error| error.to_string())
+            .unwrap_or_default(),
+    };
+    untwist::libraries::attach(collection, None);
+    message
+}
+
+#[wasm_bindgen]
+pub fn load_library_shard(bytes: &[u8]) -> String {
+    untwist::libraries::load_shard(bytes).unwrap_or_default()
+}
+
+#[wasm_bindgen]
+pub fn library_wanted(source: &str) -> String {
+    serde_json::to_string(&untwist::libraries::wanted_for(source)).unwrap_or_default()
+}
