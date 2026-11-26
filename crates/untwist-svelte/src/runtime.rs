@@ -1,6 +1,7 @@
 use oxc_ast::ast::{Expression, ImportDeclarationSpecifier, Program, Statement};
 use oxc_ast::AstKind;
 use oxc_semantic::{AstNodes, Scoping};
+use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
 
@@ -252,7 +253,7 @@ impl Runtime {
             }
         }
         if runtime.namespaces.is_empty() && runtime.symbols.is_empty() {
-            runtime.hoisted(scoping, nodes);
+            runtime.hoisted(source, scoping, nodes);
         }
         if runtime.imports_svelte {
             return runtime;
@@ -297,9 +298,10 @@ impl Runtime {
                 Some(rt) => found.entry(rt).or_default().push(*symbol),
             }
         }
-        if !found.contains_key(&Rt::FromHtml) {
+        let Some(templates) = found.get(&Rt::FromHtml).cloned() else {
             return;
-        }
+        };
+        let end = region_end(source, &templates, scoping, nodes);
         for node in nodes.iter() {
             let AstKind::CallExpression(call) = node.kind() else {
                 continue;
@@ -318,15 +320,16 @@ impl Runtime {
         }
         for (rt, symbols) in found {
             match symbols.as_slice() {
-                [only] => {
+                [only] if in_region(rt, *only, end, scoping) => {
                     self.symbols.insert(*only, rt);
                 }
+                [_] => {}
                 _ => self.ambiguous.extend(symbols),
             }
         }
     }
 
-    fn hoisted(&mut self, scoping: &Scoping, nodes: &AstNodes<'_>) {
+    fn hoisted(&mut self, source: &str, scoping: &Scoping, nodes: &AstNodes<'_>) {
         let mut candidates: FxHashMap<&str, Vec<SymbolId>> = FxHashMap::default();
         for symbol in scoping.symbol_ids() {
             let name = bare(scoping.symbol_name(symbol));
@@ -339,6 +342,13 @@ impl Runtime {
         if !candidates.contains_key("from_html") && !candidates.contains_key("template") {
             return;
         }
+        let templates: Vec<SymbolId> = ["from_html", "template"]
+            .iter()
+            .filter_map(|name| candidates.get(name))
+            .flatten()
+            .copied()
+            .collect();
+        let end = region_end(source, &templates, scoping, nodes);
         for (name, mut symbols) in candidates {
             let mut picked = false;
             if let (true, Some((_, arity))) = (
@@ -372,9 +382,10 @@ impl Runtime {
                 .filter(|bound| bare(bound.as_str()) == name)
                 .count();
             match twins == 1 || picked {
-                true => {
+                true if in_region(rt, *only, end, scoping) => {
                     self.symbols.insert(*only, rt);
                 }
+                true => {}
                 false => self.ambiguous.push(*only),
             }
         }
@@ -403,6 +414,95 @@ impl Runtime {
             _ => None,
         }
     }
+}
+
+fn statements_of<'a>(
+    scoping: &Scoping,
+    nodes: &AstNodes<'a>,
+    scope: ScopeId,
+) -> Option<&'a [Statement<'a>]> {
+    match nodes.kind(scoping.get_node_id(scope)) {
+        AstKind::Program(program) => Some(program.body.as_slice()),
+        AstKind::Function(function) => function
+            .body
+            .as_ref()
+            .map(|body| body.statements.as_slice()),
+        AstKind::ArrowFunctionExpression(arrow) => arrow
+            .get_function_body()
+            .map(|body| body.statements.as_slice()),
+        _ => None,
+    }
+}
+
+fn runs_at_top(scoping: &Scoping, from: ScopeId, home: ScopeId) -> bool {
+    for scope in scoping.scope_ancestors(from) {
+        if scope == home {
+            return true;
+        }
+        if scoping.scope_flags(scope).is_function() {
+            return false;
+        }
+    }
+    false
+}
+
+fn is_disclosure(source: &str, statement: &Statement<'_>) -> bool {
+    if matches!(
+        statement,
+        Statement::FunctionDeclaration(_) | Statement::ClassDeclaration(_)
+    ) {
+        return false;
+    }
+    let span = oxc_span::GetSpan::span(statement);
+    let text = &source[span.start as usize..span.end as usize];
+    text.contains("__svelte") && text.contains(".v") && text.contains("new Set")
+}
+
+fn is_component_shape(statement: &Statement<'_>) -> bool {
+    let Statement::FunctionDeclaration(function) = statement else {
+        return false;
+    };
+    function.params.items.first().is_some_and(|param| {
+        matches!(&param.pattern, oxc_ast::ast::BindingPattern::BindingIdentifier(ident) if ident.name == "$$anchor")
+    })
+}
+
+fn in_region(rt: Rt, symbol: SymbolId, end: u32, scoping: &Scoping) -> bool {
+    matches!(rt, Rt::Window | Rt::Document) || scoping.symbol_span(symbol).start < end
+}
+
+pub fn region_end(
+    source: &str,
+    templates: &[SymbolId],
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+) -> u32 {
+    let Some(first) = templates.first() else {
+        return u32::MAX;
+    };
+    let home = scoping.symbol_scope_id(*first);
+    let declared = templates
+        .iter()
+        .map(|symbol| scoping.symbol_span(*symbol).start)
+        .min()
+        .unwrap_or(0);
+    let mut end = u32::MAX;
+    for symbol in templates {
+        for reference in scoping.get_resolved_references(*symbol) {
+            let node = nodes.get_node(reference.node_id());
+            if runs_at_top(scoping, node.scope_id(), home) {
+                end = end.min(oxc_span::GetSpan::span(&node.kind()).start);
+            }
+        }
+    }
+    for statement in statements_of(scoping, nodes, home).unwrap_or_default() {
+        let start = oxc_span::GetSpan::span(statement).start;
+        if is_component_shape(statement) || (start > declared && is_disclosure(source, statement)) {
+            end = end.min(start);
+            break;
+        }
+    }
+    end
 }
 
 fn global_aliases(scoping: &Scoping, nodes: &AstNodes<'_>, global: &str) -> Vec<SymbolId> {
