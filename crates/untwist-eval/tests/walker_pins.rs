@@ -432,7 +432,7 @@ const SESSION: &str =
 const NATIVE_LOOPS: &str =
     "native decoder loops: a compiled frame's slots, read before the loop and written back after it";
 
-const INVENTORY: [(&str, &str, usize, &str); 76] = [
+const INVENTORY: [(&str, &str, usize, &str); 79] = [
     ("builtins/charged.rs", "FrameRef<'", 3, HOLDER),
     ("builtins/mod.rs", "FrameRef<'", 7, REALM),
     ("builtins/mod.rs", "Frame<'", 1, REALM),
