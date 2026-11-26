@@ -160,7 +160,11 @@ fn a_callee_that_is_no_code_runner_is_refused() {
 
 #[test]
 fn a_region_that_reads_the_host_is_refused() {
-    let rows = ["[eval, typeof location]", "[eval, Math.SQRT2 + '']", "[eval, String.name]"];
+    let rows = [
+        "[eval, typeof location]",
+        "[eval, Math.SQRT2 + '']",
+        "[eval, String.name]",
+    ];
     for region in rows {
         assert_eq!(outcome("", region, &[]), SinkOutcome::Refused, "{region}");
     }
