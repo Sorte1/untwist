@@ -126,6 +126,7 @@ Common flags:
 | `-f, --force` | Overwrite the files in `DIR` that this run writes and remove the ones a previous run left there. Input files are never overwritten. |
 | `--unsafe` | Use the unsafe lane (see below). |
 | `--modern BASELINE` | Opt-in: remove core-js polyfills of features that are native in `BASELINE` (see [Modern mode](#modern-mode)). |
+| `--libraries SRC` | Library fingerprints to match (repeatable): `builtin` (the default), `none`, a collection directory with `collection.json`, or one `.table.gz`. A collection loads only the packages whose bloom filter the program hits; the CLI never fetches one. |
 | `--types[=jsdoc\|ts]` | Experimental, opt-in: annotate only types that hold for every value on every run, as JSDoc (the default) or TypeScript (see [Proven types](#proven-types)). |
 | `--restore svelte` | Opt-in, needs `-o`: also write each compiled Svelte 5 component back as a `.svelte` file (see [Svelte restore](#svelte-restore)). |
 | `--restore solid` | Opt-in, needs `-o`: also write each compiled SolidJS component back as a `.jsx` file (see [Solid restore](#solid-restore)). Both frameworks: `--restore svelte,solid`. |
