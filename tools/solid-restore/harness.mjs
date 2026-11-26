@@ -126,6 +126,48 @@ function templateKey(js) {
   return [...js.matchAll(TEMPLATE)].map((match) => match[1]).sort().join("\u0000");
 }
 
+const normal = (markup) =>
+  markup
+    .replace(/\\(.)/g, "$1")
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&gt;/g, ">");
+
+function templateSet(js) {
+  return [...js.matchAll(TEMPLATE)].map((match) => normal(match[1]));
+}
+
+function closureKey(path, seen = new Set()) {
+  if (seen.has(path) || !existsSync(path)) return [];
+  seen.add(path);
+  const text = readFileSync(path, "utf8");
+  let own;
+  try {
+    own = templateSet(compiled(text, basename(path)));
+  } catch {
+    return null;
+  }
+  const out = [...own];
+  for (const match of text.matchAll(/from "\.\/([A-Za-z0-9_-]+)\.jsx"/g)) {
+    const more = closureKey(join(dirname(path), `${match[1]}.jsx`), seen);
+    if (more === null) return null;
+    out.push(...more);
+  }
+  return out;
+}
+
+const closureMatches = (path, original) => {
+  const wanted = new Set(templateSet(original));
+  const closure = closureKey(path);
+  if (closure === null || wanted.size === 0) return false;
+  let own;
+  try {
+    own = templateSet(compiled(readFileSync(path, "utf8"), basename(path)));
+  } catch {
+    return false;
+  }
+  return own.every((key) => wanted.has(key)) && [...wanted].every((key) => closure.includes(key));
+};
+
 const same = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 const specOf = (name) => (existsSync(join(CORPUS, `${name}.json`)) ? join(CORPUS, `${name}.json`) : join(HERE, "empty.json"));
 
@@ -158,13 +200,7 @@ async function check(name, lane) {
   writeFileSync(input, lane === "esm" ? original : await BUILDS[lane]([name], dir));
   const back = await restoreAll(input, dir);
   if (back.error) return { status: "not-restored", detail: back.error };
-  const keyed = (path) => {
-    try {
-      return templateKey(compiled(readFileSync(path, "utf8"), basename(path))) === templateKey(original);
-    } catch {
-      return false;
-    }
-  };
+  const keyed = (path) => closureMatches(path, original);
   const file = back.files.find((path) => basename(path) === `${name}.jsx`) ?? back.files.find(keyed);
   if (!file) return { status: "not-restored", detail: `no ${name}.jsx restored (${back.files.length} files); ${back.kept.slice(0, 3).join(" | ")}` };
   return await compare(expected, readFileSync(file, "utf8"), name, dir, back.out);
@@ -195,7 +231,7 @@ async function checkApp(names, lane) {
       continue;
     }
     const byName = candidates.filter((candidate) => basename(candidate.path) === `${name}.jsx`);
-    const matching = byName.length ? byName : candidates.filter((candidate) => candidate.key === templateKey(original));
+    const matching = byName.length ? byName : candidates.filter((candidate) => closureMatches(candidate.path, original));
     let result = { status: "not-restored", detail: `no restored component has its templates (${back.files.length} restored, ${back.kept.length} kept)` };
     for (const candidate of matching) {
       result = await compare(expected, candidate.text, name, own, back.out);
@@ -245,6 +281,17 @@ async function writeFixtures(names) {
   const dir = join(WORK, "fixture-bundle");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(FIXTURES, "bundle.iife.js"), await rollupBuild(["Parent", "Context"], dir, false));
+  const app = ["Parent", "Counter", "Todo", "Context", "Mixed", "Ternary"];
+  mkdirSync(join(FIXTURES, "raw"), { recursive: true });
+  for (const [label, build] of [["terser", () => rollupBuild(app, dir, true)], ["vite", () => viteBuild(app, dir)]]) {
+    const input = join(dir, `${label}.js`);
+    writeFileSync(input, await build());
+    const out = join(dir, `${label}.out`);
+    const result = await run(UNTWIST, [input, "-o", out, "-f"]);
+    if (result.status !== 0) throw new Error(`untwist failed on the ${label} fixture: ${result.stderr}`);
+    writeFileSync(join(FIXTURES, `bundle.${label}.untwisted.js`), readFileSync(join(out, "deobfuscated.js"), "utf8"));
+    writeFileSync(join(FIXTURES, "raw", `bundle.${label}.js`), readFileSync(input, "utf8"));
+  }
 }
 
 if (process.env.FIXTURES) {

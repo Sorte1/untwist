@@ -1,6 +1,7 @@
 mod ast;
 mod convert;
 mod element;
+mod fingerprints;
 mod jsx;
 mod module;
 mod runtime;
@@ -107,6 +108,99 @@ fn references(
     (refs, shorthands)
 }
 
+#[doc(hidden)]
+pub use untwist_restore::table::FingerprintRow;
+
+#[doc(hidden)]
+pub fn fingerprint_rows(code: &str) -> Vec<FingerprintRow> {
+    let alloc = Allocator::default();
+    let parsed = untwist_core::parse::parse_program(&alloc, code);
+    if untwist_core::parse::has_error(&parsed.diagnostics) {
+        return Vec::new();
+    }
+    let program = alloc.alloc(parsed.program);
+    let semantic = SemanticBuilder::new()
+        .with_build_nodes(true)
+        .build(program)
+        .semantic;
+    let scoping = semantic.scoping();
+    let nodes = semantic.nodes();
+    let templates: Vec<SymbolId> = nodes
+        .iter()
+        .filter_map(|node| match node.kind() {
+            AstKind::VariableDeclarator(declarator) => match declarator
+                .init
+                .as_ref()
+                .map(Expression::without_parentheses)
+            {
+                Some(Expression::CallExpression(call))
+                    if matches!(call.callee.without_parentheses(), Expression::Identifier(ident) if runtime::labelled(&ident.name) == Some("template")) =>
+                {
+                    ast::binding(&declarator.id)
+                }
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
+    let jsx: Vec<Span> = nodes
+        .iter()
+        .filter_map(|node| match node.kind() {
+            AstKind::CallExpression(call) => match call.callee.without_parentheses() {
+                Expression::Identifier(ident)
+                    if ast::symbol_of(ident, scoping)
+                        .is_some_and(|symbol| templates.contains(&symbol))
+                        || runtime::labelled(&ident.name) == Some("createComponent") =>
+                {
+                    Some(call.span)
+                }
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect();
+    let spans: Vec<Span> = nodes
+        .iter()
+        .filter_map(|node| match node.kind() {
+            AstKind::Function(function) => Some(function.span),
+            AstKind::ArrowFunctionExpression(arrow) => Some(arrow.span),
+            _ => None,
+        })
+        .filter(|span| {
+            jsx.iter()
+                .any(|call| span.start <= call.start && call.end <= span.end)
+        })
+        .filter(|span| {
+            !templates.iter().any(|symbol| {
+                let at = scoping.symbol_span(*symbol);
+                span.start <= at.start && at.end <= span.end
+            })
+        })
+        .collect();
+    let marks = untwist_restore::fingerprint::Marks::of(nodes, scoping);
+    untwist_restore::fingerprint::bound_functions(program.source_text, &marks, scoping, nodes)
+        .into_iter()
+        .map(|(symbol, print)| {
+            let used_by_component = scoping.get_resolved_references(symbol).any(|reference| {
+                let span = nodes.kind(reference.node_id()).span();
+                let scope = nodes.get_node(reference.node_id()).scope_id();
+                scoping.scope_ancestors(scope).count() <= 2
+                    || spans
+                        .iter()
+                        .any(|outer| outer.start <= span.start && span.end <= outer.end)
+            });
+            let name = scoping.symbol_name(symbol);
+            FingerprintRow {
+                hash: print.hash,
+                rt: runtime::labelled(name).map(str::to_string),
+                nodes: print.nodes,
+                name: name.to_string(),
+                used_by_component,
+            }
+        })
+        .collect()
+}
+
 pub fn restore(code: &str) -> Restore {
     if !may_hold_components(code) {
         return Restore::default();
@@ -165,6 +259,11 @@ pub fn restore(code: &str) -> Restore {
         rw: &rw,
         roots: Default::default(),
         idents,
+        ignored: Default::default(),
+        inline: Default::default(),
+        deleted: Default::default(),
+        library: Default::default(),
+        candidates: convert::candidates(nodes),
     };
     let found = module::components(&cx, home);
     module::restore_all(&cx, home, &found)

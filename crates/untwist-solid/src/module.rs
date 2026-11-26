@@ -15,11 +15,74 @@ use crate::runtime::Rt;
 use crate::{Component, Restore};
 
 pub struct Found {
-    pub symbol: SymbolId,
+    pub symbol: Option<SymbolId>,
     pub name: String,
     pub span: Span,
     pub node: NodeId,
     pub arrow: bool,
+    pub inline: bool,
+}
+
+fn unique(taken: &mut Vec<String>, base: &str) -> String {
+    let mut chosen = base.to_string();
+    let mut counter = 1;
+    while taken.contains(&chosen) {
+        counter += 1;
+        chosen = format!("{base}{counter}");
+    }
+    taken.push(chosen.clone());
+    chosen
+}
+
+fn captures(cx: &Cx<'_, '_>, span: Span, home: ScopeId) -> bool {
+    cx.referenced_at(span).any(|(_, symbol)| {
+        let scope = cx.scoping.symbol_scope_id(symbol);
+        scope != home && !inside(span, cx.scoping.symbol_span(symbol))
+    })
+}
+
+fn inline_components(
+    cx: &Cx<'_, '_>,
+    home: ScopeId,
+    jsx_calls: &[Span],
+    taken: &mut Vec<String>,
+) -> Vec<Found> {
+    let mut out = Vec::new();
+    for node in cx.nodes.iter() {
+        let (span, arrow) = match node.kind() {
+            AstKind::Function(function) if function.id.is_none() => (function.span, false),
+            AstKind::ArrowFunctionExpression(arrow) => (arrow.span, true),
+            _ => continue,
+        };
+        if !jsx_calls.iter().any(|call| inside(span, *call)) {
+            continue;
+        }
+        let parent = cx.nodes.parent_id(node.id());
+        let placed = match cx.nodes.kind(parent) {
+            AstKind::CallExpression(call) => {
+                cx.is(&call.callee, Rt::CreateComponent)
+                    && crate::ast::arg(call, 0)
+                        .is_some_and(|first| first.without_parentheses().span() == span)
+            }
+            AstKind::ArrayExpression(_) | AstKind::ObjectProperty(_) => {
+                cx.runtime.minified && cx.nodes.get_node(parent).scope_id() == home
+            }
+            _ => false,
+        };
+        if !placed || captures(cx, span, home) {
+            continue;
+        }
+        let name = unique(taken, "Component");
+        out.push(Found {
+            symbol: None,
+            name,
+            span,
+            node: node.id(),
+            arrow,
+            inline: true,
+        });
+    }
+    out
 }
 
 fn function_span(cx: &Cx<'_, '_>, symbol: SymbolId) -> Option<(Span, NodeId, bool)> {
@@ -74,31 +137,29 @@ pub fn components(cx: &Cx<'_, '_>, home: ScopeId) -> Vec<Found> {
             continue;
         };
         let name = cx.scoping.symbol_name(symbol);
-        let capital = name.starts_with(|c: char| c.is_ascii_uppercase());
+        let capital = name.starts_with(|c: char| c.is_ascii_uppercase())
+            && name.len() >= 3
+            && name.chars().any(|c| c.is_ascii_lowercase());
         let has_jsx = jsx_calls.iter().any(|call| inside(span, *call));
         let target = targets.contains(&symbol);
-        if !(target || (has_jsx && capital)) {
+        if !(target || (has_jsx && (capital || cx.runtime.minified))) {
             continue;
         }
         let base = match capital {
             true => name.to_string(),
             false => "Component".to_string(),
         };
-        let mut chosen = base.clone();
-        let mut counter = 1;
-        while taken.contains(&chosen) {
-            counter += 1;
-            chosen = format!("{base}{counter}");
-        }
-        taken.push(chosen.clone());
+        let chosen = unique(&mut taken, &base);
         out.push(Found {
-            symbol,
+            symbol: Some(symbol),
             name: chosen,
             span,
             node,
             arrow,
+            inline: false,
         });
     }
+    out.extend(inline_components(cx, home, &jsx_calls, &mut taken));
     out
 }
 
@@ -222,6 +283,35 @@ struct Unit {
     shares: bool,
 }
 
+fn render_inline(cx: &Cx<'_, '_>, found: &Found) -> R<String> {
+    match cx.nodes.kind(found.node) {
+        AstKind::Function(function) => {
+            let Some(body) = &function.body else {
+                return fail("an inline component has no body");
+            };
+            let head = match (function.r#async, function.generator) {
+                (false, false) => "function",
+                _ => return fail("an inline component is async or a generator"),
+            };
+            Ok(format!(
+                "{head} {}{} {}",
+                found.name,
+                cx.rw.render(function.params.span)?,
+                cx.rw.render(body.span)?
+            ))
+        }
+        AstKind::ArrowFunctionExpression(arrow) => {
+            let params = cx.rw.render(arrow.params.span)?;
+            let params = match params.starts_with('(') {
+                true => params,
+                false => format!("({params})"),
+            };
+            Ok(format!("{params} => {}", cx.rw.render(arrow.body.span())?))
+        }
+        _ => fail("an inline component has an unknown shape"),
+    }
+}
+
 fn unit(
     cx: &Cx<'_, '_>,
     home: ScopeId,
@@ -233,8 +323,17 @@ fn unit(
     let mut bodies = Vec::new();
     for (span, node) in roots {
         cx.collect_node(*node)?;
-        bodies.push(indent_rest(&cx.rw.render(*span)?, ""));
+        let text = match all.iter().find(|found| found.inline && found.span == *span) {
+            Some(found) => render_inline(cx, found)?,
+            None => cx.rw.render(*span)?,
+        };
+        bodies.push(indent_rest(&text, ""));
     }
+    let excluded: Vec<Span> = all
+        .iter()
+        .filter(|found| found.inline && !roots.iter().any(|(span, _)| *span == found.span))
+        .map(|found| found.span)
+        .collect();
     let mut deps = Deps::default();
     let mut included: Vec<Span> = roots.iter().map(|(span, _)| *span).collect();
     let mut handled: FxHashSet<SymbolId> = FxHashSet::default();
@@ -245,7 +344,11 @@ fn unit(
     loop {
         let mut seen: Vec<SymbolId> = Vec::new();
         for span in included.iter().filter(|span| !scanned.contains(span)) {
-            seen.extend(cx.referenced(*span));
+            seen.extend(
+                cx.referenced_at(*span)
+                    .filter(|(at, _)| !excluded.iter().any(|skip| inside(*skip, *at)))
+                    .map(|(_, symbol)| symbol),
+            );
         }
         scanned = included.clone();
         let mut fresh = Vec::new();
@@ -270,7 +373,7 @@ fn unit(
                 }
                 continue;
             }
-            if let Some(child) = all.iter().find(|other| other.symbol == symbol) {
+            if let Some(child) = all.iter().find(|other| other.symbol == Some(symbol)) {
                 if !deps.children.contains(&child.name) {
                     deps.children.push(child.name.clone());
                 }
@@ -291,6 +394,12 @@ fn unit(
                     shared_names.push(name);
                 }
                 continue;
+            }
+            if cx.library.borrow().contains(&symbol) {
+                return fail(format!(
+                    "`{}` belongs to the bundled library, not to the component",
+                    cx.scoping.symbol_name(symbol)
+                ));
             }
             let Some((span, node)) = helper_owner(cx, symbol) else {
                 return fail(format!(
@@ -314,6 +423,13 @@ fn unit(
             cx.collect_node(node)?;
             let text = cx.rw.render(span)?;
             helper_texts.push((span.start, indent_rest(&text, "")));
+        }
+    }
+    for found in all.iter().filter(|found| excluded.contains(&found.span)) {
+        if roots.iter().any(|(span, _)| inside(*span, found.span))
+            && !deps.children.contains(&found.name)
+        {
+            deps.children.push(found.name.clone());
         }
     }
     let outside: Vec<SymbolId> = state
@@ -394,7 +510,7 @@ fn assemble(head: &[String], helpers: Vec<String>, main: Vec<String>) -> String 
 }
 
 fn main_text(found: &Found, body: &str) -> String {
-    match found.arrow {
+    match found.arrow || (found.inline && !body.starts_with("function")) {
         true => format!(
             "const {} = {body};\n\nexport default {};",
             found.name, found.name
@@ -450,10 +566,33 @@ fn shared_unit(
     Ok((assemble(&built.head, built.helpers, main), built.children))
 }
 
+fn library(cx: &Cx<'_, '_>, home: ScopeId) -> FxHashSet<SymbolId> {
+    let mut reached: FxHashSet<SymbolId> = FxHashSet::default();
+    let mut queue: Vec<SymbolId> = cx.runtime.symbols.keys().copied().collect();
+    while let Some(symbol) = queue.pop() {
+        let Some((span, _)) = helper_owner(cx, symbol) else {
+            continue;
+        };
+        for (_, used) in cx.referenced_at(span) {
+            if cx.scoping.symbol_scope_id(used) == home && reached.insert(used) {
+                queue.push(used);
+            }
+        }
+    }
+    reached
+}
+
 pub fn restore_all(cx: &Cx<'_, '_>, home: ScopeId, found: &[Found]) -> Restore {
+    if !cx.runtime.esm {
+        *cx.library.borrow_mut() = library(cx, home);
+    }
     for component in found {
-        if cx.scoping.symbol_name(component.symbol) != component.name {
-            cx.rw.rename(component.symbol, component.name.clone());
+        match component.symbol {
+            Some(symbol) if cx.scoping.symbol_name(symbol) != component.name => {
+                cx.rw.rename(symbol, component.name.clone());
+            }
+            Some(_) => {}
+            None => cx.name_inline(component.span, &component.name),
         }
     }
     let none = FxHashSet::default();

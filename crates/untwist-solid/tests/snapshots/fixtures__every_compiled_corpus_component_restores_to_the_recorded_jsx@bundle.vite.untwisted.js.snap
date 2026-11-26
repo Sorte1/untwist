@@ -1,0 +1,138 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/bundle.vite.untwisted.js
+---
+==== Component.jsx
+import { createMemo, mapArray } from "solid-js";
+
+export default function Component(e) {
+  const t = "fallback" in e && { fallback: () => e.fallback };
+  return createMemo(mapArray(() => e.each, e.children, t || undefined));
+}
+==== Component2.jsx
+export default function Component2(e) {
+  return <span class="badge" data-tone={e.tone ?? "plain"}>{e.label}{e.children}</span>;
+}
+==== Component3.jsx
+import { createSignal } from "solid-js";
+import Component2 from "./Component2.jsx";
+
+export default function Component3() {
+  const [e, t] = createSignal(0);
+  return (
+    <div class="parent">
+      <Component2 label="static" />
+      <Component2 label={`count ${e()}`} tone={(e() > 1) ? "hot" : undefined}>
+        <em>child {e()}</em>
+      </Component2>
+      <Component2 label="text">plain text</Component2>
+      <button onClick={() => t(e() + 1)}>more</button>
+    </div>
+  );
+}
+==== Component4.jsx
+import { createSignal } from "solid-js";
+
+export default function Component4() {
+  const [e, t] = createSignal(0);
+  return (
+    <div>
+      <p>Count: {e()}</p>
+      <button onClick={() => t(e() + 1)}>+1</button>
+    </div>
+  );
+}
+==== Component5.jsx
+import { createSignal, Show } from "solid-js";
+import Component from "./Component.jsx";
+
+export default function Component5() {
+  const [e, t] = createSignal([]);
+  const [n, l] = createSignal("");
+  let s = 0;
+  const i = () => {
+    if (n()) {
+      t([...e(), {
+        id: s++,
+        text: n()
+      }]);
+      l("");
+    }
+  };
+  return (
+    <div class="todo">
+      <input value={n()} onInput={(c) => l(c.currentTarget.value)} />
+      <button class="add" onClick={i}>add</button>
+      <Show when={e().length} fallback={<p>nothing to do</p>}>
+        <ul>
+          <Component each={e()}>
+            {(a) => <li>{a.text}<button class="rm" onClick={() => t(e().filter((b) => b.id !== a.id))}>x</button></li>}
+          </Component>
+        </ul>
+        <p>{e().length} left</p>
+      </Show>
+    </div>
+  );
+}
+==== Component6.jsx
+import { useContext } from "solid-js";
+import { ce } from "./shared.jsx";
+
+export default function Component6() {
+  const e = useContext(ce);
+  return <span class={e()}>{e}</span>;
+}
+==== Component7.jsx
+import { createSignal } from "solid-js";
+import { ce } from "./shared.jsx";
+import Component6 from "./Component6.jsx";
+
+export default function Component7() {
+  const [e, t] = createSignal("dark");
+  return (
+    <div>
+      <ce.Provider value={e}><Component6 /></ce.Provider>
+      <button onClick={() => t(e() === "dark" ? "light" : "dark")}>flip</button>
+    </div>
+  );
+}
+==== Component8.jsx
+import { createSignal, Show } from "solid-js";
+import Component from "./Component.jsx";
+
+export default function Component8(e) {
+  const [t, n] = createSignal(true);
+  const [l, s] = createSignal(["x"]);
+  return (
+    <div class="mixed" classList={{ open: t() }}>
+      <h3 onClick={() => n(!t())}>{e.heading}</h3>
+      <Show when={t()}>
+        <Component each={l()}>
+          {(r) => <Show when={r !== "hide"} fallback={<s>hidden</s>}><span class="tag">{r}</span></Show>}
+        </Component>
+        <button onClick={() => s([...l(), "hide", "y"])}>more</button>
+      </Show>
+    </div>
+  );
+}
+==== Component9.jsx
+import { createSignal } from "solid-js";
+
+export default function Component9() {
+  const [e, t] = createSignal(false);
+  const [n, l] = createSignal(0);
+  return (
+    <div>
+      {e() ? <b>on</b> : <i>off</i>}{(n() > 1) && <span>more than one</span>}{n() > 0 ? "positive" : "zero"}
+      <button class="t" onClick={() => t(!e())}>toggle</button>
+      <button class="n" onClick={() => l(n() + 1)}>inc</button>
+    </div>
+  );
+}
+==== shared.jsx
+import { createContext } from "solid-js";
+
+const ce = createContext("light");
+
+export { ce };

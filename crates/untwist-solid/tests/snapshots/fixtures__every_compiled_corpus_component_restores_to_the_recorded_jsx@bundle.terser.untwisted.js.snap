@@ -1,0 +1,38 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/bundle.terser.untwisted.js
+---
+==== Component5.jsx
+import { createSignal } from "solid-js";
+
+export default function Component5() {
+  const [e, t] = createSignal(0);
+  return (
+    <div>
+      <p>Count: {e()}</p>
+      <button onClick={() => t(e() + 1)}>+1</button>
+    </div>
+  );
+}
+==== Component9.jsx
+import { createSignal } from "solid-js";
+
+export default function Component9() {
+  const [e, t] = createSignal(false);
+  const [n, r] = createSignal(0);
+  return (
+    <div>
+      {e() ? <b>on</b> : <i>off</i>}{(n() > 1) && <span>more than one</span>}{n() > 0 ? "positive" : "zero"}
+      <button class="t" onClick={() => t(!e())}>toggle</button>
+      <button class="n" onClick={() => r(n() + 1)}>inc</button>
+    </div>
+  );
+}
+==== Component kept as JS: `s` belongs to the bundled library, not to the component
+==== Component2 kept as JS: an effect declares a pattern
+==== Component3 kept as JS: an effect declares a pattern
+==== Component7 kept as JS: `s` belongs to the bundled library, not to the component
+==== Component4 kept as JS: its child component Component2 is kept as JS
+==== Component6 kept as JS: its child component Component is kept as JS
+==== Component8 kept as JS: its child component Component is kept as JS

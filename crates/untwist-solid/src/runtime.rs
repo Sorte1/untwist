@@ -140,11 +140,25 @@ fn bundled(name: &str) -> Option<Rt> {
         .map(|at| Rt::Api(at as u8))
 }
 
+pub fn labelled(name: &str) -> Option<&'static str> {
+    let name = bare(name);
+    MACHINERY
+        .iter()
+        .map(|row| row.1)
+        .chain(API.iter().map(|row| row.0))
+        .find(|known| *known == name)
+}
+
+pub fn bundled_name(name: &str) -> Option<Rt> {
+    bundled(name)
+}
+
 #[derive(Default)]
 pub struct Runtime {
     pub symbols: FxHashMap<SymbolId, Rt>,
     pub ambiguous: Vec<SymbolId>,
     pub esm: bool,
+    pub minified: bool,
 }
 
 impl Runtime {
@@ -175,6 +189,9 @@ impl Runtime {
         }
         if !runtime.esm {
             runtime.named(scoping, nodes);
+        }
+        if !runtime.esm && runtime.symbols.is_empty() && runtime.ambiguous.is_empty() {
+            runtime.fingerprinted(program.source_text, scoping, nodes);
         }
         runtime
     }
@@ -210,6 +227,103 @@ impl Runtime {
         }
     }
 
+    fn fingerprinted(&mut self, source: &str, scoping: &Scoping, nodes: &AstNodes<'_>) {
+        let marks = untwist_restore::fingerprint::Marks::of(nodes, scoping);
+        let prints = untwist_restore::fingerprint::bound_functions(source, &marks, scoping, nodes);
+        let mut found: FxHashMap<Rt, Vec<SymbolId>> = FxHashMap::default();
+        for (symbol, print) in prints {
+            if let Some(rt) = crate::fingerprints::lookup(print.hash) {
+                found.entry(rt).or_default().push(symbol);
+            }
+        }
+        let Some([template]) = found.get(&Rt::Template).map(Vec::as_slice) else {
+            return;
+        };
+        let home = scoping.symbol_scope_id(*template);
+        self.minified = true;
+        for (rt, symbol) in loops(&found, scoping, nodes, home) {
+            found.insert(rt, vec![symbol]);
+        }
+        for (rt, symbols) in found {
+            match symbols.as_slice() {
+                [only] if scoping.symbol_scope_id(*only) == home => {
+                    self.symbols.insert(*only, rt);
+                }
+                _ => self.ambiguous.extend(symbols),
+            }
+        }
+    }
+}
+
+fn loops(
+    found: &FxHashMap<Rt, Vec<SymbolId>>,
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+    home: ScopeId,
+) -> Vec<(Rt, SymbolId)> {
+    let only = |name: &str| -> Option<SymbolId> {
+        let rt = bundled(name)?;
+        match found.get(&rt).map(Vec::as_slice) {
+            Some([symbol]) => Some(*symbol),
+            _ => None,
+        }
+    };
+    let (Some(memo), Some(map), Some(index)) =
+        (only("createMemo"), only("mapArray"), only("indexArray"))
+    else {
+        return Vec::new();
+    };
+    let mut picks: Vec<(Rt, SymbolId)> = Vec::new();
+    for symbol in scoping.get_bindings(home).values().copied() {
+        if found.values().any(|symbols| symbols.contains(&symbol)) {
+            continue;
+        }
+        let AstKind::Function(function) = nodes.kind(scoping.symbol_declaration(symbol)) else {
+            continue;
+        };
+        let [Statement::VariableDeclaration(_), Statement::ReturnStatement(ret)] = function
+            .body
+            .as_ref()
+            .map_or(&[][..], |body| body.statements.as_slice())
+        else {
+            continue;
+        };
+        let Some(Expression::CallExpression(outer)) =
+            ret.argument.as_ref().map(Expression::without_parentheses)
+        else {
+            continue;
+        };
+        let Some(Expression::CallExpression(inner)) = outer
+            .arguments
+            .first()
+            .and_then(|arg| arg.as_expression())
+            .map(Expression::without_parentheses)
+        else {
+            continue;
+        };
+        if expr_symbol(&outer.callee, scoping) != Some(memo) || function.params.items.len() != 1 {
+            continue;
+        }
+        let callee = expr_symbol(&inner.callee, scoping);
+        let name = match callee {
+            Some(symbol) if symbol == map => "For",
+            Some(symbol) if symbol == index => "Index",
+            _ => continue,
+        };
+        if let Some(rt) = bundled(name) {
+            picks.push((rt, symbol));
+        }
+    }
+    picks
+        .iter()
+        .filter(|(rt, _)| {
+            picks.iter().filter(|(other, _)| other == rt).count() == 1 && !found.contains_key(rt)
+        })
+        .copied()
+        .collect()
+}
+
+impl Runtime {
     pub fn home(&self, scoping: &Scoping) -> Option<ScopeId> {
         self.symbols
             .iter()
