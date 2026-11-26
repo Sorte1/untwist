@@ -1,0 +1,23 @@
+[package]
+name = "untwist-restore"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+readme.workspace = true
+rust-version.workspace = true
+keywords = ["javascript", "decompiler", "deobfuscator", "framework"]
+categories = ["development-tools", "parser-implementations"]
+description = "Shared pieces of untwist's framework restores: template parser, source rewriter, function fingerprints"
+
+[dependencies]
+oxc_allocator.workspace = true
+oxc_ast.workspace = true
+oxc_ast_visit.workspace = true
+oxc_semantic.workspace = true
+oxc_span.workspace = true
+oxc_syntax.workspace = true
+rustc-hash.workspace = true
+

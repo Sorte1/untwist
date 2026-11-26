@@ -14,6 +14,7 @@ pub(crate) enum Role {
     Module(usize),
     Declarations,
     Svelte,
+    Solid,
     Wasm,
     SourceMap,
 }
@@ -439,15 +440,20 @@ impl Planner<'_> {
         planned
     }
 
-    fn svelte(&mut self, dir: &Path, result: &Output) -> Vec<PlannedFile> {
-        let mut planned = Vec::with_capacity(result.svelte.len());
-        for file in &result.svelte {
+    fn restored(&mut self, dir: &Path, result: &Output) -> Vec<PlannedFile> {
+        let mut planned = Vec::with_capacity(result.svelte.len() + result.solid.len());
+        let files = result
+            .svelte
+            .iter()
+            .map(|file| (file, Role::Svelte))
+            .chain(result.solid.iter().map(|file| (file, Role::Solid)));
+        for (file, role) in files {
             planned.extend(self.admit(
                 dir,
                 Candidate {
                     relative: file.path.clone(),
                     contents: file.code.clone().into_bytes(),
-                    role: Role::Svelte,
+                    role,
                     owner: OWNER_SVELTE,
                 },
             ));
@@ -532,7 +538,7 @@ fn single_file_plan(dir: &Path, result: &Output, inputs: &[PathBuf]) -> Plan {
         files.extend(planner.admit(dir, listing));
     }
     files.extend(planner.wasm(dir, result));
-    files.extend(planner.svelte(dir, result));
+    files.extend(planner.restored(dir, result));
     Plan {
         files,
         refused: planner.refused,
@@ -562,7 +568,7 @@ fn plan_per_module(dir: &Path, result: &Output, inputs: &[PathBuf]) -> Plan {
     let listing = planner.listing(dir, result);
     let wasm = planner.wasm(dir, result);
     let modules = planner.modules(dir, result);
-    let svelte = planner.svelte(dir, result);
+    let svelte = planner.restored(dir, result);
     let listing = listing.map(|file| PlannedFile {
         contents: listing_contents(result, &planner.unwritten_modules),
         ..file
@@ -618,6 +624,7 @@ mod tests {
             source_map_link: None,
             types: None,
             svelte: Vec::new(),
+            solid: Vec::new(),
         }
     }
 

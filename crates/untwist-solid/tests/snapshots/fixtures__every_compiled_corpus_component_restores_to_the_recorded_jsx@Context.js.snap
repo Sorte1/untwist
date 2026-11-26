@@ -1,0 +1,33 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/Context.js
+---
+==== Label.jsx
+import { useContext } from "solid-js";
+import { Theme } from "./shared.jsx";
+
+export default function Label() {
+  const theme = useContext(Theme);
+  return <span class={theme()}>{theme}</span>;
+}
+==== Context.jsx
+import { createSignal } from "solid-js";
+import { Theme } from "./shared.jsx";
+import Label from "./Label.jsx";
+
+export default function Context() {
+  const [theme, setTheme] = createSignal("dark");
+  return (
+    <div>
+      <Theme.Provider value={theme}><Label /></Theme.Provider>
+      <button onClick={() => setTheme(theme() === "dark" ? "light" : "dark")}>flip</button>
+    </div>
+  );
+}
+==== shared.jsx
+import { createContext } from "solid-js";
+
+const Theme = createContext("light");
+
+export { Theme };

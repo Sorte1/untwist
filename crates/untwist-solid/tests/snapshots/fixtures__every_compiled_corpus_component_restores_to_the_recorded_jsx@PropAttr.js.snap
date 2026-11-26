@@ -1,0 +1,18 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/PropAttr.js
+---
+==== PropAttr.jsx
+import { createSignal } from "solid-js";
+
+export default function PropAttr() {
+  const [v, setV] = createSignal("x");
+  return (
+    <div>
+      <input value={v()} data-v={v()} />
+      <my-element class="custom" prop:items={[1, 2]} attr:size={v()} />
+      <button onClick={() => setV(v() + "y")}>more</button>
+    </div>
+  );
+}

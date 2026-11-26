@@ -1,0 +1,15 @@
+import { createSignal } from "solid-js";
+
+export default function Ternary() {
+  const [on, setOn] = createSignal(false);
+  const [n, setN] = createSignal(0);
+  return (
+    <div>
+      {on() ? <b>on</b> : <i>off</i>}
+      {n() > 1 && <span>more than one</span>}
+      {n() > 0 ? "positive" : "zero"}
+      <button class="t" onClick={() => setOn(!on())}>toggle</button>
+      <button class="n" onClick={() => setN(n() + 1)}>inc</button>
+    </div>
+  );
+}

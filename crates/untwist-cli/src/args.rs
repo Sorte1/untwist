@@ -281,9 +281,10 @@ pub struct Args {
         value_name = "FRAMEWORK",
         value_delimiter = ',',
         help = "opt-in: also write each compiled component of FRAMEWORK (svelte: Svelte 5 client \
-                output) back as source, one <Name>.svelte beside the file that holds it; a view \
-                for reading, the JavaScript output is unchanged, and a component with any part \
-                untwist cannot map is left out with a note; needs --output"
+                output, as <Name>.svelte; solid: SolidJS dom output, as <Name>.jsx; several as \
+                svelte,solid) back as source, beside the file that holds it; a view for reading, \
+                the JavaScript output is unchanged, and a component with any part untwist cannot \
+                map is left out with a note; needs --output"
     )]
     pub restore: Vec<RestoreArg>,
     #[arg(
@@ -341,6 +342,7 @@ pub enum ReportFormat {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
 pub enum RestoreArg {
     Svelte,
+    Solid,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]
@@ -442,6 +444,7 @@ impl Args {
             source_map: self.source_map.is_some(),
             types: self.types.map(TypesArg::mode),
             svelte: self.restore.contains(&RestoreArg::Svelte),
+            solid: self.restore.contains(&RestoreArg::Solid),
             ..untwist::Options::default()
         }
     }

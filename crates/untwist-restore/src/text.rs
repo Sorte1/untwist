@@ -19,7 +19,8 @@ pub struct Site {
 
 pub struct Rewriter<'s> {
     pub source: &'s str,
-    sites: Vec<Site>,
+    framework: &'static str,
+    sites: RefCell<Vec<Site>>,
     refs: Vec<(Span, SymbolId)>,
     shorthands: Vec<u32>,
     pub forbidden: RefCell<FxHashSet<SymbolId>>,
@@ -32,6 +33,7 @@ pub type Reason = String;
 impl<'s> Rewriter<'s> {
     pub fn new(
         source: &'s str,
+        framework: &'static str,
         mut sites: Vec<Site>,
         mut refs: Vec<(Span, SymbolId)>,
         mut shorthands: Vec<u32>,
@@ -41,7 +43,8 @@ impl<'s> Rewriter<'s> {
         refs.sort_by_key(|(span, _)| span.start);
         Rewriter {
             source,
-            sites,
+            framework,
+            sites: RefCell::new(sites),
             refs,
             shorthands,
             forbidden: RefCell::new(FxHashSet::default()),
@@ -80,8 +83,9 @@ impl<'s> Rewriter<'s> {
             seen.insert(*symbol);
             if forbidden.contains(symbol) {
                 return Err(format!(
-                    "`{}` is compiler machinery that has no Svelte spelling here",
-                    span.source_text(self.source)
+                    "`{}` is compiler machinery that has no {} spelling here",
+                    span.source_text(self.source),
+                    self.framework
                 ));
             }
             if let Some(name) = renames.get(symbol) {
@@ -101,10 +105,9 @@ impl<'s> Rewriter<'s> {
     pub fn render(&self, span: Span) -> Result<String, Reason> {
         let mut out = String::new();
         let mut cursor = span.start;
-        let first = self
-            .sites
-            .partition_point(|site| site.span.start < span.start);
-        for site in &self.sites[first..] {
+        let sites = self.sites.borrow();
+        let first = sites.partition_point(|site| site.span.start < span.start);
+        for site in &sites[first..] {
             if site.span.start >= span.end {
                 break;
             }
@@ -129,6 +132,19 @@ impl<'s> Rewriter<'s> {
         }
         self.gap(&mut out, cursor, span.end)?;
         Ok(out)
+    }
+
+    pub fn add_site(&self, site: Site) {
+        let mut sites = self.sites.borrow_mut();
+        let at = sites.partition_point(|other| {
+            (other.span.start, std::cmp::Reverse(other.span.end))
+                < (site.span.start, std::cmp::Reverse(site.span.end))
+        });
+        sites.insert(at, site);
+    }
+
+    pub fn has_site(&self, span: Span) -> bool {
+        self.sites.borrow().iter().any(|site| site.span == span)
     }
 
     pub fn text(&self, span: Span) -> &'s str {

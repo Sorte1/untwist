@@ -16,12 +16,13 @@ description = "Fast JavaScript deobfuscator, unminifier and unbundler that never
 bench = false
 
 [features]
-default = ["parallel", "modern", "boundaries", "types", "svelte"]
+default = ["parallel", "modern", "boundaries", "types", "svelte", "solid"]
 modern = ["untwist-rename/modern"]
 boundaries = ["untwist-unpack/boundaries"]
 parallel = ["dep:rayon"]
 types = ["dep:untwist-types"]
 svelte = ["dep:untwist-svelte"]
+solid = ["dep:untwist-solid"]
 refusal-spans = ["untwist-deobfuscate/refusal-spans"]
 libraries-all = ["untwist-rename/libraries-all"]
 test-hooks = ["refusal-spans", "untwist-core/test-hooks", "untwist-deobfuscate/test-hooks", "untwist-eval/test-hooks", "untwist-rename/test-hooks", "untwist-unminify/test-hooks", "untwist-types?/test-hooks"]
@@ -36,6 +37,8 @@ untwist-unminify = { path = "../untwist-unminify", version = "0.6.0" }
 untwist-unpack = { path = "../untwist-unpack", version = "0.6.0" }
 untwist-types = { path = "../untwist-types", version = "0.6.0", optional = true }
 untwist-svelte = { path = "../untwist-svelte", version = "0.6.0", optional = true }
+untwist-solid = { path = "../untwist-solid", version = "0.6.0", optional = true }
+untwist-restore = { path = "../untwist-restore", version = "0.6.0" }
 anyhow.workspace = true
 oxc_allocator.workspace = true
 oxc_ast.workspace = true

@@ -1,3 +1,4 @@
+use oxc_ast::ast::Expression;
 use oxc_ast::AstKind;
 use oxc_semantic::{AstNodes, Scoping};
 use oxc_span::{GetSpan, Span};
@@ -191,4 +192,43 @@ pub fn arrow(
 ) -> Option<Print> {
     let root = arrow.scope_id.get()?;
     Some(shape(source, marks, scoping, arrow.span, root, None))
+}
+
+pub fn bound_functions(
+    source: &str,
+    marks: &Marks,
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+) -> Vec<(SymbolId, Print)> {
+    let mut out = Vec::new();
+    for symbol in scoping.symbol_ids() {
+        if scoping
+            .scope_ancestors(scoping.symbol_scope_id(symbol))
+            .count()
+            > 2
+        {
+            continue;
+        }
+        let print = match nodes.kind(scoping.symbol_declaration(symbol)) {
+            AstKind::Function(function) => self::function(source, marks, function, scoping),
+            AstKind::VariableDeclarator(declarator) => match declarator
+                .init
+                .as_ref()
+                .map(Expression::without_parentheses)
+            {
+                Some(Expression::FunctionExpression(function)) => {
+                    self::function(source, marks, function, scoping)
+                }
+                Some(Expression::ArrowFunctionExpression(arrow)) => {
+                    self::arrow(source, marks, arrow, scoping)
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(print) = print {
+            out.push((symbol, print));
+        }
+    }
+    out
 }

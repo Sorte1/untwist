@@ -1,0 +1,20 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/Attributes.js
+---
+==== Attributes.jsx
+import { createSignal } from "solid-js";
+
+export default function Attributes(props) {
+  const [on, setOn] = createSignal(false);
+  return (
+    <div>
+      <a target="_blank" rel="noopener" href={props.href} aria-label={on() ? "on" : "off"}>link</a>
+      <input type="checkbox" disabled={props.locked} checked={on()} />
+      <span tabindex="0" class={on() ? "active" : "idle"} data-state={on() ? 1 : 0}>state</span>
+      <div class={`box ${props.kind}`} id={props.id} hidden={!on()} />
+      <button type="button" onClick={() => setOn(!on())}>toggle</button>
+    </div>
+  );
+}

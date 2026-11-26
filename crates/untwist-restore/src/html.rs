@@ -24,7 +24,21 @@ pub fn is_void(name: &str) -> bool {
 }
 
 pub fn parse(text: &str) -> Option<Vec<Node>> {
-    let mut parser = Parser { text, at: 0 };
+    let mut parser = Parser {
+        text,
+        at: 0,
+        open_ended: false,
+    };
+    let nodes = parser.nodes(None)?;
+    (parser.at == text.len()).then_some(nodes)
+}
+
+pub fn parse_open_ended(text: &str) -> Option<Vec<Node>> {
+    let mut parser = Parser {
+        text,
+        at: 0,
+        open_ended: true,
+    };
     let nodes = parser.nodes(None)?;
     (parser.at == text.len()).then_some(nodes)
 }
@@ -32,6 +46,7 @@ pub fn parse(text: &str) -> Option<Vec<Node>> {
 struct Parser<'t> {
     text: &'t str,
     at: usize,
+    open_ended: bool,
 }
 
 impl<'t> Parser<'t> {
@@ -44,7 +59,7 @@ impl<'t> Parser<'t> {
         loop {
             let rest = self.rest();
             if rest.is_empty() {
-                return closing.is_none().then_some(nodes);
+                return (closing.is_none() || self.open_ended).then_some(nodes);
             }
             if let Some(after) = rest.strip_prefix("</") {
                 let name = closing?;
@@ -128,7 +143,11 @@ impl<'t> Parser<'t> {
         }
         if RAW.contains(&name.as_str()) {
             let rest = self.rest();
-            let end = rest.find(&format!("</{name}"))?;
+            let end = match rest.find(&format!("</{name}")) {
+                Some(end) => end,
+                None if self.open_ended => rest.len(),
+                None => return None,
+            };
             let text = rest[..end].to_string();
             self.at += end;
             let closed = self.nodes(Some(&name))?;
@@ -183,6 +202,16 @@ mod tests {
             input.attrs,
             vec![("type".to_string(), Some("checkbox".to_string()))]
         );
+    }
+
+    #[test]
+    fn open_ended_parse_closes_trailing_elements() {
+        let nodes = parse_open_ended("<div><p>Count: <!> / </p><button>+1").unwrap();
+        let Node::Element(div) = &nodes[0] else {
+            panic!()
+        };
+        assert_eq!(div.children.len(), 2);
+        assert!(parse("<div><button>+1").is_none());
     }
 
     #[test]

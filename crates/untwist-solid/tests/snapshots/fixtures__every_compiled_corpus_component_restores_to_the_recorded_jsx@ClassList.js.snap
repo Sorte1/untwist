@@ -1,0 +1,18 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/ClassList.js
+---
+==== ClassList.jsx
+import { createSignal } from "solid-js";
+
+export default function ClassList() {
+  const [n, setN] = createSignal(0);
+  return (
+    <div>
+      <p class="base" classList={{ odd: n() % 2 === 1, even: n() % 2 === 0, big: n() > 2 }}>{n()}</p>
+      <span class="fixed">fixed</span>
+      <button onClick={() => setN(n() + 1)}>next</button>
+    </div>
+  );
+}

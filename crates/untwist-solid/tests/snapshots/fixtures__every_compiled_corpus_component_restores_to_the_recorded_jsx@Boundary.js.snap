@@ -1,0 +1,25 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/Boundary.js
+---
+==== Bomb.jsx
+export default function Bomb(props) {
+  if (props.armed) throw new Error("boom");
+  return <p>safe</p>;
+}
+==== Boundary.jsx
+import { createSignal, ErrorBoundary, Show } from "solid-js";
+import Bomb from "./Bomb.jsx";
+
+export default function Boundary() {
+  const [armed, setArmed] = createSignal(false);
+  return (
+    <div>
+      <ErrorBoundary fallback={(err, reset) => <p class="err" onClick={reset}>{err.message}</p>}>
+        <Show when={armed()} fallback={<Bomb armed={false} />}><Bomb armed /></Show>
+      </ErrorBoundary>
+      <button onClick={() => setArmed(true)}>arm</button>
+    </div>
+  );
+}

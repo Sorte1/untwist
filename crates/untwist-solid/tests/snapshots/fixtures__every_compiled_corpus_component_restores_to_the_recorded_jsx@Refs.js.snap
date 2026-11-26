@@ -1,0 +1,23 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/Refs.js
+---
+==== Refs.jsx
+import { onMount } from "solid-js";
+
+export default function Refs() {
+  let input;
+  let box;
+  onMount(() => {
+    input.value = "mounted";
+    console.log(box.tagName);
+  });
+  return (
+    <div>
+      <input ref={input} />
+      <div class="box" ref={el => box = el} />
+      <span ref={el => el.setAttribute("data-ref", "yes")}>span</span>
+    </div>
+  );
+}

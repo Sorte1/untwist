@@ -1,0 +1,39 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/Store.js
+---
+==== Store.jsx
+import { For } from "solid-js";
+import { createStore, produce } from "solid-js/store";
+
+export default function Store() {
+  const [state, setState] = createStore({
+    todos: [{
+      text: "one",
+      done: false
+    }],
+    filter: "all"
+  });
+  const toggle = i => setState("todos", i, "done", d => !d);
+  return (
+    <div>
+      <For each={state.todos}>
+        {(todo, i) => (
+          <label classList={{ done: todo.done }}>
+            <input type="checkbox" checked={todo.done} onChange={() => toggle(i())} />
+            {todo.text}
+          </label>
+        )}
+      </For>
+      <button
+        onClick={() => setState(produce(s => s.todos.push({
+          text: "two",
+          done: true
+        })))}
+      >
+        add
+      </button>
+    </div>
+  );
+}

@@ -1,0 +1,13 @@
+export default function Untracked(props) {
+  const initial = props.start;
+  const label = "static label";
+  const list = [1, 2, 3];
+  return (
+    <div>
+      <p>{initial}</p>
+      <p>{label}</p>
+      <p>{list.map((x) => x * 2).join(",")}</p>
+      <ul>{list.map((x) => <li>{x}</li>)}</ul>
+    </div>
+  );
+}

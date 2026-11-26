@@ -258,7 +258,7 @@ impl Runtime {
             return runtime;
         }
         let marks = crate::fingerprint::Marks::of(nodes, scoping);
-        let prints = bound_functions(source, &marks, scoping, nodes);
+        let prints = crate::fingerprint::bound_functions(source, &marks, scoping, nodes);
         if runtime.is_empty() && runtime.ambiguous.is_empty() {
             runtime.fingerprinted(source, &marks, &prints, scoping, nodes);
         }
@@ -403,47 +403,6 @@ impl Runtime {
             _ => None,
         }
     }
-}
-
-pub fn bound_functions(
-    source: &str,
-    marks: &crate::fingerprint::Marks,
-    scoping: &Scoping,
-    nodes: &AstNodes<'_>,
-) -> Vec<(SymbolId, crate::fingerprint::Print)> {
-    let mut out = Vec::new();
-    for symbol in scoping.symbol_ids() {
-        if scoping
-            .scope_ancestors(scoping.symbol_scope_id(symbol))
-            .count()
-            > 2
-        {
-            continue;
-        }
-        let print = match nodes.kind(scoping.symbol_declaration(symbol)) {
-            AstKind::Function(function) => {
-                crate::fingerprint::function(source, marks, function, scoping)
-            }
-            AstKind::VariableDeclarator(declarator) => match declarator
-                .init
-                .as_ref()
-                .map(Expression::without_parentheses)
-            {
-                Some(Expression::FunctionExpression(function)) => {
-                    crate::fingerprint::function(source, marks, function, scoping)
-                }
-                Some(Expression::ArrowFunctionExpression(arrow)) => {
-                    crate::fingerprint::arrow(source, marks, arrow, scoping)
-                }
-                _ => None,
-            },
-            _ => None,
-        };
-        if let Some(print) = print {
-            out.push((symbol, print));
-        }
-    }
-    out
 }
 
 fn global_aliases(scoping: &Scoping, nodes: &AstNodes<'_>, global: &str) -> Vec<SymbolId> {

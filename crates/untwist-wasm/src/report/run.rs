@@ -29,6 +29,7 @@ pub struct RunReport {
     wasm: String,
     wasm_bytes: Vec<Vec<u8>>,
     svelte: String,
+    solid: String,
 }
 
 #[wasm_bindgen]
@@ -39,6 +40,10 @@ impl RunReport {
 
     pub fn svelte_json(&self) -> String {
         self.svelte.clone()
+    }
+
+    pub fn solid_json(&self) -> String {
+        self.solid.clone()
     }
 
     pub fn wasm_bytes(&self, index: u32) -> Option<Vec<u8>> {
@@ -142,7 +147,8 @@ fn report_with(source: &str, options: Options, wasm: &WasmFiles, maps: MapFlags)
         .bundle
         .as_ref()
         .map(untwist::BundleOutput::bundle_json);
-    let svelte = svelte_json(&result);
+    let svelte = restore_json(&result, &result.svelte, untwist::SVELTE_PASS);
+    let solid = restore_json(&result, &result.solid, untwist::SOLID_PASS);
     let modules = result
         .bundle
         .take()
@@ -184,27 +190,24 @@ fn report_with(source: &str, options: Options, wasm: &WasmFiles, maps: MapFlags)
         wasm,
         wasm_bytes,
         svelte,
+        solid,
     }
 }
 
 #[derive(serde::Serialize)]
-struct SvelteJson<'a> {
-    files: &'a [untwist::SvelteFile],
+struct RestoreJson<'a> {
+    files: &'a [untwist::RestoredFile],
     kept: Vec<&'a str>,
 }
 
-fn svelte_json(result: &untwist::Output) -> String {
+fn restore_json(result: &untwist::Output, files: &[untwist::RestoredFile], pass: &str) -> String {
     let kept = result
         .notes
         .iter()
-        .filter(|note| note.pass == untwist::SVELTE_PASS && note.message.contains(" kept as JS: "))
+        .filter(|note| note.pass == pass && note.message.contains(" kept as JS: "))
         .map(|note| note.message.as_str())
         .collect();
-    serde_json::to_string(&SvelteJson {
-        files: &result.svelte,
-        kept,
-    })
-    .unwrap_or_default()
+    serde_json::to_string(&RestoreJson { files, kept }).unwrap_or_default()
 }
 
 #[wasm_bindgen]
@@ -292,6 +295,7 @@ fn report_for_with(
             wasm: String::new(),
             wasm_bytes: Vec::new(),
             svelte: String::new(),
+            solid: String::new(),
         },
     }
 }
@@ -619,6 +623,24 @@ mod tests {
             .contains("$state(0)"));
         assert_eq!(json["kept"], serde_json::json!([]));
         let none: serde_json::Value = serde_json::from_str(&plain.svelte_json()).unwrap();
+        assert_eq!(none["files"], serde_json::json!([]));
+    }
+
+    const SOLID_COUNTER: &str = include_str!("../../../untwist-solid/tests/fixtures/Counter.js");
+
+    #[test]
+    fn restore_solid_lists_the_component_and_leaves_the_code_alone() {
+        let plain = run_report(SOLID_COUNTER, "", false);
+        let restored = run_report(SOLID_COUNTER, "--restore solid", false);
+        assert_eq!(plain.stdout(), restored.stdout());
+        let json: serde_json::Value = serde_json::from_str(&restored.solid_json()).unwrap();
+        assert_eq!(json["files"][0]["path"], "Counter.jsx");
+        assert!(json["files"][0]["code"]
+            .as_str()
+            .unwrap()
+            .contains("createSignal(0)"));
+        assert_eq!(json["kept"], serde_json::json!([]));
+        let none: serde_json::Value = serde_json::from_str(&plain.solid_json()).unwrap();
         assert_eq!(none["files"], serde_json::json!([]));
     }
 

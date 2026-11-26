@@ -1,0 +1,1 @@
+{ "steps": [{ "input": [".name", "typed"] }, { "check": ".agree" }] }

@@ -11,9 +11,10 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [features]
-default = ["svelte"]
+default = ["svelte", "solid"]
 types = ["untwist/types"]
 svelte = ["untwist/svelte"]
+solid = ["untwist/solid"]
 
 [dependencies]
 untwist = { path = "../untwist", default-features = false, features = ["refusal-spans", "modern", "boundaries"] }

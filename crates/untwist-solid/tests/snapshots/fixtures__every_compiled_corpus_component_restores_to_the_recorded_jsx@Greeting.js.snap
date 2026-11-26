@@ -1,0 +1,9 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/Greeting.js
+---
+==== Greeting.jsx
+export default function Greeting(props) {
+  return <p class="greeting" title={props.title}>Hello, {props.name}!</p>;
+}

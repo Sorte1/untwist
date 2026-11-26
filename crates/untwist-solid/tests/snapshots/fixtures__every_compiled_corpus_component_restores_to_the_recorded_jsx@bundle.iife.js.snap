@@ -1,0 +1,52 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/bundle.iife.js
+---
+==== Badge.jsx
+export default function Badge(props) {
+  return <span class="badge" data-tone={props.tone ?? "plain"}>{props.label}{props.children}</span>;
+}
+==== Parent.jsx
+import { createSignal } from "solid-js";
+import Badge from "./Badge.jsx";
+
+export default function Parent() {
+  const [n, setN] = createSignal(0);
+  return (
+    <div class="parent">
+      <Badge label="static" />
+      <Badge label={`count ${n()}`} tone={n() > 1 ? "hot" : undefined}><em>child {n()}</em></Badge>
+      <Badge label="text">plain text</Badge>
+      <button onClick={() => setN(n() + 1)}>more</button>
+    </div>
+  );
+}
+==== Label.jsx
+import { useContext } from "solid-js";
+import { Theme } from "./shared.jsx";
+
+export default function Label() {
+  const theme = useContext(Theme);
+  return <span class={theme()}>{theme}</span>;
+}
+==== Context.jsx
+import { createSignal } from "solid-js";
+import { Theme } from "./shared.jsx";
+import Label from "./Label.jsx";
+
+export default function Context() {
+  const [theme, setTheme] = createSignal("dark");
+  return (
+    <div>
+      <Theme.Provider value={theme}><Label /></Theme.Provider>
+      <button onClick={() => setTheme(theme() === "dark" ? "light" : "dark")}>flip</button>
+    </div>
+  );
+}
+==== shared.jsx
+import { createContext } from "solid-js";
+
+const Theme = createContext("light");
+
+export { Theme };

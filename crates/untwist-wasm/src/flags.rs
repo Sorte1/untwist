@@ -153,7 +153,8 @@ fn valued(mut options: Options, flag: &str, word: &str) -> Result<Options, Strin
             for framework in word.split(',') {
                 match framework {
                     "svelte" => options.svelte = true,
-                    other => return Err(format!("unknown framework {other} (svelte)")),
+                    "solid" => options.solid = true,
+                    other => return Err(format!("unknown framework {other} (svelte or solid)")),
                 }
             }
         }

@@ -1,0 +1,26 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/Lifecycle.js
+---
+==== Ticker.jsx
+import { onMount, onCleanup } from "solid-js";
+
+export default function Ticker(props) {
+  onMount(() => console.log("mount", props.name));
+  onCleanup(() => console.log("cleanup", props.name));
+  return <p>{props.name}</p>;
+}
+==== Lifecycle.jsx
+import { createSignal, Show } from "solid-js";
+import Ticker from "./Ticker.jsx";
+
+export default function Lifecycle() {
+  const [shown, setShown] = createSignal(true);
+  return (
+    <div>
+      <Show when={shown()}><Ticker name="tick" /></Show>
+      <button onClick={() => setShown(!shown())}>toggle</button>
+    </div>
+  );
+}
