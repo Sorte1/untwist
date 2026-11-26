@@ -34,7 +34,11 @@ between visits; untwist.dev runs the latest release.
 - **Unminify.** Undoes minifier idioms: `!0` becomes `true`, comma sequences become statements,
   ternaries become `if`/`else`, Yoda conditions are flipped, `void 0` becomes `undefined`, and so on.
 - **Untranspile.** Turns TypeScript, Babel, SWC and esbuild helpers for spread, destructuring,
-  classes, generators and `async` back into native syntax.
+  classes, generators and `async` back into native syntax. `Math.pow(a, b)` becomes `a ** b`
+  when one operand is a plain number, string or boolean (so a BigInt operand throws in both forms),
+  and with `--unsafe` Babel's array index loops and loose-mode `_createForOfIteratorHelperLoose`
+  loops become `for...of` when the iterated value is a fresh array, a string or a new `Map`/`Set`
+  whose iterator has no `return` for an early exit to call.
 - **Unpack.** Detects webpack 4/5 (including JSONP chunks), browserify, esbuild and Bun, rolldown
   (also Vite 8), SystemJS, AMD, UMD, Parcel, Metro, Turbopack and Closure bundles, extracts their modules and rewrites
   `require`/`import` specifiers to relative paths. Rollup and Vite scope-hoisted bundles can be

@@ -11,6 +11,7 @@ use untwist_core::pass::{
 };
 use untwist_core::semantic::{has_module_syntax, program_is_strict, scope_hazard};
 
+mod array_source;
 mod async_fn;
 mod async_pair;
 mod builtins;
@@ -28,6 +29,7 @@ mod fingerprint;
 mod for_of;
 mod for_of_inline;
 mod for_of_loop;
+mod for_of_loose;
 mod for_of_tsc;
 mod generator;
 mod generator_regen;
@@ -102,6 +104,7 @@ pub struct UntranspileHelpers {
     strict: bool,
     class_pending: u32,
     waiting: bool,
+    indexed_seen: bool,
     promise_written: bool,
     keys: define_chain::Keys,
     define_ready: bool,
@@ -141,6 +144,7 @@ impl Default for UntranspileHelpers {
             strict: false,
             class_pending: 0,
             waiting: false,
+            indexed_seen: false,
             promise_written: false,
             keys: define_chain::Keys::default(),
             define_ready: false,
@@ -557,7 +561,49 @@ impl UntranspileHelpers {
         for _ in 0..values {
             shapes::fire(PASS, for_of_tsc::SHAPE);
         }
-        cx.changed_by(fired + values);
+        let table = &self.table;
+        let closures = for_of_loop::rewrite_adjacent(
+            node,
+            |statement, scoping| for_of_loose::shaped(statement, Some(table), scoping),
+            cx,
+        );
+        for _ in 0..closures {
+            shapes::fire(PASS, for_of_loop::SHAPE);
+        }
+        cx.changed_by(closures);
+        let loose = for_of_loose::rewrite_statements(node, Some(&self.table), self.module, cx);
+        for _ in 0..loose {
+            shapes::fire(PASS, for_of_loose::HELPER_SHAPE);
+        }
+        cx.changed_by(fired + values + loose);
+    }
+
+    #[inline(never)]
+    fn indexed_site<'a>(&mut self, node: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
+        if !for_of_loose::has_indexed_shape(node, cx.scoping()) {
+            return;
+        }
+        self.indexed_seen = true;
+        if !cx.opts.unsafe_transforms
+            || self.hazard != Some(false)
+            || self.builtins == Builtins::Written
+        {
+            return;
+        }
+        let closures = for_of_loop::rewrite_adjacent(
+            node,
+            |statement, scoping| for_of_loose::shaped(statement, None, scoping),
+            cx,
+        );
+        for _ in 0..closures {
+            shapes::fire(PASS, for_of_loop::SHAPE);
+        }
+        cx.changed_by(closures);
+        let indexed = for_of_loose::rewrite_statements(node, None, self.module, cx);
+        for _ in 0..indexed {
+            shapes::fire(PASS, for_of_loose::INDEXED_SHAPE);
+        }
+        cx.changed_by(indexed);
     }
 
     #[inline(never)]
@@ -792,6 +838,7 @@ impl<'a> Pass<'a> for UntranspileHelpers {
             && (self.define_quiet || !self.define_live())
             && !self.iterators_seen
             && !self.inline_seen
+            && !self.indexed_seen
         {
             Interest::EXIT_STATEMENTS
         } else {
@@ -935,6 +982,9 @@ impl<'a> Pass<'a> for UntranspileHelpers {
     }
 
     fn exit_statements(&mut self, node: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
+        if !self.dormant && cx.opts.unsafe_transforms && for_of_loose::may_hold_site(node) {
+            self.indexed_site(node, cx);
+        }
         if self.table.has_iterators() {
             self.for_of_site(node, cx);
         }

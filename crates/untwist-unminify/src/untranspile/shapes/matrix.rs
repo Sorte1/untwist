@@ -7,6 +7,12 @@ const BABEL_7_29_SAFARI9_IIFE_TERSER_CLASS_EARLY_RETURN: &str =
 const BABEL_7_12_IE11_FOR_OF: &str = "fixtures/untranspile/matrix/babel-7.12/ie11/for-of.js";
 const BABEL_7_12_IE11_RUNTIME_FOR_OF: &str =
     "fixtures/untranspile/matrix/babel-7.12/ie11-runtime/for-of.js";
+const BABEL_7_12_IE11_LOOSE_FOR_OF_EXITS: &str =
+    "fixtures/untranspile/matrix/babel-7.12/ie11-loose/for-of-exits.js";
+const BABEL_7_20_IE11_LOOSE_FOR_OF_EXITS: &str =
+    "fixtures/untranspile/matrix/babel-7.20/ie11-loose/for-of-exits.js";
+const BABEL_7_29_IE11_LOOSE_FOR_OF_EXITS: &str =
+    "fixtures/untranspile/matrix/babel-7.29/ie11-loose/for-of-exits.js";
 const BABEL_7_20_IE11_FOR_OF: &str = "fixtures/untranspile/matrix/babel-7.20/ie11/for-of.js";
 const BABEL_7_20_IE11_RUNTIME_FOR_OF: &str =
     "fixtures/untranspile/matrix/babel-7.20/ie11-runtime/for-of.js";
@@ -774,6 +780,30 @@ pub const VARIANTS: &[Variant] = &[
         (VARIABLE_DECLARATION, LOGICAL_EXPRESSION_FOCUS),
         (&[Kind::UnsupportedIterableToArray], 200),
         BABEL_7_29_IE11_ROLLUP_TERSER_FOR_OF,
+    ),
+    variant(
+        Kind::ForOfIteratorLoose,
+        0x73df_901a_fd8a_e16f_43b2_56fd_2eb5_8308,
+        (2, 4),
+        (VARIABLE_DECLARATION, NO_FOCUS),
+        (&[Kind::UnsupportedIterableToArray], 108),
+        BABEL_7_12_IE11_LOOSE_FOR_OF_EXITS,
+    ),
+    variant(
+        Kind::ForOfIteratorLoose,
+        0xd332_94e9_c20b_d4fc_f3eb_4dc7_91a5_b635,
+        (2, 4),
+        (VARIABLE_DECLARATION, LOGICAL_EXPRESSION_FOCUS),
+        (&[Kind::UnsupportedIterableToArray], 108),
+        BABEL_7_20_IE11_LOOSE_FOR_OF_EXITS,
+    ),
+    variant(
+        Kind::ForOfIteratorLoose,
+        0xc913_6ac8_dda4_bd28_1a22_696b_75a7_d4b0,
+        (2, 4),
+        (VARIABLE_DECLARATION, LOGICAL_EXPRESSION_FOCUS),
+        (&[Kind::UnsupportedIterableToArray], 109),
+        BABEL_7_29_IE11_LOOSE_FOR_OF_EXITS,
     ),
     variant(
         Kind::Regenerator,

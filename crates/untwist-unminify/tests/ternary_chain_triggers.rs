@@ -50,6 +50,9 @@ const TRIGGERS: &[Trigger] = &[
         "",
         "function (x, y) { if (x === undefined) { x = 1; } }",
     ),
+    trigger("exponentiation", "", "Math.pow(x, 2)"),
+    trigger("exponentiation", "", "x = Math.pow(x, 3)"),
+    trigger("exponentiation", "", "o.v = Math.pow(o.v, 0.5)"),
     trigger("for-to-while", "", "function () { for (;;) b(); }"),
     trigger("for-to-while", "", "function () { for (; a(); ) b(); }"),
     trigger("for-to-while", "", "function () { for (;;) a(); }"),
@@ -458,7 +461,7 @@ fn mismatches_in(triggers: &[Trigger]) -> Vec<String> {
 fn every_unminify_pass_has_at_least_three_triggers() {
     let mut names: Vec<&'static str> = stage_passes(false).iter().map(|pass| pass.name()).collect();
     names.sort_unstable();
-    assert_eq!(names.len(), 33);
+    assert_eq!(names.len(), 34);
     for name in names {
         let count = TRIGGERS
             .iter()

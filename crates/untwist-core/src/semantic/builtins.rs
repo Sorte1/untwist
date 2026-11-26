@@ -109,6 +109,14 @@ impl Unpatched {
         }
     }
 
+    pub fn learn_now(&mut self, program: &Program<'_>, cx: &Cx<'_, '_>) {
+        if cx.opts.unsafe_transforms || self.verdict != Builtins::Unknown {
+            return;
+        }
+        self.asked = true;
+        self.learn(program, cx);
+    }
+
     pub fn holds(&mut self, cx: &mut Cx<'_, '_>) -> bool {
         if cx.opts.unsafe_transforms {
             return true;

@@ -63,6 +63,7 @@ pub enum Kind {
     Awaiter,
     Async,
     ForOfIterator,
+    ForOfIteratorLoose,
     Regenerator,
     RegeneratorDefine,
     RegeneratorValues,
@@ -172,7 +173,7 @@ pub fn known(hash: u128, size: Size) -> Option<&'static Variant> {
     variants().find(|variant| variant.hash == hash && sized(variant, size))
 }
 
-pub const HELPER_NAMES: [(&str, Kind); 73] = [
+pub const HELPER_NAMES: [(&str, Kind); 75] = [
     ("_toConsumableArray", Kind::ToConsumableArray),
     ("_to_consumable_array", Kind::ToConsumableArray),
     ("_arrayWithoutHoles", Kind::ArrayWithoutHoles),
@@ -258,6 +259,11 @@ pub const HELPER_NAMES: [(&str, Kind); 73] = [
     ("__async", Kind::Async),
     ("_createForOfIteratorHelper", Kind::ForOfIterator),
     ("_create_for_of_iterator_helper", Kind::ForOfIterator),
+    ("_createForOfIteratorHelperLoose", Kind::ForOfIteratorLoose),
+    (
+        "_create_for_of_iterator_helper_loose",
+        Kind::ForOfIteratorLoose,
+    ),
     ("_regenerator", Kind::Regenerator),
     ("_regeneratorDefine2", Kind::RegeneratorDefine),
     ("_regeneratorValues", Kind::RegeneratorValues),
@@ -307,7 +313,10 @@ pub fn is_async_runner(kind: Kind) -> bool {
 }
 
 pub fn is_iterator_helper(kind: Kind) -> bool {
-    matches!(kind, Kind::ForOfIterator | Kind::Values)
+    matches!(
+        kind,
+        Kind::ForOfIterator | Kind::ForOfIteratorLoose | Kind::Values
+    )
 }
 
 pub fn is_regenerator(kind: Kind) -> bool {

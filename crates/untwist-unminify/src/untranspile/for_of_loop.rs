@@ -170,6 +170,14 @@ fn site(attempt: &TryStatement<'_>, scoping: &Scoping) -> bool {
     else {
         return false;
     };
+    attempt.handler.is_some() && attempt.finalizer.is_some() && pair(declaration, looped, scoping)
+}
+
+fn pair(
+    declaration: &VariableDeclaration<'_>,
+    looped: &ForStatement<'_>,
+    scoping: &Scoping,
+) -> bool {
     let Some((closure, init)) = closure_of(declaration) else {
         return false;
     };
@@ -196,9 +204,7 @@ fn site(attempt: &TryStatement<'_>, scoping: &Scoping) -> bool {
         }
         scan.visit_statement(statement);
     }
-    attempt.handler.is_some()
-        && attempt.finalizer.is_some()
-        && !scan.bad
+    !scan.bad
         && scoping.get_resolved_reference_ids(closure).len() == 1
         && scoping.symbol_redeclarations(closure).is_empty()
         && calls(&looped.body, closure, scoping)
@@ -226,6 +232,16 @@ fn inline<'a>(attempt: &mut TryStatement<'a>, cx: &Cx<'a, '_>) -> Option<()> {
     let Some(Statement::VariableDeclaration(mut declaration)) = statements.pop() else {
         return None;
     };
+    move_body(&mut declaration, &mut looped, cx)?;
+    attempt.block.body.push(Statement::ForStatement(looped));
+    Some(())
+}
+
+fn move_body<'a>(
+    declaration: &mut VariableDeclaration<'a>,
+    looped: &mut ForStatement<'a>,
+    cx: &Cx<'a, '_>,
+) -> Option<()> {
     let mut moved = take_body(declaration.declarations.first_mut()?.init.as_mut()?, cx)?;
     for statement in moved.iter_mut() {
         if let Statement::VariableDeclaration(declaration) = statement {
@@ -238,8 +254,51 @@ fn inline<'a>(attempt: &mut TryStatement<'a>, cx: &Cx<'a, '_>) -> Option<()> {
         return None;
     };
     block.body = moved;
-    attempt.block.body.push(Statement::ForStatement(looped));
     Some(())
+}
+
+fn adjacent_at(
+    statements: &[Statement<'_>],
+    at: usize,
+    shaped: impl Fn(&Statement<'_>, &Scoping) -> bool,
+    scoping: &Scoping,
+) -> bool {
+    let (Some(Statement::VariableDeclaration(declaration)), Some(next)) =
+        (statements.get(at), statements.get(at + 1))
+    else {
+        return false;
+    };
+    let Statement::ForStatement(looped) = next else {
+        return false;
+    };
+    !declaration.declare && shaped(next, scoping) && pair(declaration, looped, scoping)
+}
+
+pub fn rewrite_adjacent<'a>(
+    statements: &mut AVec<'a, Statement<'a>>,
+    shaped: impl Fn(&Statement<'_>, &Scoping) -> bool,
+    cx: &mut Cx<'a, '_>,
+) -> usize {
+    let sites: Vec<usize> = (0..statements.len())
+        .filter(|at| adjacent_at(statements, *at, &shaped, cx.scoping()))
+        .collect();
+    let mut done = 0;
+    for at in sites.into_iter().rev() {
+        let (head, tail) = statements.split_at_mut(at + 1);
+        let (Statement::VariableDeclaration(declaration), Some(Statement::ForStatement(looped))) =
+            (&mut head[at], tail.first_mut())
+        else {
+            continue;
+        };
+        if move_body(declaration, looped, cx).is_some() {
+            statements.remove(at);
+            done += 1;
+        }
+    }
+    if done > 0 {
+        cx.binding_moved();
+    }
+    done
 }
 
 pub fn rewrite_statements<'a>(

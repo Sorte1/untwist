@@ -79,6 +79,7 @@ const LEXICAL_ORDER: &[&str] = &[
 
 const TRANSPILE_ORDER: &[&str] = &[
     "default-parameters",
+    "exponentiation",
     "logical-assignments",
     "nullish-coalescing",
     "nullish-coalescing-assignment",

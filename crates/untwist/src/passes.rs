@@ -34,6 +34,7 @@ pub const PASSES: &[PassInfo] = &[
     pass("layers", "deobfuscate", false),
     pass("inline-layers", "deobfuscate", false),
     pass("default-parameters", "transpile", false),
+    pass("exponentiation", "transpile", false),
     pass("logical-assignments", "transpile", false),
     pass("nullish-coalescing", "transpile", false),
     pass("nullish-coalescing-assignment", "transpile", false),
