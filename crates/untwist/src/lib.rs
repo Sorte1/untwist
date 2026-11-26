@@ -70,7 +70,8 @@ pub use wasm::{
 pub use write::{clean, stale_paths, OutputConflict, WriteReport, BUNDLE_JSON, DEOBFUSCATED};
 
 pub fn all_pass_ctors<'a>() -> Vec<PassCtor<'a>> {
-    let mut ctors = untwist_unminify::prepare_ctors();
+    let mut ctors = untwist_deobfuscate::js_confuser::ctors();
+    ctors.extend(untwist_unminify::prepare_ctors());
     ctors.extend(untwist_unminify::transpile_ctors());
     ctors.extend(untwist_unminify::unminify_ctors());
     ctors.extend(untwist_unminify::lexical_ctors());

@@ -14,6 +14,10 @@ const fn pass(name: &'static str, stage: &'static str, unsafe_only: bool) -> Pas
 }
 
 pub const PASSES: &[PassInfo] = &[
+    pass("remove-js-confuser-self-defending", "prepare", false),
+    pass("decode-js-confuser-strings", "prepare", false),
+    pass("inline-js-confuser-globals", "prepare", false),
+    pass("fold-js-confuser-helpers", "prepare", false),
     pass("block-statements", "prepare", false),
     pass("sequence", "prepare", false),
     pass("split-variable-declarations", "prepare", false),

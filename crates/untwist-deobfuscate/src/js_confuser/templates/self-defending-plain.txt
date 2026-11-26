@@ -1,0 +1,1 @@
+( function ( ) { var $0 = function ( ) { const $1 = function ( ) { const $2 = new RegExp ( "\u000a" ) ; return $2 [ "test" ] ( $0 ) } ; if ( $1 ( ) ) { while ( true ) { } } } ; return $0 ( ) } ) ( ) ;
