@@ -265,6 +265,8 @@ async function writeFixtures(names) {
     const result = await run(UNTWIST, [input, "-o", out, "-f"]);
     if (result.status !== 0) throw new Error(`untwist failed on the ${label} fixture: ${result.stderr}`);
     writeFileSync(join(FIXTURES, `bundle.${label}.untwisted.js`), readFileSync(join(out, "deobfuscated.js"), "utf8"));
+    mkdirSync(join(FIXTURES, "raw"), { recursive: true });
+    writeFileSync(join(FIXTURES, "raw", `bundle.${label}.js`), readFileSync(input, "utf8"));
   }
 }
 
