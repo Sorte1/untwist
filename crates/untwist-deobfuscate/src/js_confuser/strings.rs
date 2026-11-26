@@ -14,7 +14,7 @@ use untwist_eval::fold::{const_to_expression, Const};
 
 use super::base91;
 use super::names::{names, Names};
-use super::refs::{inside, judge_replaced, names_observed, scan, Refs};
+use super::refs::{inside, judge_replaced, names_observed, no_op_helpers, scan, Refs};
 use super::templates::{matches_decoder, matches_getter, matches_prelude, PRELUDE_LENGTHS};
 use super::tokens::FIXED;
 use crate::pure_calls::literal_data;
@@ -269,27 +269,6 @@ fn packed_string(program: &Program<'_>, symbol: SymbolId) -> Option<Packed> {
     None
 }
 
-fn empty_helpers(program: &Program<'_>, refs: &Refs<'_>, scoping: &Scoping) -> FxHashSet<SymbolId> {
-    program
-        .body
-        .iter()
-        .filter_map(function_symbol)
-        .filter(|(symbol, function)| {
-            function
-                .body
-                .as_ref()
-                .is_some_and(|b| b.statements.is_empty() && b.directives.is_empty())
-                && function.params.items.iter().all(|p| {
-                    matches!(p.pattern, BindingPattern::BindingIdentifier(_))
-                        && p.initializer.is_none()
-                })
-                && function.params.rest.is_none()
-                && stable(*symbol, refs, scoping)
-        })
-        .map(|(symbol, _)| symbol)
-        .collect()
-}
-
 fn stable(symbol: SymbolId, refs: &Refs<'_>, scoping: &Scoping) -> bool {
     refs.stable(symbol, scoping)
 }
@@ -418,7 +397,7 @@ fn analyse(program: &Program<'_>, scoping: &Scoping) -> Result<Plan, &'static st
     let Some(prelude) = find_prelude(program, &names) else {
         return refusal("its getGlobal and bufferToString prelude is not the js-confuser template");
     };
-    let helpers = empty_helpers(program, &refs, scoping);
+    let helpers = no_op_helpers(program, &refs, scoping);
     let prelude_symbols = top_level_symbols(&prelude.statements, scoping);
     if !prelude_symbols.iter().all(|s| stable(*s, &refs, scoping))
         || !closed(

@@ -247,3 +247,85 @@ pub(super) fn judge_replaced<'a>(
     let reach = global_reach(&clone, &scoping, (None, &[]), watch);
     Some(Judged { intact, reach })
 }
+
+fn simple_params(params: &FormalParameters<'_>) -> bool {
+    params.rest.is_none()
+        && params.items.iter().all(|p| {
+            matches!(p.pattern, BindingPattern::BindingIdentifier(_)) && p.initializer.is_none()
+        })
+}
+
+fn redefines_itself_empty(
+    statement: &Statement<'_>,
+    own: SymbolId,
+    scoping: &Scoping,
+) -> Option<Span> {
+    let Statement::ExpressionStatement(statement) = statement else {
+        return None;
+    };
+    let Expression::AssignmentExpression(assign) = &statement.expression else {
+        return None;
+    };
+    let AssignmentTarget::AssignmentTargetIdentifier(target) = &assign.left else {
+        return None;
+    };
+    let Expression::FunctionExpression(replacement) = &assign.right else {
+        return None;
+    };
+    let empty = simple_params(&replacement.params)
+        && !replacement.r#async
+        && !replacement.generator
+        && replacement
+            .body
+            .as_ref()
+            .is_some_and(|b| b.statements.is_empty() && b.directives.is_empty());
+    let targets_itself = scoping
+        .get_reference(target.reference_id.get()?)
+        .symbol_id()
+        == Some(own);
+    (assign.operator == oxc_syntax::operator::AssignmentOperator::Assign && empty && targets_itself)
+        .then_some(target.span)
+}
+
+pub(super) fn no_op_helpers(
+    program: &Program<'_>,
+    refs: &Refs<'_>,
+    scoping: &Scoping,
+) -> FxHashSet<SymbolId> {
+    program
+        .body
+        .iter()
+        .filter_map(|statement| match statement {
+            Statement::FunctionDeclaration(function)
+                if !function.r#async && !function.generator =>
+            {
+                Some((function.id.as_ref()?.symbol_id.get()?, function))
+            }
+            _ => None,
+        })
+        .filter(|(symbol, function)| {
+            let Some(body) = function.body.as_ref() else {
+                return false;
+            };
+            if !simple_params(&function.params)
+                || !body.directives.is_empty()
+                || !scoping.symbol_redeclarations(*symbol).is_empty()
+            {
+                return false;
+            }
+            let writes: Vec<Span> = refs
+                .of(*symbol)
+                .iter()
+                .filter(|r| r.write)
+                .map(|r| r.span)
+                .collect();
+            match body.statements.as_slice() {
+                [] => writes.is_empty(),
+                [only] => redefines_itself_empty(only, *symbol, scoping)
+                    .is_some_and(|span| writes == [span]),
+                _ => false,
+            }
+        })
+        .map(|(symbol, _)| symbol)
+        .collect()
+}
