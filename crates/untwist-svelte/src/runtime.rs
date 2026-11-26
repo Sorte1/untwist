@@ -61,7 +61,30 @@ pub enum Rt {
     RemoveTextareaChild,
     Window,
     Document,
+    AttributeEffect,
+    Transition,
+    Animation,
+    Element,
+    Boundary,
+    RestProps,
+    SpreadProps,
+    Fallback,
+    DerivedSafeEqual,
+    ToArray,
+    SetAttributes,
+    ToggleClass,
+    Export(u8),
 }
+
+pub const EXPORTS: &[(&str, &str)] = &[
+    ("fade", "svelte/transition"),
+    ("fly", "svelte/transition"),
+    ("slide", "svelte/transition"),
+    ("scale", "svelte/transition"),
+    ("blur", "svelte/transition"),
+    ("draw", "svelte/transition"),
+    ("flip", "svelte/animate"),
+];
 
 const NAMES: &[(&str, &str, Rt)] = &[
     ("from_html", "from_html", Rt::FromHtml),
@@ -128,6 +151,22 @@ const NAMES: &[(&str, &str, Rt)] = &[
     ),
     ("window", "$window", Rt::Window),
     ("document", "$document", Rt::Document),
+    ("attribute_effect", "attribute_effect", Rt::AttributeEffect),
+    ("transition", "transition", Rt::Transition),
+    ("animation", "animation", Rt::Animation),
+    ("element", "element", Rt::Element),
+    ("boundary", "boundary", Rt::Boundary),
+    ("rest_props", "rest_props", Rt::RestProps),
+    ("spread_props", "spread_props", Rt::SpreadProps),
+    ("fallback", "fallback", Rt::Fallback),
+    (
+        "derived_safe_equal",
+        "derived_safe_equal",
+        Rt::DerivedSafeEqual,
+    ),
+    ("to_array", "to_array", Rt::ToArray),
+    ("set_attributes", "set_attributes", Rt::SetAttributes),
+    ("toggle_class", "toggle_class", Rt::ToggleClass),
 ];
 
 const ARITY: &[(&str, usize)] = &[("clsx", 1)];
@@ -144,6 +183,13 @@ fn sourced(name: &str) -> Option<Rt> {
         .iter()
         .find(|(_, source, _)| *source == name)
         .map(|row| row.2)
+}
+
+fn export_named(name: &str) -> Option<Rt> {
+    EXPORTS
+        .iter()
+        .position(|(export, _)| *export == name)
+        .map(|at| Rt::Export(at as u8))
 }
 
 fn bare(name: &str) -> &str {
@@ -173,6 +219,8 @@ pub struct Runtime {
     pub symbols: FxHashMap<SymbolId, Rt>,
     pub ambiguous: Vec<SymbolId>,
     pub imports_svelte: bool,
+    pub inline: FxHashMap<u32, Rt>,
+    pub exports: FxHashMap<SymbolId, u8>,
 }
 
 impl Runtime {
@@ -205,7 +253,64 @@ impl Runtime {
         if runtime.namespaces.is_empty() && runtime.symbols.is_empty() {
             runtime.hoisted(scoping, nodes);
         }
+        if runtime.is_empty() && runtime.ambiguous.is_empty() {
+            runtime.fingerprinted(scoping, nodes);
+        }
+        if !runtime.imports_svelte && !runtime.is_empty() {
+            runtime.exported(scoping, nodes);
+        }
         runtime
+    }
+
+    fn exported(&mut self, scoping: &Scoping, nodes: &AstNodes<'_>) {
+        let mut found: FxHashMap<u8, Vec<SymbolId>> = FxHashMap::default();
+        for (symbol, print) in bound_functions(scoping, nodes) {
+            if let Some(Rt::Export(at)) = crate::fingerprints::lookup(print.hash) {
+                found.entry(at).or_default().push(symbol);
+            }
+        }
+        for (at, symbols) in found {
+            if let [only] = symbols.as_slice() {
+                self.exports.insert(*only, at);
+            }
+        }
+    }
+
+    fn fingerprinted(&mut self, scoping: &Scoping, nodes: &AstNodes<'_>) {
+        let mut found: FxHashMap<Rt, Vec<SymbolId>> = FxHashMap::default();
+        for (symbol, print) in bound_functions(scoping, nodes) {
+            match crate::fingerprints::lookup(print.hash) {
+                Some(Rt::Export(_)) | None => {}
+                Some(rt) => found.entry(rt).or_default().push(symbol),
+            }
+        }
+        if !found.contains_key(&Rt::FromHtml) {
+            return;
+        }
+        for node in nodes.iter() {
+            let AstKind::CallExpression(call) = node.kind() else {
+                continue;
+            };
+            let Expression::FunctionExpression(function) = call.callee.without_parentheses() else {
+                continue;
+            };
+            if let Some(rt) = crate::fingerprint::function(function, scoping)
+                .and_then(|print| crate::fingerprints::lookup(print.hash))
+            {
+                self.inline.insert(function.span.start, rt);
+            }
+        }
+        for (rt, global) in [(Rt::Window, "window"), (Rt::Document, "document")] {
+            found.insert(rt, global_aliases(scoping, nodes, global));
+        }
+        for (rt, symbols) in found {
+            match symbols.as_slice() {
+                [only] => {
+                    self.symbols.insert(*only, rt);
+                }
+                _ => self.ambiguous.extend(symbols),
+            }
+        }
     }
 
     fn hoisted(&mut self, scoping: &Scoping, nodes: &AstNodes<'_>) {
@@ -279,9 +384,93 @@ impl Runtime {
                     .flatten()
             }
             Expression::Identifier(ident) => self.symbols.get(&symbol_of(ident, scoping)?).copied(),
+            Expression::FunctionExpression(function) => {
+                self.inline.get(&function.span.start).copied()
+            }
             _ => None,
         }
     }
+}
+
+pub fn bound_functions(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+) -> Vec<(SymbolId, crate::fingerprint::Print)> {
+    let mut out = Vec::new();
+    for symbol in scoping.symbol_ids() {
+        if scoping
+            .scope_ancestors(scoping.symbol_scope_id(symbol))
+            .count()
+            > 2
+        {
+            continue;
+        }
+        let print = match nodes.kind(scoping.symbol_declaration(symbol)) {
+            AstKind::Function(function) => crate::fingerprint::function(function, scoping),
+            AstKind::VariableDeclarator(declarator) => match declarator
+                .init
+                .as_ref()
+                .map(Expression::without_parentheses)
+            {
+                Some(Expression::FunctionExpression(function)) => {
+                    crate::fingerprint::function(function, scoping)
+                }
+                Some(Expression::ArrowFunctionExpression(arrow)) => {
+                    crate::fingerprint::arrow(arrow, scoping)
+                }
+                _ => None,
+            },
+            _ => None,
+        };
+        if let Some(print) = print {
+            out.push((symbol, print));
+        }
+    }
+    out
+}
+
+fn global_aliases(scoping: &Scoping, nodes: &AstNodes<'_>, global: &str) -> Vec<SymbolId> {
+    scoping
+        .symbol_ids()
+        .filter(|symbol| {
+            scoping
+                .scope_ancestors(scoping.symbol_scope_id(*symbol))
+                .count()
+                <= 2
+        })
+        .filter(
+            |symbol| match nodes.kind(scoping.symbol_declaration(*symbol)) {
+                AstKind::VariableDeclarator(declarator) => declarator.init.is_none(),
+                _ => false,
+            },
+        )
+        .filter(|symbol| {
+            let mut writes = scoping
+                .get_resolved_references(*symbol)
+                .filter(|reference| reference.is_write());
+            let only = writes.next();
+            writes.next().is_none()
+                && only.is_some_and(|reference| {
+                    matches!(
+                        nodes.parent_kind(reference.node_id()),
+                        AstKind::AssignmentExpression(assign)
+                            if assign.operator.as_str() == "="
+                                && matches!(
+                                    assign.right.without_parentheses(),
+                                    Expression::Identifier(ident)
+                                        if ident.name == global
+                                            && ident.reference_id.get().is_some_and(|id| {
+                                                scoping.get_reference(id).symbol_id().is_none()
+                                            })
+                                )
+                    )
+                })
+        })
+        .collect()
+}
+
+pub fn sourced_name(name: &str) -> Option<Rt> {
+    sourced(bare(name)).or_else(|| export_named(bare(name)))
 }
 
 pub fn symbol_of(

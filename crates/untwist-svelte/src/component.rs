@@ -144,6 +144,12 @@ impl<'a, 's> Shared<'a, 's> {
             snippets: Default::default(),
             children: Default::default(),
             specials: Default::default(),
+            components: self
+                .components
+                .iter()
+                .map(|(function, name)| (function.span, name.clone()))
+                .collect(),
+            consumed: Default::default(),
         }
     }
 
@@ -261,38 +267,6 @@ impl<'a, 's> Shared<'a, 's> {
         })
     }
 
-    fn snippet(&self, cx: &Cx<'a, 's>, symbol: SymbolId) -> R<M> {
-        let declarator = cx
-            .declarator(symbol)
-            .ok_or("a snippet that is not declared here")?;
-        let init = declarator.init.as_ref().ok_or("a snippet without a body")?;
-        let Expression::ArrowFunctionExpression(arrow) = init.without_parentheses() else {
-            return fail("a snippet of an unknown shape");
-        };
-        let mut params = Vec::new();
-        for param in arrow.params.items.iter().skip(1) {
-            let symbol =
-                binding(&param.pattern).ok_or("a snippet with a destructured parameter")?;
-            if let Some(init) = &param.initializer {
-                if cx.rt(init) != Some(Rt::Noop) {
-                    return fail("a snippet parameter with a default value");
-                }
-            }
-            params.push(cx.scoping.symbol_name(symbol).to_string());
-        }
-        let mut scratch = cx.scratch();
-        let (nodes, _) = cx.render_fn(init, &mut scratch)?;
-        let header = format!(
-            "{{#snippet {}({})}}",
-            cx.scoping.symbol_name(symbol),
-            params.join(", ")
-        );
-        Ok(M::Block {
-            sections: vec![(header, nodes)],
-            close: "{/snippet}".to_string(),
-        })
-    }
-
     fn snippets(&self, cx: &Cx<'a, 's>) -> R<Vec<M>> {
         let mut done = Vec::new();
         let mut out = Vec::new();
@@ -309,7 +283,7 @@ impl<'a, 's> Shared<'a, 's> {
             }
             for symbol in pending {
                 done.push(symbol);
-                out.push(self.snippet(cx, symbol)?);
+                out.push(cx.snippet_block(symbol)?);
             }
         }
     }
@@ -404,25 +378,15 @@ impl<'a, 's> Shared<'a, 's> {
     fn child_imports(&self, cx: &Cx<'a, 's>) -> Vec<String> {
         let mut out = Vec::new();
         for symbol in cx.children.borrow().iter() {
-            let AstKind::Function(function) = cx.nodes.kind(cx.scoping.symbol_declaration(*symbol))
-            else {
-                continue;
-            };
-            if let Some((_, name)) = self
-                .components
-                .iter()
-                .find(|(known, _)| std::ptr::eq(*known, function))
-            {
-                out.push(format!(
-                    "\timport {} from './{name}.svelte';",
-                    cx.scoping.symbol_name(*symbol)
-                ));
+            if let Some(name) = cx.component_name(*symbol) {
+                out.push(format!("\timport {name} from './{name}.svelte';"));
             }
         }
         out
     }
 
-    pub fn restore(&self, function: &'a Function<'a>, esm: bool) -> R<String> {
+    pub fn restore(&self, function: &'a Function<'a>, esm: bool) -> R<(String, Vec<String>)> {
+        self.rw.seen.borrow_mut().clear();
         let base = self.cx(None);
         let (anchor, props) = component_params(function, self.runtime, self.scoping)
             .ok_or("not a component function")?;
@@ -436,6 +400,7 @@ impl<'a, 's> Shared<'a, 's> {
             props,
             css: None,
             prop_symbols: Vec::new(),
+            rest: None,
             script: Vec::new(),
             pushed: false,
             dom_start: statements.len(),
@@ -451,7 +416,83 @@ impl<'a, 's> Shared<'a, 's> {
             parts.script.push(statement);
         }
         let cx = self.cx(parts.css.as_ref().map(|css| css.hash.clone()));
-        self.finish(&cx, function, statements, parts, esm)
+        let text = self.finish(&cx, function, statements, parts, esm)?;
+        if !esm {
+            self.closed(&cx, function)?;
+        }
+        let children = cx
+            .children
+            .borrow()
+            .iter()
+            .filter_map(|symbol| cx.component_name(*symbol).map(str::to_string))
+            .collect();
+        Ok((text, children))
+    }
+
+    fn export_imports(&self, cx: &Cx<'a, 's>, function: &Function<'_>) -> R<Vec<String>> {
+        let scope = function
+            .scope_id
+            .get()
+            .ok_or("a component without a scope")?;
+        let mut modules: Vec<(&str, Vec<&str>)> = Vec::new();
+        let seen = self.rw.seen.borrow();
+        let mut used: Vec<(&SymbolId, &u8)> = self
+            .runtime
+            .exports
+            .iter()
+            .filter(|(symbol, _)| seen.contains(symbol))
+            .collect();
+        used.sort_by_key(|(_, at)| **at);
+        for (symbol, at) in used {
+            let (name, module) = crate::runtime::EXPORTS[usize::from(*at)];
+            if cx.scoping.symbol_name(*symbol) != name && self.clashes(cx, scope, name) {
+                return fail(format!("the import `{name}` would clash with a binding"));
+            }
+            match modules.iter_mut().find(|(known, _)| *known == module) {
+                Some((_, names)) => names.push(name),
+                None => modules.push((module, vec![name])),
+            }
+        }
+        Ok(modules
+            .into_iter()
+            .map(|(module, names)| format!("\timport {{ {} }} from '{module}';", names.join(", ")))
+            .collect())
+    }
+
+    fn closed(&self, cx: &Cx<'a, 's>, function: &Function<'_>) -> R<()> {
+        let scope = function
+            .scope_id
+            .get()
+            .ok_or("a component without a scope")?;
+        let enclosing: Vec<ScopeId> = cx.scoping.scope_ancestors(scope).skip(1).collect();
+        let allowed: FxHashSet<SymbolId> = cx
+            .snippets
+            .borrow()
+            .iter()
+            .chain(cx.children.borrow().iter())
+            .chain(cx.facts.handlers.iter())
+            .chain(self.runtime.exports.keys())
+            .copied()
+            .collect();
+        let seen = self.rw.seen.borrow();
+        let outside = seen.iter().find(|symbol| {
+            !allowed.contains(symbol)
+                && enclosing.contains(&cx.scoping.symbol_scope_id(**symbol))
+                && !self.components.iter().any(|(function, _)| {
+                    function.id.as_ref().and_then(|id| id.symbol_id.get()) == Some(**symbol)
+                })
+        });
+        match outside {
+            Some(symbol) => fail(format!(
+                "`{}` is declared outside the component in the bundle (`{}`)",
+                cx.scoping.symbol_name(*symbol),
+                first_line(
+                    cx.rw
+                        .text(cx.nodes.kind(cx.scoping.symbol_declaration(*symbol)).span())
+                )
+            )),
+            None => Ok(()),
+        }
     }
 
     fn preamble(
@@ -483,18 +524,57 @@ impl<'a, 's> Shared<'a, 's> {
             if self.is_group_list(cx, declaration) {
                 return Ok(true);
             }
-            let symbols: Vec<Option<SymbolId>> = declaration
-                .declarations
-                .iter()
-                .map(|declarator| binding(&declarator.id))
-                .collect();
-            if symbols
-                .iter()
-                .all(|symbol| symbol.is_some_and(|symbol| cx.facts.props.contains_key(&symbol)))
-            {
-                parts.prop_symbols.extend(symbols.into_iter().flatten());
-                return Ok(true);
+            let mut props = Vec::new();
+            let mut rest = None;
+            for declarator in &declaration.declarations {
+                let Some(symbol) = binding(&declarator.id) else {
+                    return Ok(false);
+                };
+                if cx.facts.props.contains_key(&symbol) {
+                    props.push(symbol);
+                    continue;
+                }
+                let Some(Expression::CallExpression(call)) = declarator
+                    .init
+                    .as_ref()
+                    .map(Expression::without_parentheses)
+                else {
+                    return Ok(false);
+                };
+                let props_arg = arg(call, 0).and_then(|props| match props {
+                    Expression::Identifier(ident) => crate::runtime::symbol_of(ident, cx.scoping),
+                    _ => None,
+                });
+                if cx.rt(&call.callee) != Some(Rt::RestProps)
+                    || rest.is_some()
+                    || parts.props.is_none()
+                    || call.arguments.len() != 2
+                    || props_arg != parts.props
+                {
+                    return Ok(false);
+                }
+                let excludes = arg(call, 1).ok_or("rest props without an exclusion list")?;
+                let (list, holder) = match excludes.without_parentheses() {
+                    Expression::Identifier(ident) => {
+                        let holder = crate::runtime::symbol_of(ident, cx.scoping)
+                            .ok_or("rest props with an exclusion list of an unknown shape")?;
+                        (self.excluded(cx, holder)?, Some(holder))
+                    }
+                    Expression::ArrayExpression(array) => (strings(array)?, None),
+                    _ => return fail("rest props with an exclusion list of an unknown shape"),
+                };
+                rest = Some((symbol, list, holder));
             }
+            if rest.is_some() && parts.rest.is_some() {
+                return fail("two rest props declarations");
+            }
+            cx.rw
+                .forbid_some(rest.as_ref().and_then(|(_, _, holder)| *holder));
+            if rest.is_some() {
+                parts.rest = rest;
+            }
+            parts.prop_symbols.extend(props);
+            return Ok(true);
         }
         Ok(false)
     }
@@ -564,7 +644,46 @@ impl<'a, 's> Shared<'a, 's> {
             line.push(key.clone());
             seen.push(key.clone());
         }
+        if let Some((rest, excluded, _)) = &parts.rest {
+            let rest = *rest;
+            if let Some(key) = seen.iter().find(|key| !excluded.contains(key)) {
+                return fail(format!(
+                    "the prop `{key}` is read but also lands in the rest props"
+                ));
+            }
+            for key in excluded.iter().filter(|key| !key.starts_with("$$")) {
+                if seen.contains(key) {
+                    continue;
+                }
+                if !is_identifier(key) || self.clashes(cx, scope, key) {
+                    return fail(format!(
+                        "the prop `{key}` would clash with a binding of the same name"
+                    ));
+                }
+                line.push(key.clone());
+            }
+            line.push(format!("...{}", cx.scoping.symbol_name(rest)));
+        }
         Ok(line)
+    }
+
+    fn excluded(&self, cx: &Cx<'a, 's>, excludes: SymbolId) -> R<Vec<String>> {
+        let shape = "rest props with an exclusion list of an unknown shape";
+        let init = cx
+            .declarator(excludes)
+            .and_then(|declarator| declarator.init.as_ref())
+            .ok_or(shape)?;
+        let Expression::NewExpression(new) = init.without_parentheses() else {
+            return fail(shape);
+        };
+        if !matches!(&new.callee, Expression::Identifier(ident) if ident.name == "Set" && crate::runtime::symbol_of(ident, cx.scoping).is_none())
+        {
+            return fail(shape);
+        }
+        let [oxc_ast::ast::Argument::ArrayExpression(array)] = new.arguments.as_slice() else {
+            return fail(shape);
+        };
+        strings(array)
     }
 
     fn finish(
@@ -584,7 +703,9 @@ impl<'a, 's> Shared<'a, 's> {
             return fail("push() and pop() do not pair");
         }
         let snippets = self.snippets(cx)?;
-        let used: FxHashSet<SymbolId> = cx.snippets.borrow().iter().copied().collect();
+        let mut used: FxHashSet<SymbolId> = cx.snippets.borrow().iter().copied().collect();
+        used.extend(parts.rest.as_ref().and_then(|(_, _, holder)| *holder));
+        used.extend(cx.facts.handlers.iter().copied());
         let props_line = self.props_line(cx, function, &parts)?;
         let source = self.program.source_text;
         let mut instance: Vec<String> = Vec::new();
@@ -614,6 +735,9 @@ impl<'a, 's> Shared<'a, 's> {
                 )
             })?;
             instance.push(indented(source, statement.span(), &text));
+        }
+        if !esm {
+            instance.splice(0..0, self.export_imports(cx, function)?);
         }
         let mut out = String::new();
         if !module.is_empty() {
@@ -655,6 +779,7 @@ struct Parts<'a> {
     props: Option<SymbolId>,
     css: Option<Css>,
     prop_symbols: Vec<SymbolId>,
+    rest: Option<(SymbolId, Vec<String>, Option<SymbolId>)>,
     script: Vec<&'a Statement<'a>>,
     pushed: bool,
     dom_start: usize,
@@ -669,4 +794,18 @@ fn group_specials(specials: &[(&'static str, String)]) -> Vec<(&'static str, Vec
         }
     }
     out
+}
+
+fn strings(array: &oxc_ast::ast::ArrayExpression<'_>) -> R<Vec<String>> {
+    array
+        .elements
+        .iter()
+        .map(|element| {
+            element
+                .as_expression()
+                .and_then(string)
+                .map(str::to_string)
+                .ok_or_else(|| "rest props with an exclusion list of an unknown shape".to_string())
+        })
+        .collect()
 }

@@ -1,7 +1,52 @@
 use super::*;
 
 impl<'a, 's> Cx<'a, 's> {
+    fn old_if_block(&self, body: &mut Body, call: &'a CallExpression<'a>) -> R<()> {
+        let node = self.node_expr(body, arg(call, 0).ok_or("an if block without an anchor")?)?;
+        let test = arg(call, 1)
+            .and_then(thunk_body)
+            .ok_or("an if block of an unknown shape")?;
+        let elseif = match arg(call, 4) {
+            None => false,
+            Some(flag) => boolean(Some(flag)).ok_or("an if block with a computed else-if flag")?,
+        };
+        if call.arguments.len() > 5 {
+            return fail("an if block of an unknown shape");
+        }
+        let opener = if elseif { "{:else if" } else { "{#if" };
+        let (nodes, _) =
+            self.render_fn(arg(call, 2).ok_or("an if block without a branch")?, body)?;
+        let mut sections = vec![(format!("{opener} {}}}", self.render(test)?), nodes)];
+        if let Some(alternate) = arg(call, 3).filter(|alternate| !is_nullish(Some(alternate))) {
+            let (nodes, _) = self.render_fn(alternate, body)?;
+            match nodes.as_slice() {
+                [M::Block {
+                    sections: inner,
+                    close,
+                }] if close == "{/if}"
+                    && inner
+                        .first()
+                        .is_some_and(|(header, _)| header.starts_with("{:else if")) =>
+                {
+                    sections.extend(inner.iter().cloned());
+                }
+                _ => sections.push(("{:else}".to_string(), nodes)),
+            }
+        }
+        self.fill_anchor(
+            body,
+            node,
+            vec![M::Block {
+                sections,
+                close: "{/if}".to_string(),
+            }],
+        )
+    }
+
     pub(super) fn if_block(&self, body: &mut Body, call: &'a CallExpression<'a>) -> R<()> {
+        if arg(call, 1).and_then(thunk_body).is_some() {
+            return self.old_if_block(body, call);
+        }
         if call.arguments.len() != 2 {
             return fail("an if block with an else-if flag");
         }
@@ -136,44 +181,50 @@ impl<'a, 's> Cx<'a, 's> {
         let flags = arg(call, 1)
             .and_then(number)
             .ok_or("an each block with computed flags")?;
-        if flags & 8 != 0 {
-            return fail("an animated each block");
-        }
         let node = self.node_expr(body, arg(call, 0).ok_or("an each block without an anchor")?)?;
         let collection = self.thunk(arg(call, 2).ok_or("an each block without a collection")?)?;
         let render = arg(call, 4).ok_or("an each block without a body")?;
+        let fields = match render.without_parentheses() {
+            Expression::ArrowFunctionExpression(arrow) => arrow
+                .params
+                .items
+                .get(1)
+                .and_then(|param| binding(&param.pattern))
+                .and_then(|item| self.destructure(arrow_statements(arrow), item)),
+            _ => None,
+        };
         let (nodes, params) = self.render_fn(render, body)?;
-        let mut item = params
-            .get(1)
-            .map(|symbol| self.scoping.symbol_name(*symbol).to_string());
+        let item = match (&fields, params.get(1)) {
+            (Some(fields), _) => Some(self.pattern(fields, &[])?),
+            (None, Some(symbol)) => Some(self.scoping.symbol_name(*symbol).to_string()),
+            (None, None) => None,
+        };
         let index = params
             .get(2)
+            .filter(|symbol| !self.scoping.get_resolved_reference_ids(**symbol).is_empty())
             .map(|symbol| self.scoping.symbol_name(*symbol).to_string())
             .filter(|name| name != "$$index");
-        if item.as_deref() == Some("$$item") {
-            item = Some(self.destructured(render)?);
-        }
         let key = match arg(call, 3) {
             Some(key) if self.rt(key) == Some(Rt::Index) => None,
-            Some(Expression::ArrowFunctionExpression(arrow))
-                if item.as_deref().is_some_and(|item| item.starts_with('{')) =>
-            {
-                Some(
-                    self.render(
-                        thunk_body_any(arrow)
-                            .ok_or("a key function of an unknown shape")?
-                            .span(),
-                    )?,
-                )
-            }
             Some(Expression::ArrowFunctionExpression(arrow)) => {
-                let params =
-                    param_symbols(&arrow.params).ok_or("a key function of an unknown shape")?;
-                let [param] = params.as_slice() else {
+                let scope = arrow
+                    .scope_id
+                    .get()
+                    .ok_or("a key function without a scope")?;
+                let [param] = arrow.params.items.as_slice() else {
                     return fail("a key function of an unknown shape");
                 };
-                if Some(self.scoping.symbol_name(*param)) != item.as_deref() {
-                    return fail("a key function names its item differently");
+                if arrow.params.rest.is_some() {
+                    return fail("a key function of an unknown shape");
+                }
+                match (&fields, params.get(1)) {
+                    (Some(fields), _) => self.key_fields(&param.pattern, fields, scope)?,
+                    (None, Some(item)) => {
+                        let symbol =
+                            binding(&param.pattern).ok_or("a key function of an unknown shape")?;
+                        self.key_rename(symbol, self.scoping.symbol_name(*item), scope)?;
+                    }
+                    (None, None) => return fail("a keyed each block without an item"),
                 }
                 Some(
                     self.render(
@@ -221,32 +272,53 @@ impl<'a, 's> Cx<'a, 's> {
         }
     }
 
-    pub(super) fn destructured(&self, render: &'a Expression<'a>) -> R<String> {
-        let shape = "an each block that destructures its item in a way with no simple pattern";
-        let Expression::ArrowFunctionExpression(arrow) = render.without_parentheses() else {
-            return fail(shape);
-        };
-        let mut names = Vec::new();
-        for symbol in crate::script::leading_getters(arrow_statements(arrow)) {
-            let getter = self.arrow(symbol).ok_or(shape)?;
-            let Some(Expression::StaticMemberExpression(member)) =
-                getter.get_expression().map(Expression::without_parentheses)
-            else {
-                return fail(shape);
-            };
-            let Expression::CallExpression(read) = member.object.without_parentheses() else {
-                return fail(shape);
-            };
-            let name = self.scoping.symbol_name(symbol);
-            if self.rt(&read.callee) != Some(Rt::Get) || member.property.name != name {
-                return fail(shape);
-            }
-            names.push(name.to_string());
+    fn within_scope(&self, span: Span, scope: ScopeId) -> bool {
+        let node = self.scoping.get_node_id(scope);
+        let outer = self.nodes.kind(node).span();
+        outer.start <= span.start && span.end <= outer.end
+    }
+
+    fn key_rename(&self, symbol: SymbolId, name: &str, scope: ScopeId) -> R<()> {
+        if self.scoping.symbol_name(symbol) == name {
+            return Ok(());
         }
-        if names.is_empty() {
-            return fail(shape);
+        let captured = self.scoping.symbol_ids().any(|other| {
+            other != symbol
+                && self.scoping.symbol_name(other) == name
+                && self
+                    .scoping
+                    .get_resolved_references(other)
+                    .any(|reference| {
+                        let at = self.nodes.kind(reference.node_id()).span();
+                        self.within_scope(at, scope)
+                    })
+        });
+        if captured {
+            return fail("a key function names its item differently");
         }
-        Ok(format!("{{ {} }}", names.join(", ")))
+        self.rw.rename(symbol, name.to_string());
+        Ok(())
+    }
+
+    fn key_fields(
+        &self,
+        pattern: &oxc_ast::ast::BindingPattern<'_>,
+        fields: &pattern::Destructure,
+        scope: ScopeId,
+    ) -> R<()> {
+        let mut bound = Vec::new();
+        if !pattern::key_bindings(pattern, Vec::new(), &mut bound) {
+            return fail("a key function of an unknown shape");
+        }
+        for (path, symbol) in bound {
+            let leaf = fields
+                .leaves
+                .iter()
+                .find(|leaf| leaf.path == path)
+                .ok_or("a key function reads a field the each block does not")?;
+            self.key_rename(symbol, self.scoping.symbol_name(leaf.local), scope)?;
+        }
+        Ok(())
     }
 
     pub(super) fn key_block(&self, body: &mut Body, call: &'a CallExpression<'a>) -> R<()> {
@@ -377,46 +449,14 @@ impl<'a, 's> Cx<'a, 's> {
         self.fill_anchor(body, node, vec![M::Tag(tag)])
     }
 
-    pub(super) fn user_call(&self, body: &mut Body, call: &'a CallExpression<'a>) -> R<()> {
-        let Expression::Identifier(callee) = call.callee.without_parentheses() else {
-            return fail(format!(
-                "the call `{}` has no template meaning",
-                first_line(self.rw.text(call.span))
-            ));
-        };
-        let symbol = symbol_of(callee, self.scoping).ok_or_else(|| {
-            format!(
-                "the call to the unbound `{}` has no template meaning",
-                callee.name
-            )
-        })?;
-        let node = self.node_expr(body, arg(call, 0).ok_or("a call in the template code")?)?;
-        if self.arrow(symbol).is_some() && !body.deferred.contains(&symbol) {
-            let args = self.render_args(call, 1)?;
-            if !self.snippets.borrow().contains(&symbol) {
-                self.snippets.borrow_mut().push(symbol);
-            }
-            return self.fill_anchor(
-                body,
-                node,
-                vec![M::Tag(format!("{{@render {}({args})}}", callee.name))],
-            );
-        }
-        let name = callee.name.as_str();
-        if !name.starts_with(|c: char| c.is_ascii_uppercase()) || call.arguments.len() != 2 {
-            return fail(format!(
-                "the call to `{name}` is neither a snippet nor a component"
-            ));
-        }
-        let Some(Expression::ObjectExpression(object)) =
-            arg(call, 1).map(Expression::without_parentheses)
-        else {
-            return fail(format!(
-                "the component `{name}` gets props that are not an object literal"
-            ));
-        };
-        let mut attrs = Vec::new();
-        let mut children = Vec::new();
+    fn component_object(
+        &self,
+        body: &mut Body,
+        name: &str,
+        object: &'a oxc_ast::ast::ObjectExpression<'a>,
+        attrs: &mut Vec<String>,
+        children: &mut Vec<M>,
+    ) -> R<()> {
         for property in &object.properties {
             let ObjectPropertyKind::ObjectProperty(property) = property else {
                 return fail(format!("the component `{name}` gets spread props"));
@@ -432,7 +472,7 @@ impl<'a, 's> Cx<'a, 's> {
                         Expression::ArrowFunctionExpression(_)
                     ) =>
                 {
-                    children = self.render_fn(&property.value, body)?.0;
+                    *children = self.render_fn(&property.value, body)?.0;
                 }
                 (PropertyKind::Init, _) => match property.value.without_parentheses() {
                     Expression::StringLiteral(_) => attrs.push(format!(
@@ -480,6 +520,86 @@ impl<'a, 's> Cx<'a, 's> {
                         false => format!("bind:{key}={{{target}}}"),
                     };
                 }
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn user_call(&self, body: &mut Body, call: &'a CallExpression<'a>) -> R<()> {
+        let Expression::Identifier(callee) = call.callee.without_parentheses() else {
+            return fail(format!(
+                "the call `{}` has no template meaning",
+                first_line(self.rw.text(call.span))
+            ));
+        };
+        let symbol = symbol_of(callee, self.scoping).ok_or_else(|| {
+            format!(
+                "the call to the unbound `{}` has no template meaning",
+                callee.name
+            )
+        })?;
+        let node = self.node_expr(body, arg(call, 0).ok_or("a call in the template code")?)?;
+        if self.arrow(symbol).is_some() && !body.deferred.contains(&symbol) {
+            let args = self.render_args(call, 1)?;
+            if !self.snippets.borrow().contains(&symbol) {
+                self.snippets.borrow_mut().push(symbol);
+            }
+            return self.fill_anchor(
+                body,
+                node,
+                vec![M::Tag(format!("{{@render {}({args})}}", callee.name))],
+            );
+        }
+        let name = match self.component_name(symbol) {
+            Some(name) => {
+                if self
+                    .scoping
+                    .symbol_ids()
+                    .any(|other| other != symbol && self.scoping.symbol_name(other) == name)
+                {
+                    return fail(format!(
+                        "the child component name `{name}` is taken by another binding"
+                    ));
+                }
+                name.to_string()
+            }
+            None => callee.name.to_string(),
+        };
+        let name = name.as_str();
+        if !name.starts_with(|c: char| c.is_ascii_uppercase()) || call.arguments.len() != 2 {
+            return fail(format!(
+                "the call to `{name}` is neither a snippet nor a component"
+            ));
+        }
+        let mut attrs = Vec::new();
+        let mut children = Vec::new();
+        match arg(call, 1).map(Expression::without_parentheses) {
+            Some(Expression::ObjectExpression(object)) => {
+                self.component_object(body, name, object, &mut attrs, &mut children)?
+            }
+            Some(Expression::CallExpression(spread))
+                if self.rt(&spread.callee) == Some(Rt::SpreadProps) =>
+            {
+                for part in &spread.arguments {
+                    match part.as_expression().map(Expression::without_parentheses) {
+                        Some(Expression::ObjectExpression(object)) => {
+                            self.component_object(body, name, object, &mut attrs, &mut children)?
+                        }
+                        Some(thunk) if thunk_body(thunk).is_some() => {
+                            attrs.push(format!("{{...{}}}", self.thunk(thunk)?));
+                        }
+                        _ => {
+                            return fail(format!(
+                                "the component `{name}` gets spread props of an unknown shape"
+                            ))
+                        }
+                    }
+                }
+            }
+            _ => {
+                return fail(format!(
+                    "the component `{name}` gets props that are not an object literal"
+                ))
             }
         }
         if !self.children.borrow().contains(&symbol) {

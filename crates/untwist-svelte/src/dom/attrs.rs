@@ -26,6 +26,11 @@ impl<'a, 's> Cx<'a, 's> {
                             {
                                 self.update_call(body, call)
                             }
+                            Expression::CallExpression(call)
+                                if self.rt(&call.callee) == Some(Rt::SetAttributes) =>
+                            {
+                                self.set_attributes(body, call)
+                            }
                             _ => fail("an assignment in the template code"),
                         }
                     }
@@ -50,6 +55,18 @@ impl<'a, 's> Cx<'a, 's> {
         name: &str,
         value: &'a Expression<'a>,
     ) -> R<()> {
+        if let (Some(event), DKind::Element { .. }) =
+            (name.strip_prefix("__"), &body.dom[node].kind)
+        {
+            if event.is_empty() || !event.bytes().all(|b| b.is_ascii_lowercase()) {
+                return fail(format!(
+                    "the element property `{name}` has no attribute spelling"
+                ));
+            }
+            let code = self.hoisted_handler(value)?;
+            self.push_attr(body, node, attr(&format!("on{event}"), &code));
+            return Ok(());
+        }
         match (name, &body.dom[node].kind) {
             ("textContent", DKind::Element { .. }) => {
                 let text = self.text_value(value)?;
@@ -120,6 +137,18 @@ impl<'a, 's> Cx<'a, 's> {
             }
             Some(Rt::SetClass) => self.set_class(body, call),
             Some(Rt::SetStyle) => self.set_style(body, call),
+            Some(Rt::ToggleClass) => {
+                let node = self.element(body, arg(call, 0))?;
+                let name = arg(call, 1)
+                    .and_then(string)
+                    .ok_or("toggle_class() with a computed name")?;
+                if call.arguments.len() != 3 {
+                    return fail("toggle_class() with extra arguments");
+                }
+                let code = self.code(arg(call, 2).ok_or("toggle_class() without a value")?)?;
+                self.push_attr(body, node, directive("class", name, &code));
+                Ok(())
+            }
             _ => fail(format!(
                 "`{}` has no template meaning",
                 first_line(self.rw.text(call.span))
@@ -132,7 +161,8 @@ impl<'a, 's> Cx<'a, 's> {
         if call.arguments.len() > 6 {
             return fail("set_class() with extra arguments");
         }
-        let value = arg(call, 2).ok_or("set_class() without a value")?;
+        let old = call.arguments.len() == 2;
+        let value = arg(call, if old { 1 } else { 2 }).ok_or("set_class() without a value")?;
         if let Some(text) = string(value) {
             if let Some(attr) = self.static_attr("class", Some(text)) {
                 self.push_attr(body, node, attr);
@@ -149,9 +179,24 @@ impl<'a, 's> Cx<'a, 's> {
             let text = self.attr_value("class", inner)?;
             self.push_attr(body, node, text);
         }
-        match arg(call, 5).map(Expression::without_parentheses) {
+        let directives = match arg(call, 5).map(Expression::without_parentheses) {
+            None => None,
+            Some(Expression::ObjectExpression(object)) => Some(&**object),
+            Some(Expression::Identifier(_)) => match arg(call, 5)
+                .and_then(|dep| self.symbol(dep))
+                .and_then(|symbol| self.facts.classes.get(&symbol))
+            {
+                Some(Class::Dep(span)) => Some(
+                    self.object_at(*span)
+                        .ok_or("class directives that are not an object literal")?,
+                ),
+                _ => return fail("class directives that are not an object literal"),
+            },
+            Some(_) => return fail("class directives that are not an object literal"),
+        };
+        match directives {
             None => Ok(()),
-            Some(Expression::ObjectExpression(object)) => {
+            Some(object) => {
                 for property in &object.properties {
                     let ObjectPropertyKind::ObjectProperty(property) = property else {
                         return fail("a spread in the class directives");
@@ -164,7 +209,6 @@ impl<'a, 's> Cx<'a, 's> {
                 }
                 Ok(())
             }
-            Some(_) => fail("class directives that are not an object literal"),
         }
     }
 
@@ -273,6 +317,75 @@ impl<'a, 's> Cx<'a, 's> {
         let attribute = format!("on{name}{}", if capture { "capture" } else { "" });
         self.push_attr(body, node, attr(&attribute, &code));
         Ok(())
+    }
+
+    fn object_at(&self, span: Span) -> Option<&'a oxc_ast::ast::ObjectExpression<'a>> {
+        self.nodes.iter().find_map(|node| match node.kind() {
+            AstKind::ObjectExpression(object)
+                if span.start <= object.span.start
+                    && object.span.end <= span.end
+                    && span.size() - object.span.size() <= 2 =>
+            {
+                Some(object)
+            }
+            _ => None,
+        })
+    }
+
+    fn hoisted_handler(&self, value: &'a Expression<'a>) -> R<String> {
+        let Expression::ArrayExpression(array) = value.without_parentheses() else {
+            return self.code(value);
+        };
+        let shape = "a hoisted event handler of an unknown shape";
+        let mut items = array.elements.iter().map(|element| element.as_expression());
+        let handler = items.next().flatten().ok_or(shape)?;
+        let symbol = self.symbol(handler).ok_or(shape)?;
+        let function = self
+            .declarator(symbol)
+            .and_then(|declarator| declarator.init.as_ref())
+            .ok_or(shape)?;
+        let Expression::ArrowFunctionExpression(arrow) = function.without_parentheses() else {
+            return fail(shape);
+        };
+        let params = param_symbols(&arrow.params).ok_or(shape)?;
+        let args: Vec<SymbolId> = items
+            .map(|item| item.and_then(|item| self.symbol(item)))
+            .collect::<Option<_>>()
+            .ok_or(shape)?;
+        if params.len() != args.len() + 1 {
+            return fail(shape);
+        }
+        let scope = arrow.scope_id.get().ok_or(shape)?;
+        for (param, arg) in params.iter().skip(1).zip(&args) {
+            let name = self.scoping.symbol_name(*arg);
+            if self.scoping.symbol_name(*param) != name {
+                if self.hoisted_clash(scope, name, *param) {
+                    return fail("a hoisted event handler whose names would clash");
+                }
+                self.rw.rename(*param, name.to_string());
+            }
+        }
+        let event = params[0];
+        let head = match self.scoping.get_resolved_reference_ids(event).is_empty() {
+            true => "()".to_string(),
+            false => format!("({})", self.scoping.symbol_name(event)),
+        };
+        let text = match arrow.get_expression() {
+            Some(expr) => self.render(expr.span())?,
+            None => self.render(arrow.body.span())?,
+        };
+        Ok(format!("{head} => {text}"))
+    }
+
+    fn hoisted_clash(&self, scope: ScopeId, name: &str, except: SymbolId) -> bool {
+        self.scoping.symbol_ids().any(|other| {
+            other != except
+                && self.scoping.symbol_name(other) == name
+                && self
+                    .scoping
+                    .scope_ancestors(self.scoping.symbol_scope_id(other))
+                    .any(|ancestor| ancestor == scope)
+        })
     }
 
     pub(super) fn getter_code(&self, expr: &'a Expression<'a>) -> R<String> {
@@ -404,6 +517,29 @@ impl<'a, 's> Cx<'a, 's> {
         Ok(format!("{name}=\"{out}\""))
     }
 
+    fn function_binding(
+        &self,
+        name: &str,
+        getter: &'a Expression<'a>,
+        setter: &'a Expression<'a>,
+    ) -> R<Option<String>> {
+        let Expression::ArrowFunctionExpression(arrow) = setter.without_parentheses() else {
+            return Ok(None);
+        };
+        let params = param_symbols(&arrow.params);
+        let Some(&[param]) = params.as_deref() else {
+            return Ok(None);
+        };
+        let canonical =
+            thunk_body_any(arrow).is_some_and(|body| self.assigned(body, param, "", 2).is_ok());
+        if canonical || thunk_body(getter).is_none() {
+            return Ok(None);
+        }
+        let get = self.render(getter.span())?;
+        let set = self.render(setter.span())?;
+        Ok(Some(format!("bind:{name}={{{get}, {set}}}")))
+    }
+
     pub(super) fn bind(&self, body: &mut Body, call: &'a CallExpression<'a>, rt: Rt) -> R<()> {
         let (node, getter, setter, name) = match rt {
             Rt::BindValue => (arg(call, 0), arg(call, 1), arg(call, 2), "value"),
@@ -423,8 +559,18 @@ impl<'a, 's> Cx<'a, 's> {
             }
         };
         let node = self.element(body, node)?;
-        let getter = self.getter_code(getter.ok_or("a binding without a getter")?)?;
-        let target = self.setter_target(setter.ok_or("a binding without a setter")?)?;
+        let (getter, setter) = (
+            getter.ok_or("a binding without a getter")?,
+            setter.ok_or("a binding without a setter")?,
+        );
+        if rt != Rt::BindThis {
+            if let Some(text) = self.function_binding(name, getter, setter)? {
+                self.push_attr(body, node, text);
+                return Ok(());
+            }
+        }
+        let getter = self.getter_code(getter)?;
+        let target = self.setter_target(setter)?;
         if getter != target {
             return fail(format!(
                 "bind:{name} reads `{getter}` but writes `{target}`"
