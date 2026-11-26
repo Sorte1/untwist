@@ -7,6 +7,7 @@ use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::{FxHashMap, FxHashSet};
 
+use super::aliases::GlobalAliases;
 use super::reach::{key_of, Key};
 use super::GLOBAL_OBJECTS;
 use crate::host_globals::{is_host_global, is_host_global_property};
@@ -140,9 +141,10 @@ const MAX_PASSES: usize = 8;
 
 struct Collect<'s> {
     scoping: &'s Scoping,
+    aliases: &'s GlobalAliases,
     annex_b: &'s AnnexBWrites,
-    numeric: &'s NumericBindings,
-    led: Option<&'s NumericBindings>,
+    fixed: Option<&'s NumericBindings>,
+    current: NumericBindings,
     module: bool,
     bindings: FxHashMap<SymbolId, usize>,
     plain_bindings: FxHashMap<SymbolId, usize>,
@@ -210,16 +212,22 @@ impl Collect<'_> {
     }
 
     fn numeric(&self, expression: &Expression<'_>) -> bool {
-        match self.led {
-            Some(led) => is_led(expression, self.scoping, self.numeric, led),
-            None => is_numeric(expression, self.scoping, self.numeric),
+        match self.fixed {
+            Some(numeric) => is_led(expression, self.scoping, numeric, &self.current),
+            None => is_numeric(expression, self.scoping, &self.current),
         }
     }
 
     fn adds_to(&self, symbol: SymbolId, right: &Expression<'_>) -> bool {
-        match self.led {
-            Some(led) => led.contains(&symbol),
-            None => self.numeric.contains(&symbol) && self.numeric(right),
+        match self.fixed {
+            Some(_) => self.current.contains(&symbol),
+            None => self.current.contains(&symbol) && self.numeric(right),
+        }
+    }
+
+    fn forget(&mut self, symbol: SymbolId) {
+        if !self.params.contains_key(&symbol) {
+            self.current.remove(&symbol);
         }
     }
 
@@ -270,10 +278,10 @@ impl Collect<'_> {
     fn is_global_object(&self, object: &Expression<'_>) -> bool {
         match object.without_parentheses() {
             Expression::ThisExpression(_) => true,
-            Expression::Identifier(id) => {
-                GLOBAL_OBJECTS.contains(&id.name.as_str())
-                    && reference_symbol(id, self.scoping).is_none()
-            }
+            Expression::Identifier(id) => match reference_symbol(id, self.scoping) {
+                Some(symbol) => self.aliases.contains(&symbol),
+                None => GLOBAL_OBJECTS.contains(&id.name.as_str()),
+            },
             _ => false,
         }
     }
@@ -353,6 +361,7 @@ impl<'a> VisitJs<'a> for Collect<'_> {
                 let numeric = it.init.as_ref().is_none_or(|init| self.numeric(init));
                 if !numeric {
                     self.refused.insert(symbol);
+                    self.forget(symbol);
                 }
                 self.plain_values.insert(symbol);
             }
@@ -383,6 +392,8 @@ impl<'a> VisitJs<'a> for Collect<'_> {
             };
             if let (true, Some(reference)) = (numeric, target.reference_id.get()) {
                 self.numeric_writes.insert(reference);
+            } else if let Some(symbol) = reference_symbol(target, self.scoping) {
+                self.forget(symbol);
             }
         }
         walk_js::walk_assignment_expression(self, it);
@@ -427,25 +438,29 @@ impl<'a> VisitJs<'a> for Collect<'_> {
 struct Sources<'s, 'a> {
     program: &'s Program<'a>,
     scoping: &'s Scoping,
+    aliases: &'s GlobalAliases,
     annex_b: &'s AnnexBWrites,
     module: bool,
 }
 
 fn narrowed(
     sources: &Sources<'_, '_>,
-    (numeric, led): (&NumericBindings, Option<&NumericBindings>),
+    fixed: Option<&NumericBindings>,
+    current: NumericBindings,
 ) -> NumericBindings {
     let Sources {
         program,
         scoping,
+        aliases,
         annex_b,
         module,
     } = *sources;
     let mut collect = Collect {
         scoping,
+        aliases,
         annex_b,
-        numeric,
-        led,
+        fixed,
+        current,
         module,
         bindings: FxHashMap::default(),
         plain_bindings: FxHashMap::default(),
@@ -462,33 +477,37 @@ fn narrowed(
         .strict
         .push(module || crate::semantic::program_is_strict(program));
     collect.visit_program(program);
-    led.unwrap_or(numeric)
+    collect
+        .current
         .iter()
         .copied()
         .filter(|&symbol| collect.holds(symbol))
         .collect()
 }
 
-fn fixpoint(sources: &Sources<'_, '_>, numeric: Option<&NumericBindings>) -> NumericBindings {
+fn fixpoint(sources: &Sources<'_, '_>, fixed: Option<&NumericBindings>) -> NumericBindings {
     let mut current: NumericBindings = sources.scoping.symbol_ids().collect();
     for _ in 0..MAX_PASSES {
-        let next = match numeric {
-            Some(numeric) => narrowed(sources, (numeric, Some(&current))),
-            None => narrowed(sources, (&current, None)),
-        };
-        if next.len() == current.len() {
-            return next;
+        let before = current.len();
+        current = narrowed(sources, fixed, current);
+        if current.len() == before {
+            return current;
         }
-        current = next;
     }
     NumericBindings::default()
 }
 
-pub(super) fn key_bindings(program: &Program<'_>, scoping: &Scoping, module: bool) -> KeyBindings {
+pub(super) fn key_bindings(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    module: bool,
+    aliases: &GlobalAliases,
+) -> KeyBindings {
     let annex_b = AnnexBWrites::of(program, scoping);
     let sources = Sources {
         program,
         scoping,
+        aliases,
         annex_b: &annex_b,
         module,
     };

@@ -333,6 +333,9 @@ impl Scan<'_> {
     }
 
     pub(super) fn allow_root_name<'e>(&self, id: &'e IdentifierReference<'_>) -> Option<Root<'e>> {
+        if self.is_global_alias(id) {
+            return Some(Root::Global);
+        }
         let root = self.root_named(id.name.as_str())?;
         self.global_named(id, &[id.name.as_str()]).then_some(root)
     }

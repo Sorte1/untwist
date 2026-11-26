@@ -248,7 +248,7 @@ impl Scan<'_> {
         }
     }
 
-    fn is_window_slot(&self, name: &str) -> bool {
+    pub(super) fn is_window_slot(&self, name: &str) -> bool {
         self.is_builtin_root_name(name)
             || GLOBAL_OBJECTS.contains(&name)
             || CODE_RUNNERS.contains(&name)

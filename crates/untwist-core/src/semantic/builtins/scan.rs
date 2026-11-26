@@ -11,6 +11,7 @@ use std::cell::{Cell, OnceCell, RefCell};
 use super::{Builtins, Reliance, Scanned};
 use crate::semantic::{every_global_foreign, is_foreign_global, program_is_strict};
 
+mod aliases;
 mod allow;
 mod escapes;
 mod functions;
@@ -194,6 +195,7 @@ struct Scan<'s> {
     functions: OnceCell<functions::FunctionBindings>,
     escaping: OnceCell<escapes::Escaping>,
     windows: OnceCell<windows::WindowLocals>,
+    aliases: OnceCell<aliases::GlobalAliases>,
     numeric: OnceCell<numeric::KeyBindings>,
     reached: RefCell<FxHashMap<usize, bool>>,
     scoping: &'s Scoping,
@@ -210,6 +212,7 @@ struct Scan<'s> {
     host_member: Option<usize>,
     window_escaped: bool,
     window_writes: Cell<bool>,
+    discarded: Option<usize>,
 }
 
 fn names_a_foreign_root(scoping: &Scoping, reliance: &Reliance) -> bool {
@@ -337,6 +340,7 @@ impl<'s> Scan<'s> {
             functions: OnceCell::new(),
             escaping: OnceCell::new(),
             windows: OnceCell::new(),
+            aliases: OnceCell::new(),
             numeric: OnceCell::new(),
             reached: RefCell::new(FxHashMap::default()),
             scoping,
@@ -353,6 +357,7 @@ impl<'s> Scan<'s> {
             host_member: None,
             window_escaped: false,
             window_writes: Cell::new(false),
+            discarded: None,
         }
     }
 }
@@ -366,9 +371,14 @@ impl Scan<'_> {
     }
 
     pub(super) fn numeric_key(&self, key: &Expression<'_>) -> bool {
-        let numeric = self
-            .numeric
-            .get_or_init(|| numeric::key_bindings(self.program, self.scoping, self.module));
+        let numeric = self.numeric.get_or_init(|| {
+            numeric::key_bindings(
+                self.program,
+                self.scoping,
+                self.module,
+                self.global_aliases(),
+            )
+        });
         numeric::is_harmless_key(key, self.scoping, numeric)
     }
 
@@ -479,9 +489,23 @@ impl Scan<'_> {
                 .intersects(SymbolFlags::FunctionScopedVariable | SymbolFlags::Function)
     }
 
+    pub(super) fn global_aliases(&self) -> &aliases::GlobalAliases {
+        self.aliases
+            .get_or_init(|| aliases::global_aliases(self.program, self.scoping))
+    }
+
+    pub(super) fn is_global_alias(&self, id: &IdentifierReference<'_>) -> bool {
+        id.reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+            .is_some_and(|symbol| self.global_aliases().contains(&symbol))
+    }
+
     fn is_global_object(&self, expression: &Expression<'_>) -> bool {
         match expression.without_parentheses() {
-            Expression::Identifier(id) => self.global_named(id, &GLOBAL_OBJECTS),
+            Expression::Identifier(id) => {
+                self.global_named(id, &GLOBAL_OBJECTS) || self.is_global_alias(id)
+            }
             Expression::ThisExpression(_) => self.frame().this == This::Global,
             _ => false,
         }
@@ -779,6 +803,42 @@ impl Scan<'_> {
         self.judge_write(target, key)
     }
 
+    fn defines_a_plain_global(&self, call: &CallExpression<'_>) -> bool {
+        let discarded = self.discarded == Some(std::ptr::from_ref(call).addr());
+        if !discarded || !self.is_definer(&call.callee) {
+            return false;
+        }
+        if !self
+            .definer_like(&call.callee)
+            .is_some_and(|method| KEYED_DEFINERS.contains(&method))
+        {
+            return false;
+        }
+        let mut parts = call.arguments.iter().map(Argument::as_expression);
+        let (Some(Some(target)), Some(Some(key))) = (parts.next(), parts.next()) else {
+            return false;
+        };
+        self.is_global_object(target)
+            && self.known_key(key).is_some_and(|name| {
+                !self.pattern_name_reaches(&name)
+                    && !self.is_window_slot(&name)
+                    && !LEGACY_DEFINERS.contains(&name.as_str())
+                    && (self.module
+                        || self
+                            .scoping
+                            .get_binding(self.scoping.root_scope_id(), name.as_str().into())
+                            .is_none())
+            })
+    }
+
+    fn visit_plain_definition(&mut self, arguments: &[Argument<'_>]) {
+        let mut parts = arguments.iter();
+        if let Some(target) = parts.next().and_then(Argument::as_expression) {
+            self.visit_unless_root(target);
+        }
+        parts.for_each(|argument| self.visit_argument(argument));
+    }
+
     fn legacy_definition(&mut self, callee: &Expression<'_>, arguments: &[Argument<'_>]) -> bool {
         let Some((object, key)) = member_of(callee) else {
             return false;
@@ -1000,6 +1060,14 @@ impl<'a> VisitJs<'a> for Scan<'_> {
             return;
         };
         self.visit_binding_identifier(id);
+        if id
+            .symbol_id
+            .get()
+            .is_some_and(|symbol| self.global_aliases().contains(&symbol))
+        {
+            self.visit_unless_root(init);
+            return;
+        }
         self.visit_local_value(id.symbol_id.get(), init);
     }
 
@@ -1075,6 +1143,10 @@ impl<'a> VisitJs<'a> for Scan<'_> {
         } else {
             self.visit_callee(&it.callee);
         }
+        if self.defines_a_plain_global(it) {
+            self.visit_plain_definition(&it.arguments);
+            return;
+        }
         self.visit_arguments(&it.arguments);
     }
 
@@ -1098,6 +1170,9 @@ impl<'a> VisitJs<'a> for Scan<'_> {
     }
 
     fn visit_expression_statement(&mut self, it: &ExpressionStatement<'a>) {
+        if let Expression::CallExpression(call) = it.expression.without_parentheses() {
+            self.discarded = Some(std::ptr::from_ref(&**call).addr());
+        }
         self.visit_unless_root(&it.expression);
     }
 

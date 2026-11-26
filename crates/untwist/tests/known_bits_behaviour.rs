@@ -22,13 +22,15 @@ fn unsafe_lane(source: &str) -> String {
 
 fn fixtures() -> Vec<(String, String)> {
     let fixtures = js_files_in("fixtures/known-bits");
-    assert_eq!(fixtures.len(), 21);
+    assert_eq!(fixtures.len(), 36);
     fixtures
 }
 
-const UNSAFE_PREMISE: [&str; 2] = [
+const UNSAFE_PREMISE: [&str; 4] = [
     "kept-checksum-global-call.js",
     "kept-checksum-global-write.js",
+    "kept-checksum-alias-global-call.js",
+    "kept-checksum-alias-global-write.js",
 ];
 
 fn under_unsafe_premise(label: &str) -> bool {
