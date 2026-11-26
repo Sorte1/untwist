@@ -3,7 +3,7 @@ use std::cell::Cell;
 use oxc_ast::ast::{
     BinaryOperator, BindingPattern, CallExpression, Expression, LogicalOperator, Statement,
 };
-use oxc_span::GetSpan;
+use oxc_span::{GetSpan, Span};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
 use untwist_restore::html::Node;
@@ -217,15 +217,39 @@ fn static_style(text: &str) -> Option<Vec<(String, String)>> {
 }
 
 impl<'c, 'a, 's> Block<'c, 'a, 's> {
-    pub fn starts_element(cx: &Cx<'_, '_>, statements: &[Statement<'_>]) -> bool {
-        let Some(Statement::VariableDeclaration(declaration)) = statements.first() else {
-            return false;
+    pub fn element_start(cx: &Cx<'_, '_>, statements: &[Statement<'_>]) -> Option<usize> {
+        let Some(Statement::ReturnStatement(ret)) = statements.last() else {
+            return None;
         };
-        declaration
-            .declarations
-            .first()
-            .and_then(|declarator| declarator.init.as_ref())
-            .is_some_and(|init| cx.template_of(init).is_some())
+        let root = expr_symbol(ret.argument.as_ref()?, cx.scoping)?;
+        let found = statements
+            .iter()
+            .position(|statement| statement_template(cx, statement, root).is_some())?;
+        let tail = Span::new(statements[found].span().start, ret.span.end);
+        let mut start = found;
+        while start > 0 {
+            let Statement::VariableDeclaration(declaration) = &statements[start - 1] else {
+                break;
+            };
+            let assigned = declaration.declarations.iter().all(|declarator| {
+                declarator.init.is_none()
+                    && binding(&declarator.id).is_some_and(|symbol| {
+                        cx.scoping.get_resolved_references(symbol).any(|reference| {
+                            let at = cx.nodes.kind(reference.node_id()).span();
+                            reference.is_write() && tail.start <= at.start && at.end <= tail.end
+                        })
+                    })
+            });
+            if !assigned {
+                break;
+            }
+            start -= 1;
+        }
+        Some(start)
+    }
+
+    pub fn starts_element(cx: &Cx<'_, '_>, statements: &[Statement<'_>]) -> bool {
+        Self::element_start(cx, statements) == Some(0)
     }
 
     pub fn static_element(cx: &'c Cx<'a, 's>, template: &'a Template) -> R<String> {
@@ -240,34 +264,112 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
         block.build()
     }
 
+    fn rooted(cx: &'c Cx<'a, 's>, root: SymbolId, template: &'a Template) -> Self {
+        let mut paths = FxHashMap::default();
+        paths.insert(root, Vec::new());
+        Block {
+            cx,
+            template,
+            paths,
+            ops: FxHashMap::default(),
+            root: Some(root),
+            dropped: Vec::new(),
+        }
+    }
+
     pub fn element(cx: &'c Cx<'a, 's>, statements: &[Statement<'_>]) -> R<String> {
-        let Some(Statement::VariableDeclaration(declaration)) = statements.first() else {
-            return fail("an element block does not start with its template");
+        let Some(Statement::ReturnStatement(ret)) = statements.last() else {
+            return fail("an element block does not return its element");
         };
-        let Some(template) = declaration
-            .declarations
-            .first()
-            .and_then(|declarator| declarator.init.as_ref())
-            .and_then(|init| cx.template_of(init))
+        let Some(root) = ret
+            .argument
+            .as_ref()
+            .and_then(|value| expr_symbol(value, cx.scoping))
+        else {
+            return fail("an element block does not return its element");
+        };
+        let Some(template) = statements
+            .iter()
+            .find_map(|statement| statement_template(cx, statement, root))
         else {
             return fail("an element block does not start with its template");
         };
-        let mut block = Block {
-            cx,
-            template,
-            paths: FxHashMap::default(),
-            ops: FxHashMap::default(),
-            root: None,
-            dropped: Vec::new(),
-        };
+        let mut block = Block::rooted(cx, root, template);
         block.statements(statements)?;
         block.build()
     }
 
+    pub fn sequence(
+        cx: &'c Cx<'a, 's>,
+        items: &[Expression<'_>],
+    ) -> R<Option<(String, Vec<SymbolId>)>> {
+        let Some((last, ops)) = items.split_last() else {
+            return Ok(None);
+        };
+        let Some(root) = expr_symbol(last, cx.scoping) else {
+            return Ok(None);
+        };
+        let Some(template) = ops.iter().find_map(|item| template_assign(cx, item, root)) else {
+            return Ok(None);
+        };
+        let mut block = Block::rooted(cx, root, template);
+        for item in ops {
+            block.prebind(item)?;
+            block.op(item)?;
+        }
+        let bound = block.paths.keys().copied().collect();
+        Ok(Some((block.build()?, bound)))
+    }
+
+    fn prebind(&mut self, expr: &Expression<'_>) -> R<()> {
+        match expr.without_parentheses() {
+            Expression::AssignmentExpression(assign) => {
+                if let Some((object, _)) = member_target(&assign.left) {
+                    self.prebind(object)?;
+                }
+                self.prebind(&assign.right)?;
+                let Some(symbol) = crate::convert::target_symbol(&assign.left, self.cx.scoping)
+                else {
+                    return Ok(());
+                };
+                if Some(symbol) == self.root && self.cx.template_of(&assign.right).is_some() {
+                    return Ok(());
+                }
+                if let Some(path) = self.walk(&assign.right) {
+                    self.paths.insert(symbol, path);
+                }
+                Ok(())
+            }
+            Expression::CallExpression(call) => {
+                self.prebind(&call.callee)?;
+                for arg in args(call).unwrap_or_default() {
+                    self.prebind(arg)?;
+                }
+                Ok(())
+            }
+            Expression::StaticMemberExpression(member) => self.prebind(&member.object),
+            Expression::SequenceExpression(sequence) => {
+                for item in &sequence.expressions {
+                    self.prebind(item)?;
+                }
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
     fn node(&self, expr: &Expression<'_>) -> Option<Path> {
+        if let Expression::AssignmentExpression(assign) = expr.without_parentheses() {
+            let symbol = crate::convert::target_symbol(&assign.left, self.cx.scoping)?;
+            return self.paths.get(&symbol).cloned();
+        }
         self.paths
             .get(&expr_symbol(expr, self.cx.scoping)?)
             .cloned()
+    }
+
+    fn target(&self, expr: &Expression<'_>) -> Option<Path> {
+        self.node(expr).or_else(|| self.walk(expr))
     }
 
     fn at(&self, path: &[usize]) -> Option<&'a Node> {
@@ -295,7 +397,9 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
         let Expression::StaticMemberExpression(member) = expr.without_parentheses() else {
             return None;
         };
-        let from = self.node(&member.object)?;
+        let from = self
+            .node(&member.object)
+            .or_else(|| self.walk(&member.object))?;
         self.step(&from, member.property.name.as_str())
     }
 
@@ -307,7 +411,8 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
             self.paths.insert(symbol, path);
             return Ok(true);
         }
-        let (BindingPattern::ObjectPattern(object), Some(from)) = (pattern, self.node(init)) else {
+        let (BindingPattern::ObjectPattern(object), Some(from)) = (pattern, self.target(init))
+        else {
             return Ok(false);
         };
         if object.rest.is_some() {
@@ -331,8 +436,12 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
 
     fn statements(&mut self, statements: &[Statement<'_>]) -> R<()> {
         let mut holders: Vec<(SymbolId, &Expression<'_>)> = Vec::new();
+        let mut pending: Vec<SymbolId> = Vec::new();
         let last = statements.len() - 1;
         for (index, statement) in statements.iter().enumerate() {
+            if self.cx.is_deleted(statement) {
+                continue;
+            }
             if let Some(at) = holders.iter().position(|(holder, init)| {
                 self.element_ref(statement, *holder, init).unwrap_or(false)
             }) {
@@ -341,16 +450,18 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
             }
             match statement {
                 Statement::VariableDeclaration(declaration) => {
-                    for (at, declarator) in declaration.declarations.iter().enumerate() {
+                    for declarator in &declaration.declarations {
                         let Some(init) = &declarator.init else {
-                            return fail("an element block declares a variable with no value");
+                            match binding(&declarator.id) {
+                                Some(symbol) => pending.push(symbol),
+                                None => return fail("an element block declares a pattern"),
+                            }
+                            continue;
                         };
-                        if index == 0 && at == 0 {
-                            let Some(symbol) = binding(&declarator.id) else {
-                                return fail("an element block binds its template to a pattern");
-                            };
-                            self.root = Some(symbol);
-                            self.paths.insert(symbol, Vec::new());
+                        self.prebind(init)?;
+                        if binding(&declarator.id) == self.root
+                            && self.cx.template_of(init).is_some()
+                        {
                             continue;
                         }
                         if self.bind(&declarator.id, init)? {
@@ -362,7 +473,10 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
                         holders.push((symbol, init));
                     }
                 }
-                Statement::ExpressionStatement(statement) => self.op(&statement.expression)?,
+                Statement::ExpressionStatement(statement) => {
+                    self.prebind(&statement.expression)?;
+                    self.op(&statement.expression)?
+                }
                 Statement::ReturnStatement(ret) if index == last => {
                     let returns_root = ret
                         .argument
@@ -381,6 +495,12 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
         }
         if !holders.is_empty() {
             return fail("an element block declares a value it never uses as a ref");
+        }
+        if pending
+            .iter()
+            .any(|symbol| !self.paths.contains_key(symbol))
+        {
+            return fail("an element block declares a variable it never binds to a node");
         }
         Ok(())
     }
@@ -452,9 +572,20 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
                 }
             },
             Expression::AssignmentExpression(assign) => {
+                if let Some(symbol) = crate::convert::target_symbol(&assign.left, cx.scoping) {
+                    let is_root =
+                        Some(symbol) == self.root && cx.template_of(&assign.right).is_some();
+                    let is_walk =
+                        self.paths.contains_key(&symbol) && self.walk(&assign.right).is_some();
+                    if is_root || is_walk {
+                        return Ok(());
+                    }
+                }
                 if let Some((object, property)) = member_target(&assign.left) {
-                    if let Some(path) = self.node(object) {
-                        if property == "_$owner" && is_get_owner(cx, &assign.right) {
+                    if let Some(path) = self.target(object) {
+                        let custom = matches!(self.at(&path), Some(Node::Element(element)) if element.name.contains('-'));
+                        if property == "_$owner" && custom && is_get_owner(cx, &assign.right) {
+                            cx.ignored.borrow_mut().push(assign.right.span());
                             return Ok(());
                         }
                         if let Some(event) = property.strip_prefix("$$") {
@@ -465,6 +596,12 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
                 self.setter(expr, None, &FxHashMap::default())
             }
             Expression::StaticMemberExpression(_) if self.walk(expr).is_some() => Ok(()),
+            Expression::SequenceExpression(sequence) => {
+                for item in &sequence.expressions {
+                    self.op(item)?;
+                }
+                Ok(())
+            }
             _ => fail("an element block holds an expression with no JSX spelling"),
         }
     }
@@ -508,7 +645,7 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
             [parent, value, marker] => {
                 let marker = match marker.without_parentheses() {
                     Expression::NullLiteral(_) => Marker::End,
-                    other => match self.node(other) {
+                    other => match self.target(other) {
                         Some(path) => Marker::Before(path),
                         None => return fail("insert has a marker outside the template"),
                     },
@@ -517,7 +654,7 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
             }
             _ => return fail("insert has an unknown arity"),
         };
-        let Some(parent) = self.node(parent) else {
+        let Some(parent) = self.target(parent) else {
             return fail("insert has a parent outside the template");
         };
         if let Marker::Before(path) = &marker {
@@ -545,7 +682,7 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
             ),
             _ => return fail("addEventListener has an unknown arity"),
         };
-        let (Some(path), Some(name)) = (self.node(node), string(name)) else {
+        let (Some(path), Some(name)) = (self.target(node), string(name)) else {
             return fail("addEventListener has an unknown target");
         };
         let handler = self.cx.render(handler)?;
@@ -569,7 +706,7 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
         if member.property.name != "addEventListener" {
             return Ok(false);
         }
-        let Some(path) = self.node(&member.object) else {
+        let Some(path) = self.target(&member.object) else {
             return Ok(false);
         };
         let parts = args(call).unwrap_or_default();
@@ -604,7 +741,7 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
         let parts = args(call).unwrap_or_default();
         match parts.as_slice() {
             [function, node] => {
-                let Some(path) = self.node(node) else {
+                let Some(path) = self.target(node) else {
                     return fail("use has a target outside the template");
                 };
                 let text = self.cx.render(function)?;
@@ -613,7 +750,7 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
             }
             [function, node, value] => {
                 let (Some(path), Expression::Identifier(ident)) =
-                    (self.node(node), function.without_parentheses())
+                    (self.target(node), function.without_parentheses())
                 else {
                     return fail("a directive is not a plain name");
                 };
@@ -639,7 +776,7 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
         let (Some(node), Some(props)) = (parts.first(), parts.get(1)) else {
             return fail("spread has no props");
         };
-        let Some(path) = self.node(node) else {
+        let Some(path) = self.target(node) else {
             return fail("spread has a target outside the template");
         };
         let mut attrs = Vec::new();
@@ -800,7 +937,7 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
                 if param.is_some() && expr_symbol(object, cx.scoping) == param {
                     return self.setter(&assign.right, param, values);
                 }
-                let Some(path) = self.node(object) else {
+                let Some(path) = self.target(object) else {
                     return fail("an element block assigns to a value outside the template");
                 };
                 let value = self.value(&assign.right, param, values);
@@ -825,7 +962,7 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
             Expression::CallExpression(call) => {
                 let parts = args(call).unwrap_or_default();
                 if let Some(rt) = cx.rt(&call.callee) {
-                    let Some(path) = parts.first().and_then(|node| self.node(node)) else {
+                    let Some(path) = parts.first().and_then(|node| self.target(node)) else {
                         return fail("a setter targets a value outside the template");
                     };
                     let value_at = |index: usize| {
@@ -889,7 +1026,7 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
                 if member.property.name != "toggle" || list.property.name != "classList" {
                     return fail("an element block calls a method with no JSX spelling");
                 }
-                let (Some(path), [name, value]) = (self.node(&list.object), parts.as_slice())
+                let (Some(path), [name, value]) = (self.target(&list.object), parts.as_slice())
                 else {
                     return fail("classList.toggle targets a value outside the template");
                 };
@@ -1027,6 +1164,57 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
     }
 }
 
+fn template_assign<'a>(
+    cx: &Cx<'a, '_>,
+    expr: &Expression<'_>,
+    root: SymbolId,
+) -> Option<&'a Template> {
+    match expr.without_parentheses() {
+        Expression::AssignmentExpression(assign) => {
+            if crate::convert::target_symbol(&assign.left, cx.scoping) == Some(root) {
+                if let Some(template) = cx.template_of(&assign.right) {
+                    return Some(template);
+                }
+            }
+            template_assign(cx, &assign.right, root)
+        }
+        Expression::CallExpression(call) => template_assign(cx, &call.callee, root).or_else(|| {
+            args(call)
+                .unwrap_or_default()
+                .into_iter()
+                .find_map(|arg| template_assign(cx, arg, root))
+        }),
+        Expression::StaticMemberExpression(member) => template_assign(cx, &member.object, root),
+        Expression::SequenceExpression(sequence) => sequence
+            .expressions
+            .iter()
+            .find_map(|item| template_assign(cx, item, root)),
+        _ => None,
+    }
+}
+
+fn statement_template<'a>(
+    cx: &Cx<'a, '_>,
+    statement: &Statement<'_>,
+    root: SymbolId,
+) -> Option<&'a Template> {
+    match statement {
+        Statement::VariableDeclaration(declaration) => {
+            declaration.declarations.iter().find_map(|declarator| {
+                let init = declarator.init.as_ref()?;
+                match binding(&declarator.id) == Some(root) {
+                    true => cx.template_of(init),
+                    false => template_assign(cx, init, root),
+                }
+            })
+        }
+        Statement::ExpressionStatement(statement) => {
+            template_assign(cx, &statement.expression, root)
+        }
+        _ => None,
+    }
+}
+
 fn is_get_owner(cx: &Cx<'_, '_>, expr: &Expression<'_>) -> bool {
-    matches!(expr.without_parentheses(), Expression::CallExpression(call) if cx.is(&call.callee, Rt::GetOwner) && call.arguments.is_empty())
+    matches!(expr.without_parentheses(), Expression::CallExpression(call) if call.arguments.is_empty() && (cx.is(&call.callee, Rt::GetOwner) || cx.rt(&call.callee).is_none()))
 }

@@ -48,6 +48,11 @@ pub struct Cx<'a, 's> {
     pub rw: &'a Rewriter<'s>,
     pub roots: RefCell<FxHashMap<Span, Kind>>,
     pub idents: Vec<(Span, SymbolId)>,
+    pub ignored: RefCell<Vec<Span>>,
+    pub inline: RefCell<FxHashMap<Span, String>>,
+    pub deleted: RefCell<Vec<Span>>,
+    pub library: RefCell<rustc_hash::FxHashSet<SymbolId>>,
+    pub candidates: Vec<(Span, oxc_syntax::node::NodeId)>,
 }
 
 pub fn unwrap_parens(text: String) -> String {
@@ -82,13 +87,46 @@ fn line_indent(source: &str, at: u32) -> &str {
     &line[..line.len() - line.trim_start().len()]
 }
 
+pub fn candidates(nodes: &AstNodes<'_>) -> Vec<(Span, oxc_syntax::node::NodeId)> {
+    let mut out: Vec<(Span, oxc_syntax::node::NodeId)> = nodes
+        .iter()
+        .filter(|inner| {
+            matches!(
+                inner.kind(),
+                AstKind::CallExpression(_)
+                    | AstKind::ArrayExpression(_)
+                    | AstKind::SequenceExpression(_)
+                    | AstKind::FunctionBody(_)
+            )
+        })
+        .map(|inner| (inner.kind().span(), inner.id()))
+        .collect();
+    out.sort_by_key(|(span, _)| span.start);
+    out
+}
+
 impl<'a, 's> Cx<'a, 's> {
-    pub fn referenced(&self, span: Span) -> impl Iterator<Item = SymbolId> + '_ {
+    pub fn referenced_at(&self, span: Span) -> impl Iterator<Item = (Span, SymbolId)> + '_ {
         let first = self.idents.partition_point(|(at, _)| at.start < span.start);
+        let ignored = self.ignored.borrow().clone();
         self.idents[first..]
             .iter()
-            .take_while(move |(at, _)| at.end <= span.end)
-            .map(|(_, symbol)| *symbol)
+            .take_while(move |(at, _)| at.start < span.end)
+            .filter(move |(at, _)| at.end <= span.end)
+            .filter(move |(at, _)| {
+                !ignored
+                    .iter()
+                    .any(|skip| skip.start <= at.start && at.end <= skip.end)
+            })
+            .copied()
+    }
+
+    pub fn name_inline(&self, span: Span, name: &str) {
+        self.inline.borrow_mut().insert(span, name.to_string());
+        self.rw.add_site(Site {
+            span,
+            pieces: vec![Piece::Lit(name.to_string())],
+        });
     }
 
     pub fn render(&self, expr: &Expression<'_>) -> R<String> {
@@ -133,6 +171,126 @@ impl<'a, 's> Cx<'a, 's> {
             .copied()
     }
 
+    fn tail_block(
+        &self,
+        body: oxc_syntax::node::NodeId,
+        statements: &[Statement<'_>],
+    ) -> R<Option<(Span, String)>> {
+        let Some(at) = Block::element_start(self, statements) else {
+            return Ok(None);
+        };
+        let parent = self.nodes.parent_id(body);
+        let called = matches!(self.nodes.kind(self.nodes.parent_id(parent)), AstKind::CallExpression(call) if call.callee.without_parentheses().span() == self.nodes.kind(parent).span());
+        let getter = matches!(self.nodes.kind(parent), AstKind::Function(_))
+            && matches!(
+                self.nodes.kind(self.nodes.parent_id(parent)),
+                AstKind::ObjectProperty(_)
+            );
+        if at == 0 && (called || getter) {
+            return Ok(None);
+        }
+        let tail = &statements[at..];
+        let Some(last) = tail.last() else {
+            return Ok(None);
+        };
+        let text = Block::element(self, tail)?;
+        let span = Span::new(tail[0].span().start, last.span().end);
+        Ok(Some((span, text)))
+    }
+
+    fn memo_sequence(&self, items: &[Expression<'_>], span: Span) -> R<Option<String>> {
+        let Some((last, memos)) = items.split_last() else {
+            return Ok(None);
+        };
+        let mut bound = Vec::new();
+        for item in memos {
+            let Expression::AssignmentExpression(assign) = item.without_parentheses() else {
+                return Ok(None);
+            };
+            let Some(symbol) = target_symbol(&assign.left, self.scoping) else {
+                return Ok(None);
+            };
+            let Expression::CallExpression(call) = assign.right.without_parentheses() else {
+                return Ok(None);
+            };
+            if !self.is(&call.callee, Rt::Memo) {
+                return Ok(None);
+            }
+            bound.push(symbol);
+        }
+        if bound.is_empty() {
+            return Ok(None);
+        }
+        let Some(body) = thunk(last) else {
+            return Ok(None);
+        };
+        let text = self.render(body)?;
+        self.drop_declarations(&bound, span);
+        Ok(Some(text))
+    }
+
+    pub fn is_deleted(&self, statement: &Statement<'_>) -> bool {
+        self.deleted.borrow().contains(&statement.span())
+    }
+
+    fn drop_declarations(&self, bound: &[SymbolId], inside: Span) {
+        let mut seen: Vec<Span> = Vec::new();
+        for symbol in bound {
+            let declaration = self.scoping.symbol_declaration(*symbol);
+            let AstKind::VariableDeclarator(declarator) = self.nodes.kind(declaration) else {
+                continue;
+            };
+            if declarator.init.is_some() {
+                continue;
+            }
+            let parent = self.nodes.parent_id(declaration);
+            let AstKind::VariableDeclaration(statement) = self.nodes.kind(parent) else {
+                continue;
+            };
+            let all = statement.declarations.iter().all(|declarator| {
+                declarator.init.is_none()
+                    && binding(&declarator.id).is_some_and(|symbol| bound.contains(&symbol))
+            });
+            let span = statement.span;
+            let within = inside.start <= span.start && span.end <= inside.end;
+            if !all || within || seen.contains(&span) {
+                continue;
+            }
+            seen.push(span);
+            self.deleted.borrow_mut().push(span);
+            let start = self.source[..span.start as usize]
+                .rfind('\n')
+                .map_or(span.start, |at| at as u32);
+            let used = self
+                .scoping
+                .get_resolved_references(*symbol)
+                .any(|reference| {
+                    let at = self.nodes.kind(reference.node_id()).span();
+                    !(inside.start <= at.start && at.end <= inside.end)
+                });
+            if used {
+                continue;
+            }
+            self.rw.add_site(Site {
+                span: Span::new(start, span.end),
+                pieces: Vec::new(),
+            });
+        }
+    }
+
+    fn register_tail(&self, span: Span, text: String) {
+        let text = match text.contains('\n') {
+            true => format!("return (\n  {}\n);", jsx::indent_rest(&text, "  ")),
+            false => format!("return {text};"),
+        };
+        let text = jsx::indent_rest(&text, line_indent(self.source, span.start));
+        self.roots.borrow_mut().insert(span, Kind::Jsx);
+        self.rw.add_site(Site {
+            span,
+            pieces: vec![Piece::Lit(text)],
+        });
+    }
+
     fn register(&self, span: Span, kind: Kind, text: String) {
         let before = self.source[..span.start as usize].trim_end();
         let statement_value = before.ends_with("return")
@@ -162,17 +320,14 @@ impl<'a, 's> Cx<'a, 's> {
 
     pub fn collect_node(&self, node: oxc_syntax::node::NodeId) -> R<()> {
         let owner = self.nodes.kind(node).span();
-        let mut candidates: Vec<(Span, oxc_syntax::node::NodeId)> = self
-            .nodes
+        let first = self
+            .candidates
+            .partition_point(|(span, _)| span.start < owner.start);
+        let mut candidates: Vec<(Span, oxc_syntax::node::NodeId)> = self.candidates[first..]
             .iter()
-            .filter(|inner| {
-                matches!(
-                    inner.kind(),
-                    AstKind::CallExpression(_) | AstKind::ArrayExpression(_)
-                )
-            })
-            .map(|inner| (inner.kind().span(), inner.id()))
-            .filter(|(span, _)| owner.start <= span.start && span.end <= owner.end)
+            .take_while(|(span, _)| span.start < owner.end)
+            .filter(|(span, _)| span.end <= owner.end)
+            .copied()
             .collect();
         candidates.sort_by_key(|(span, _)| (span.size(), span.start));
         for (span, id) in candidates {
@@ -182,6 +337,25 @@ impl<'a, 's> Cx<'a, 's> {
             let found = match self.nodes.kind(id) {
                 AstKind::CallExpression(call) => self.root_call(call)?,
                 AstKind::ArrayExpression(array) => self.root_array(array)?,
+                AstKind::SequenceExpression(sequence) => {
+                    if let Some(found) = self.memo_sequence(&sequence.expressions, span)? {
+                        self.register(span, Kind::Expr, found);
+                        continue;
+                    }
+                    match Block::sequence(self, &sequence.expressions)? {
+                        Some((text, bound)) => {
+                            self.drop_declarations(&bound, span);
+                            Some((Kind::Jsx, text))
+                        }
+                        None => None,
+                    }
+                }
+                AstKind::FunctionBody(body) => {
+                    if let Some((tail, text)) = self.tail_block(id, &body.statements)? {
+                        self.register_tail(tail, text);
+                    }
+                    None
+                }
                 _ => None,
             };
             if let Some((kind, text)) = found {
@@ -278,17 +452,33 @@ impl<'a, 's> Cx<'a, 's> {
         }
     }
 
-    fn memo_local<'e>(&self, callee: &'e Expression<'_>) -> Option<&'a Expression<'a>> {
-        let symbol = expr_symbol(callee, self.scoping)?;
+    fn memo_value(&self, symbol: SymbolId) -> Option<&'a Expression<'a>> {
         let AstKind::VariableDeclarator(declarator) =
             self.nodes.kind(self.scoping.symbol_declaration(symbol))
         else {
             return None;
         };
-        let Some(Expression::CallExpression(call)) = declarator
-            .init
-            .as_ref()
-            .map(Expression::without_parentheses)
+        if let Some(init) = &declarator.init {
+            return Some(init);
+        }
+        let mut writes = self
+            .scoping
+            .get_resolved_references(symbol)
+            .filter(|reference| reference.is_write());
+        let write = writes.next()?;
+        if writes.next().is_some() {
+            return None;
+        }
+        match self.nodes.parent_kind(write.node_id()) {
+            AstKind::AssignmentExpression(assign) => Some(&assign.right),
+            _ => None,
+        }
+    }
+
+    fn memo_local<'e>(&self, callee: &'e Expression<'_>) -> Option<&'a Expression<'a>> {
+        let symbol = expr_symbol(callee, self.scoping)?;
+        let Some(Expression::CallExpression(call)) =
+            self.memo_value(symbol).map(Expression::without_parentheses)
         else {
             return None;
         };
@@ -341,7 +531,11 @@ impl<'a, 's> Cx<'a, 's> {
     }
 
     pub fn returned_text(&self, statements: &[Statement<'_>]) -> R<String> {
-        match statements {
+        let skip = statements
+            .iter()
+            .take_while(|statement| self.is_deleted(statement))
+            .count();
+        match &statements[skip..] {
             [Statement::ReturnStatement(ret)] => match &ret.argument {
                 Some(value) => self.render(value),
                 None => Ok("undefined".to_string()),
@@ -489,11 +683,16 @@ impl<'a, 's> Cx<'a, 's> {
             return fail("createComponent has no component");
         };
         let name = self.render(callee)?;
-        let named = match callee.without_parentheses() {
-            Expression::Identifier(_) => name.starts_with(|c: char| c.is_ascii_uppercase()),
-            Expression::StaticMemberExpression(_) => name.split('.').all(is_identifier),
-            _ => false,
-        };
+        let inline = self
+            .inline
+            .borrow()
+            .contains_key(&callee.without_parentheses().span());
+        let named = inline
+            || match callee.without_parentheses() {
+                Expression::Identifier(_) => name.starts_with(|c: char| c.is_ascii_uppercase()),
+                Expression::StaticMemberExpression(_) => name.split('.').all(is_identifier),
+                _ => false,
+            };
         if !named {
             return fail(format!("the component `{name}` has no JSX spelling"));
         }
@@ -601,6 +800,11 @@ impl<'a, 's> Cx<'a, 's> {
     }
 
     fn getter<'e, 'b>(&self, statements: &'e [Statement<'b>]) -> R<Getter<'e, 'b>> {
+        let skip = statements
+            .iter()
+            .take_while(|statement| self.is_deleted(statement))
+            .count();
+        let statements = &statements[skip..];
         if Block::starts_element(self, statements) {
             return Ok(Getter::Jsx(Block::element(self, statements)?));
         }
@@ -733,6 +937,15 @@ pub fn is_attribute_name(name: &str) -> bool {
                 .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '$' | '-'))
     };
     ok(head) && parts.next().is_none_or(ok)
+}
+
+pub fn target_symbol(target: &AssignmentTarget<'_>, scoping: &Scoping) -> Option<SymbolId> {
+    match target {
+        AssignmentTarget::AssignmentTargetIdentifier(ident) => {
+            crate::ast::symbol_of(ident, scoping)
+        }
+        _ => None,
+    }
 }
 
 pub fn member_target<'e, 'a>(

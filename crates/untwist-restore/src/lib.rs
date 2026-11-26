@@ -1,5 +1,6 @@
 pub mod fingerprint;
 pub mod html;
+pub mod table;
 pub mod text;
 
 #[derive(Clone, Debug, PartialEq, Eq)]

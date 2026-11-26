@@ -499,9 +499,12 @@ original under the same props and clicks, and the DOM, console output and styles
 
 `--restore solid -o DIR` reads the final output for components compiled by `babel-preset-solid`
 (dom-expressions) for the browser, as the compiler emits them (`import { template as _$template }
-from "solid-js/web"`) or scope-hoisted into a Rollup bundle that keeps the runtime names, and writes
-each component as `<Name>.jsx` beside the file that holds it. It is a view for reading: the
-JavaScript output is the same with or without the flag.
+from "solid-js/web"`) or bundled by Rollup or Vite, minified or not, and writes each component as
+`<Name>.jsx` beside the file that holds it. In a minified bundle the runtime functions are found by
+the shape of their code, from a table built from solid-js 1.9.19 under Terser and esbuild; a
+function is used only when its shape matches one table row and nothing else in the bundle has the
+same shape. A component the minifier inlined into its only caller comes back as its own file. It is
+a view for reading: the JavaScript output is the same with or without the flag.
 
 The JSX is rebuilt from the `template()` strings and the node walk (`firstChild`, `nextSibling`),
 with `insert()` children (before their marker, appended or alone), attributes and properties from
@@ -513,7 +516,8 @@ children and render functions (`Show`, `For`, `Index`, `Switch`/`Match`, `Dynami
 `ErrorBoundary`, `Suspense`, context providers), `memo()` conditions back to `a ? <b/> : <c/>` and
 `a && <b/>`, fragments, SVG templates and `textContent`/`innerHTML`. Helpers the component reads
 from its module are copied in; module state that several components read (a context, a store) goes
-to `shared.jsx`, which they import.
+to `shared.jsx`, which they import. In a bundle, a component that reaches into the bundled library
+(code the runtime functions use, such as a Terser-inlined `produce`) is kept as JS.
 
 A component with any statement, call or reference that has no JSX spelling is left out with a note
 (`solid: Name kept as JS: reason`), and so is a component whose child is left out. The round trip is

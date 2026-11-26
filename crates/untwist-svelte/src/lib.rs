@@ -26,13 +26,7 @@ pub fn may_hold_components(code: &str) -> bool {
 }
 
 #[doc(hidden)]
-pub struct FingerprintRow {
-    pub hash: u64,
-    pub rt: Option<String>,
-    pub nodes: usize,
-    pub name: String,
-    pub used_by_component: bool,
-}
+pub use untwist_restore::table::FingerprintRow;
 
 #[doc(hidden)]
 pub fn fingerprint_rows(code: &str) -> Vec<FingerprintRow> {
