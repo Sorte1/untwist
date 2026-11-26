@@ -14,6 +14,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 mod annex_b;
 mod blocked_hoists;
 pub mod builtins;
+mod commonjs;
 #[cfg(feature = "test-hooks")]
 pub mod compare;
 mod observers;
@@ -30,6 +31,9 @@ pub use annex_b::{
     AnnexBWrites, ScopeOwners,
 };
 pub use blocked_hoists::{hoist_blockers, hoist_shadowing_catches, repair_blocked_hoists};
+pub use commonjs::{
+    assume_commonjs, is_commonjs, reads_the_wrapper, top_level_is_local, CommonJsGuard,
+};
 pub use observers::{
     assume_observers, assumed_hazard, closed_eval_names, closed_evals_kept, eval_payload_names,
     is_closed_eval_at, may_call_eval, observers, observing_open, open_eval_sites, with_observes,

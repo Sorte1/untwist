@@ -177,10 +177,10 @@ struct Frame {
 }
 
 impl Frame {
-    fn of_program(program: &Program<'_>, module: bool) -> Self {
+    fn of_program(program: &Program<'_>, module: bool, local_top: bool) -> Self {
         Self {
             strict: module || program_is_strict(program),
-            this: if module {
+            this: if local_top {
                 This::NotGlobal
             } else {
                 This::Global
@@ -206,6 +206,7 @@ struct Scan<'s> {
     statics: bool,
     skipped: Option<&'s FxHashSet<Span>>,
     module: bool,
+    local_top: bool,
     frames: Vec<Frame>,
     verdict: Builtins,
     promise_written: bool,
@@ -226,8 +227,8 @@ fn names_a_foreign_root(scoping: &Scoping, reliance: &Reliance) -> bool {
     })
 }
 
-fn declares_a_root_in_a_script(scoping: &Scoping, reliance: &Reliance, module: bool) -> bool {
-    !module
+fn declares_a_root_in_a_script(scoping: &Scoping, reliance: &Reliance, local_top: bool) -> bool {
+    !local_top
         && scoping
             .get_bindings(scoping.root_scope_id())
             .iter()
@@ -244,11 +245,11 @@ fn declares_a_root_in_a_script(scoping: &Scoping, reliance: &Reliance, module: b
             })
 }
 
-fn first_verdict(scoping: &Scoping, reliance: &Reliance, module: bool) -> Builtins {
+fn first_verdict(scoping: &Scoping, reliance: &Reliance, local_top: bool) -> Builtins {
     if names_a_foreign_root(scoping, reliance) {
         return Builtins::Written;
     }
-    match every_global_foreign() || declares_a_root_in_a_script(scoping, reliance, module) {
+    match every_global_foreign() || declares_a_root_in_a_script(scoping, reliance, local_top) {
         true => Builtins::Aliased,
         false => Builtins::Intact,
     }
@@ -334,6 +335,7 @@ impl<'s> Scan<'s> {
         module: bool,
         reliance: &'s Reliance,
     ) -> Self {
+        let local_top = module || crate::semantic::is_commonjs(program);
         Self {
             program,
             consts: OnceCell::new(),
@@ -351,8 +353,9 @@ impl<'s> Scan<'s> {
             statics: false,
             skipped: None,
             module,
-            frames: vec![Frame::of_program(program, module)],
-            verdict: first_verdict(scoping, reliance, module),
+            local_top,
+            frames: vec![Frame::of_program(program, module, local_top)],
+            verdict: first_verdict(scoping, reliance, local_top),
             promise_written: false,
             host_member: None,
             window_escaped: false,
@@ -375,7 +378,7 @@ impl Scan<'_> {
             numeric::key_bindings(
                 self.program,
                 self.scoping,
-                self.module,
+                (self.module, self.local_top),
                 self.global_aliases(),
             )
         });
@@ -409,7 +412,7 @@ impl Scan<'_> {
 
     fn escapes(&self, function: &Function<'_>) -> bool {
         self.escaping
-            .get_or_init(|| escapes::escaping_functions(self.program, self.scoping, self.module))
+            .get_or_init(|| escapes::escaping_functions(self.program, self.scoping, self.local_top))
             .contains(&escapes::function_address(function))
     }
 
@@ -481,7 +484,7 @@ impl Scan<'_> {
     }
 
     fn is_script_global(&self, symbol: SymbolId) -> bool {
-        !self.module
+        !self.local_top
             && self.scoping.symbol_scope_id(symbol) == self.scoping.root_scope_id()
             && self
                 .scoping
@@ -823,7 +826,7 @@ impl Scan<'_> {
                 !self.pattern_name_reaches(&name)
                     && !self.is_window_slot(&name)
                     && !LEGACY_DEFINERS.contains(&name.as_str())
-                    && (self.module
+                    && (self.local_top
                         || self
                             .scoping
                             .get_binding(self.scoping.root_scope_id(), name.as_str().into())

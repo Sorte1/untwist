@@ -177,7 +177,9 @@ impl<'p> Roots<'p> {
         symbols: &FxHashSet<SymbolId>,
         scoping: &Scoping,
     ) -> bool {
-        if self.program.source_type.is_module() || has_module_syntax(self.program) {
+        if self.program.source_type.is_module()
+            || untwist_core::semantic::top_level_is_local(self.program)
+        {
             return false;
         }
         let mut names: Vec<&str> = symbols

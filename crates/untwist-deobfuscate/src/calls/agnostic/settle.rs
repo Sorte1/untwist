@@ -112,7 +112,7 @@ pub(super) fn run<'s, 'a>(
         fresh_calls,
         pristine,
         flow,
-        !untwist_core::semantic::has_module_syntax(program),
+        !untwist_core::semantic::top_level_is_local(program),
     );
     sites.inline_budget = inline_budget(program);
     sites.foreign_sourced = super::foreign::sourced(program, scoping);
@@ -346,7 +346,7 @@ pub(super) fn script_lexicals(program: &Program<'_>, scoping: &Scoping) -> Vec<S
 }
 
 fn shared_roots(program: &Program<'_>, scoping: &Scoping) -> Vec<SymbolId> {
-    if untwist_core::semantic::has_module_syntax(program) {
+    if untwist_core::semantic::top_level_is_local(program) {
         return Vec::new();
     }
     scoping
@@ -358,7 +358,7 @@ fn shared_roots(program: &Program<'_>, scoping: &Scoping) -> Vec<SymbolId> {
 }
 
 fn root_bindings(program: &Program<'_>, scoping: &Scoping, lexical: bool) -> Vec<SymbolId> {
-    if untwist_core::semantic::has_module_syntax(program) {
+    if untwist_core::semantic::top_level_is_local(program) {
         return Vec::new();
     }
     let declared = SymbolFlags::FunctionScopedVariable.union(SymbolFlags::Function);

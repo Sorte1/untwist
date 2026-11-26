@@ -93,7 +93,7 @@ pub(super) fn watched<'p>(
     scoping: &Scoping,
     runs: &[UnitRun<'p, '_>],
 ) -> Option<Watched<'p>> {
-    if untwist_core::semantic::has_module_syntax(program) {
+    if untwist_core::semantic::top_level_is_local(program) {
         return None;
     }
     let watched = watched_units(program, scoping, runs);

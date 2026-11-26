@@ -310,7 +310,7 @@ fn dead_root_aliases<'p>(
     scoping: Option<&Scoping>,
     owner_of: impl Fn(&str) -> Option<usize>,
 ) -> Vec<DeadAlias<'p>> {
-    if program.source_type.is_module() || untwist_core::semantic::has_module_syntax(program) {
+    if program.source_type.is_module() || untwist_core::semantic::top_level_is_local(program) {
         return Vec::new();
     }
     let mut candidates: Vec<DeadAlias<'p>> = Vec::new();

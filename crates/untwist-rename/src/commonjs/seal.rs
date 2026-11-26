@@ -196,7 +196,7 @@ pub fn sealed(program: &Program<'_>, scoping: &Scoping, callbacks: &[ScopeId]) -
         .callers
         .iter()
         .any(|span| !walker.compared.contains(span));
-    let script = !program.source_type.is_module();
+    let script = !program.source_type.is_module() && !untwist_core::semantic::is_commonjs(program);
     let root = scoping.root_scope_id();
     let held = walker.held.iter().filter(|(_, symbol)| {
         let global = script && scoping.symbol_scope_id(*symbol) == root;

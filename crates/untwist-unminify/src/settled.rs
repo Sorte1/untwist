@@ -2,10 +2,10 @@ use oxc_ast::ast::Program;
 use oxc_semantic::Scoping;
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
-use untwist_core::semantic::{has_module_syntax, is_constant_binding};
+use untwist_core::semantic::is_constant_binding;
 
 pub fn script_root(program: &Program<'_>, scoping: &Scoping) -> Option<ScopeId> {
-    (!has_module_syntax(program)).then(|| scoping.root_scope_id())
+    (!untwist_core::semantic::top_level_is_local(program)).then(|| scoping.root_scope_id())
 }
 
 fn function_of(scoping: &Scoping, scope: ScopeId) -> Option<ScopeId> {

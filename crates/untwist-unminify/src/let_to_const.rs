@@ -6,9 +6,7 @@ use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::FxHashSet;
 use untwist_core::pass::{Cx, Interest, Pass};
-use untwist_core::semantic::{
-    assumed_hazard, effectively_constant_bindings, has_module_syntax, scope_hazard,
-};
+use untwist_core::semantic::{assumed_hazard, effectively_constant_bindings, scope_hazard};
 
 pub const PASS: &str = "let-to-const";
 
@@ -36,7 +34,7 @@ fn is_let_symbol(flags: SymbolFlags) -> bool {
 }
 
 fn global_lexical_scope(program: &Program<'_>, scoping: &Scoping) -> Option<ScopeId> {
-    (!has_module_syntax(program)).then(|| scoping.root_scope_id())
+    (!untwist_core::semantic::top_level_is_local(program)).then(|| scoping.root_scope_id())
 }
 
 fn let_symbols(program: &Program<'_>, scoping: &Scoping) -> Vec<SymbolId> {

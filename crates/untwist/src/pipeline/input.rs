@@ -14,8 +14,8 @@ use untwist_core::pass::{InputRoom, Note, NoteKind, PassOptions, RoundCapUndo};
 use untwist_core::print::pretty_codegen;
 use untwist_core::reflow::{print_placing, Check, GuardRecord, PendingReaders, Printed};
 use untwist_core::semantic::{
-    assume_observers, assume_shared_globals, build_scoping, forget_failures, Observers, Semantics,
-    SharedGlobals,
+    assume_commonjs, assume_observers, assume_shared_globals, build_scoping, forget_failures,
+    reads_the_wrapper, Observers, Semantics, SharedGlobals,
 };
 use untwist_core::source_map::{self, Mapped, OwnedSourceMap, Recording};
 use untwist_core::type_space::{declares_an_interface, holds_type_space};
@@ -172,8 +172,14 @@ impl Pipeline {
         self.options.module_goal || self.named(index, ".mjs")
     }
 
+    pub(super) fn commonjs_named(&self, index: usize) -> bool {
+        !self.module_named(index)
+            && !self.options.script_goal
+            && (self.options.commonjs_goal || self.named(index, ".cjs"))
+    }
+
     fn script_named(&self, index: usize) -> bool {
-        !self.module_named(index) && (self.options.script_goal || self.named(index, ".cjs"))
+        !self.module_named(index) && (self.options.script_goal || self.commonjs_named(index))
     }
 
     pub(super) fn run_input(
@@ -185,6 +191,7 @@ impl Pipeline {
         let reservation = Reservation {
             module_named: self.module_named(index),
             script_named: self.script_named(index),
+            commonjs_named: self.commonjs_named(index),
             ..reservation
         };
         let announced = !self.options.isolation.refused.contains(&index);
@@ -454,6 +461,10 @@ impl Pipeline {
         let foreign = reservation.shared.cloned().map(SharedGlobals::foreign_only);
         let _foreign = assume_shared_globals(foreign);
         let first = layering.peeled() == 0;
+        let reservation = Reservation {
+            commonjs_named: first && reservation.commonjs_named,
+            ..reservation
+        };
         if layering.start_run() {
             fresh_tree_state(room.as_ref());
         }
@@ -584,7 +595,9 @@ impl Pipeline {
         result: &mut InputResult,
     ) -> Staged {
         let stripped = strip_shell((alloc, program), &mut result.stages, &mut result.notes);
-        let nested_root = stripped || scoped;
+        let commonjs = reservation.commonjs_named && !reads_the_wrapper(program);
+        let _commonjs = assume_commonjs(commonjs.then_some(program.source_text));
+        let nested_root = stripped || scoped || commonjs;
         let pass_opts = PassOptions {
             room,
             nested_root,
@@ -612,7 +625,7 @@ impl Pipeline {
             return Staged::TypeScript;
         }
         let staged = self.run_layer_stages(&mut site, sem, reservation, layering);
-        if nested_root && matches!(staged, Staged::Done) {
+        if (stripped || scoped) && matches!(staged, Staged::Done) {
             scope_shell_body((alloc, program), scoped, &mut result.notes);
         }
         staged
@@ -878,6 +891,7 @@ mod tests {
             shared_cause: None,
             module_named: false,
             script_named: false,
+            commonjs_named: false,
         };
         let printed = pipeline
             .process(

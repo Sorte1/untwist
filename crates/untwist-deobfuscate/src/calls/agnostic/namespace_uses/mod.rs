@@ -146,7 +146,7 @@ fn walker_for<'s, 'a>(
     resolve: Resolve<'s>,
     judged: Judged<'s>,
 ) -> Walker<'s, 'a> {
-    let script = !untwist_core::semantic::has_module_syntax(program);
+    let script = !untwist_core::semantic::top_level_is_local(program);
     Walker {
         scoping,
         resolve,
@@ -338,7 +338,8 @@ impl<'s, 'a> Walker<'s, 'a> {
         self.stack.clear();
         self.this_global.clear();
         self.functions.clear();
-        self.this_global.push(self.script);
+        self.this_global
+            .push(!untwist_core::semantic::has_module_syntax(program));
         self.visit_program(program);
     }
 

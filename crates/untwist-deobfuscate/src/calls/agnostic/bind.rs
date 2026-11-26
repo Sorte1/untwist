@@ -337,7 +337,7 @@ impl<'s, 'a> Bindings<'s, 'a> {
             name_keys: FxHashSet::default(),
             filters: std::rc::Rc::default(),
             stable: BoundOnce::with_judged_eval(scoping).table(),
-            script: !untwist_core::semantic::has_module_syntax(program),
+            script: !untwist_core::semantic::top_level_is_local(program),
             plain_element_writes: FxHashSet::default(),
             element_values: FxHashMap::default(),
             other_fields_written: FxHashSet::default(),

@@ -141,6 +141,7 @@ Common flags:
 | `--split-hoisted` | Also split Rollup/Vite scope-hoisted bundles, when the split provably keeps behaviour. |
 | `--split-assume-modules` | With `--split-hoisted`: assume the split tree is ES modules for reading and for running in node, so `document.currentScript`, classic-script load timing and sloppy-mode top-level semantics are not preserved. Lifts the `currentScript` refusal, splits a bundle that sits inside an outer wrapper function, and makes every Rollup commonjs wrapper its own module while everything else stays in the entry. See [known divergences](docs/known-divergences/unpack.md). |
 | `--single-file` | Write every unpacked module into one file, with a banner per module. |
+| `--source-type KIND` | Take every input as a classic `script`, an ES `module` or a `commonjs` module instead of going by the extension (`.mjs` is a module, `.cjs` is CommonJS, other files may be a script or CommonJS). |
 | `--source-map [file\|inline]` | Emit a source map from the output back to the input. `file` (default, needs `-o`) writes `<file>.map` next to every written file with a `sourceMappingURL` comment; `inline` embeds the map as a data URL. Unpacked modules get one map each. The code itself is the same with or without the flag. |
 | `--input-source-map PATH\|inline` | With `--source-map`: the input already has a source map (a file, or its inline data URL); map through it to the original sources. A source that is absolute, has a scheme or climbs out with `..` is written as `input-map:///<name>`; the input map's `sourceRoot` is joined into each source first and not copied. |
 | `--wasm-check off\|on\|auto` | Look for wasm modules embedded in the output. `off` (default) only prints a note when the output may hold one; `auto` finds a byte array or base64 text that holds a whole module with imports or exports, writes it to `wasm/` and names its glue (feature-detect probes are left alone); `on` reparses every output to look, which can be slow on large files. |
@@ -316,7 +317,12 @@ An input is taken as an ES module, as node 22 takes it, when it is named `.mjs`,
 (before any pass runs) does not parse as a script but parses as a module (`import`/`export`,
 `import.meta` or a top-level `await x`, also in code a later pass removes), or when it declares
 `require`, `exports`, `module`, `__filename` or `__dirname` with a top-level `let`, `const` or `class`,
-which node's CommonJS wrapper does not allow. A `.cjs` input is always a script, as in node. Any
+which node's CommonJS wrapper does not allow. A `.cjs` input is always CommonJS, as in node: its
+top-level names live in node's module wrapper, so they are neither properties of the global object
+nor shared with other inputs, and a top-level function or literal data declaration nothing reads
+is removed (`unread-decoys`); an input whose own level reads `arguments`, `new.target` or `eval`
+is treated as a script or CommonJS. `--source-type script|module|commonjs` picks the goal for
+every input instead of the extension. Any
 other `.js` input is a script or CommonJS, also one that parses only by calling a global named
 `await` (`await (x)`). Untwist decides between script and module from the file extension and the
 text only: it does not read the `"type"` field of the nearest `package.json`, so a `.js` file under

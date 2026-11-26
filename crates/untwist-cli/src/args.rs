@@ -307,6 +307,17 @@ pub struct Args {
     )]
     pub restore: Vec<RestoreArg>,
     #[arg(
+        long = "source-type",
+        value_enum,
+        value_name = "KIND",
+        help = "how node or the browser loads every input: script (a classic script, its top-level \
+                names are globals), module (an ES module) or commonjs (a CommonJS module, run \
+                inside node's module wrapper, so its top-level names are its own); without it, a \
+                .mjs file is a module, a .cjs file is CommonJS and any other file may be a \
+                classic script or CommonJS"
+    )]
+    pub source_type: Option<SourceTypeArg>,
+    #[arg(
         long = "list-passes",
         help = "print every pass the engine can run, with its stage, and exit"
     )]
@@ -362,6 +373,13 @@ pub enum ReportFormat {
 pub enum RestoreArg {
     Svelte,
     Solid,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, ValueEnum)]
+pub enum SourceTypeArg {
+    Script,
+    Module,
+    Commonjs,
 }
 
 #[derive(Clone, Copy, Debug, ValueEnum)]

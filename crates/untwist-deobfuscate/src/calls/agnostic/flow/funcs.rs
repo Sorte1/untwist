@@ -86,7 +86,8 @@ pub(super) struct Prescan<'s> {
 
 impl<'s> Prescan<'s> {
     pub(super) fn new(scoping: &'s Scoping, program: &Program<'_>) -> Self {
-        let script = !untwist_core::semantic::has_module_syntax(program);
+        let script = !untwist_core::semantic::top_level_is_local(program);
+        let this_global = !untwist_core::semantic::has_module_syntax(program);
         Self {
             scoping,
             script,
@@ -101,7 +102,7 @@ impl<'s> Prescan<'s> {
             accessor_names: FxHashSet::default(),
             closed_reads: FxHashSet::default(),
             stack: Vec::new(),
-            this_global: vec![script],
+            this_global: vec![this_global],
             strict: vec![untwist_core::semantic::program_is_strict(program)],
         }
     }
