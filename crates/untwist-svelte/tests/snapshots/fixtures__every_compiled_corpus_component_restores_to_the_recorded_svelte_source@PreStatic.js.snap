@@ -1,0 +1,17 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/PreStatic.js
+---
+==== PreStatic.svelte
+<pre>  first
+</pre>
+<pre>{'\n'}two</pre>
+<textarea>x</textarea>
+<p>
+	<em>
+		{' '}
+	</em><b>{'  '}a{'  '}</b><i></i>{'   '}<u>
+		{'\n'}
+	</u>
+</p>

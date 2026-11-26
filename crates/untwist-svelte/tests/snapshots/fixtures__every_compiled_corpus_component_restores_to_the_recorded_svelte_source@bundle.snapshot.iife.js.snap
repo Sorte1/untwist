@@ -1,0 +1,6 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/bundle.snapshot.iife.js
+---
+==== NSnap3 kept as JS: `snapshot` is declared outside the component in the bundle (`function snapshot(value) {`)

@@ -1,0 +1,6 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/CssNest.js
+---
+==== CssNest kept as JS: a style sheet that does not parse

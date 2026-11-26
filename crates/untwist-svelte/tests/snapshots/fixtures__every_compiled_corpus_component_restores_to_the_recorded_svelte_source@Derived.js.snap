@@ -1,0 +1,27 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/Derived.js
+---
+==== Derived.svelte
+<script>
+	let n = $state(1);
+	let a = $derived(n * 2);
+
+	let b = $derived.by(() => {
+		let total = 0;
+	
+		for (let i = 0; i < n; i++) total += i;
+	
+		return total;
+	});
+
+	let c = $derived(n + 1);
+	let d = $derived((() => n + 2)());
+
+	let d2 = $derived({ x: n, y: n * 3 }),
+		x = $derived(d2.x),
+		y = $derived(d2.y);
+</script>
+
+<button onclick={() => n++}>{a} {b} {c} {d} {x} {y}</button>
