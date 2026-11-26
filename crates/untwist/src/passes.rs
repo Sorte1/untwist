@@ -73,6 +73,7 @@ pub const PASSES: &[PassInfo] = &[
     pass("fold-pure-calls", "cleanup", false),
     pass("var-transformation", "cleanup", false),
     pass("dead-assignment-elimination", "cleanup", false),
+    pass("unread-decoys", "cleanup", false),
     pass("fold-literal-chains", "cleanup", false),
     pass("let-to-const", "lexical", false),
     pass("var-to-let", "lexical", false),
