@@ -14,7 +14,7 @@ use untwist_core::parse::{has_error, parse_program};
 use untwist_core::semantic::build_scoping;
 use untwist_rename::library::shape::UnitKind;
 use untwist_rename::library::table::{exact_key, loose_key, Role, RowData as Row, Table};
-use untwist_rename::library::{unit_records, UnitRecord};
+use untwist_rename::library::{unit_records, version_key, UnitRecord};
 
 #[derive(clap::Args, Debug)]
 pub struct Request {
@@ -592,10 +592,17 @@ fn settle(list: &[Option<Option<String>>]) -> Vec<Option<String>> {
     list.iter().map(|slot| slot.clone().flatten()).collect()
 }
 
+fn ascending(versions: &[String]) -> Vec<String> {
+    let mut sorted = versions.to_vec();
+    sorted.sort_by(|a, b| version_key(a).cmp(&version_key(b)).then_with(|| a.cmp(b)));
+    sorted.dedup();
+    sorted
+}
+
 fn version_ranges(present: &BTreeSet<String>, order: &[String]) -> String {
     let mut ranges: Vec<(String, String)> = Vec::new();
     let mut open: Option<(String, String)> = None;
-    for version in order {
+    for version in &ascending(order) {
         if present.contains(version) {
             open = Some(match open.take() {
                 Some((low, _)) => (low, version.clone()),
@@ -729,4 +736,35 @@ pub fn run(root: &Path, request: &Request) -> Result<()> {
     write_keys(&out, &request.id, &manifest.label, keys)?;
     eprintln!("{} rows -> {}", rows.len(), out.display());
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use untwist_rename::library::parse_ranges;
+
+    fn present(versions: &[&str]) -> BTreeSet<String> {
+        versions.iter().map(|version| version.to_string()).collect()
+    }
+
+    fn order(versions: &[&str]) -> Vec<String> {
+        versions.iter().map(|version| version.to_string()).collect()
+    }
+
+    #[test]
+    fn a_spec_listed_newest_first_still_gives_ascending_ranges() {
+        let listed = order(&["0.187.0", "0.170.0", "0.160.1", "0.150.1", "0.140.2"]);
+        let ranges = version_ranges(&present(&["0.187.0", "0.170.0", "0.150.1"]), &listed);
+        assert_eq!(ranges, "0.150.1,0.170.0~0.187.0");
+        assert_eq!(parse_ranges(&ranges).len(), 2);
+    }
+
+    #[test]
+    fn versions_sort_by_number_not_by_text() {
+        let listed = order(&["1.10.0", "1.9.2", "1.2.0"]);
+        assert_eq!(
+            version_ranges(&present(&["1.9.2", "1.10.0"]), &listed),
+            "1.9.2~1.10.0"
+        );
+    }
 }
