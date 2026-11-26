@@ -1,6 +1,7 @@
 use rustc_hash::FxHashMap;
 
-pub const FIXED: [&str; 13] = [
+pub const FIXED: [&str; 14] = [
+    "Math",
     "globalThis",
     "RegExp",
     "global",

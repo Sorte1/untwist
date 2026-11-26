@@ -60,9 +60,8 @@ lock-self-defending--classes-1.js	safe	machinery	xfail	jsc-builtin-patched: safe
 lock-self-defending--mixed-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
 lock-anti-debug--*	*	machinery	xfail	jsc-anti-debug: lock.antiDebug's debugger statements are kept
 lock-tamper--*	*	machinery	xfail	jsc-tamper: lock.tamperProtection's native-function check and strict-mode probe are not recognised
-lock-integrity--*	*	machinery	xfail	jsc-integrity: lock.integrity hashes each protected function's source text (cyrb53 over toString() with spaces and punctuation removed) and hangs on a mismatch; the check is not proven against the input text, so it is kept, and a reformatted output may hang
-lock-integrity--greeting-1.js	*	simplified	xfail	jsc-integrity: lock.integrity hashes each protected function's source text (cyrb53 over toString() with spaces and punctuation removed) and hangs on a mismatch; the check is not proven against the input text, so it is kept, and a reformatted output may hang
-lock-integrity--functions-1.js	*	simplified	xfail	jsc-integrity: lock.integrity hashes each protected function's source text (cyrb53 over toString() with spaces and punctuation removed) and hangs on a mismatch; the check is not proven against the input text, so it is kept, and a reformatted output may hang
+lock-integrity--classes-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
+lock-integrity--mixed-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
 preset-low--*	*	machinery	xfail	jsc-string-concealing: stringConcealing's base91 decoders over one packed string (UTF-8 through TextDecoder, Buffer or a fallback picked from the global object) are not decoded
 preset-medium--*	*	machinery	xfail	jsc-cff: controlFlowFlattening's state-vector dispatcher (while (sum(states) !== end) switch (sum(states))) is not undone
 preset-high--*	*	machinery	xfail	jsc-cff: controlFlowFlattening's state-vector dispatcher (while (sum(states) !== end) switch (sum(states))) is not undone
@@ -70,7 +69,8 @@ pair-strings+rename--classes-1.js	safe	machinery	xfail	jsc-builtin-patched: safe
 pair-strings+rename--mixed-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
 pair-strings+minify--classes-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
 pair-strings+minify--mixed-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
-pair-strings+scrambler--*	*	machinery	xfail	jsc-string-concealing: stringConcealing's base91 decoders over one packed string (UTF-8 through TextDecoder, Buffer or a fallback picked from the global object) are not decoded
+pair-strings+scrambler--classes-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
+pair-strings+scrambler--mixed-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
 pair-strings+dispatcher--greeting-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
 pair-strings+dispatcher--functions-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
 pair-strings+dispatcher--objects-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
@@ -104,7 +104,8 @@ pair-minify+dispatcher--control-1.js	*	machinery	xfail	jsc-dispatcher: dispatche
 pair-minify+dispatcher--strings-1.js	*	machinery	xfail	jsc-dispatcher: dispatcher's name/flag/return-type function table and payload variable are not inlined back
 pair-minify+dispatcher--mixed-1.js	*	machinery	xfail	jsc-dispatcher: dispatcher's name/flag/return-type function table and payload variable are not inlined back
 pair-minify+dispatcher--numbers-1.js	*	machinery	xfail	jsc-dispatcher: dispatcher's name/flag/return-type function table and payload variable are not inlined back
-pair-minify+globals--*	*	machinery	xfail	jsc-global-getter: the getGlobal template (globalThis, global, window, Function("return this")) is left
+pair-minify+globals--classes-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
+pair-minify+globals--mixed-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
 pair-scrambler+dispatcher--greeting-1.js	*	machinery	xfail	jsc-dispatcher: dispatcher's name/flag/return-type function table and payload variable are not inlined back
 pair-scrambler+dispatcher--functions-1.js	*	machinery	xfail	jsc-dispatcher: dispatcher's name/flag/return-type function table and payload variable are not inlined back
 pair-scrambler+dispatcher--objects-1.js	*	machinery	xfail	jsc-dispatcher: dispatcher's name/flag/return-type function table and payload variable are not inlined back
@@ -112,7 +113,8 @@ pair-scrambler+dispatcher--control-1.js	*	machinery	xfail	jsc-dispatcher: dispat
 pair-scrambler+dispatcher--strings-1.js	*	machinery	xfail	jsc-dispatcher: dispatcher's name/flag/return-type function table and payload variable are not inlined back
 pair-scrambler+dispatcher--mixed-1.js	*	machinery	xfail	jsc-dispatcher: dispatcher's name/flag/return-type function table and payload variable are not inlined back
 pair-scrambler+dispatcher--numbers-1.js	*	machinery	xfail	jsc-dispatcher: dispatcher's name/flag/return-type function table and payload variable are not inlined back
-pair-scrambler+globals--*	*	machinery	xfail	jsc-global-getter: the getGlobal template (globalThis, global, window, Function("return this")) is left
+pair-scrambler+globals--classes-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
+pair-scrambler+globals--mixed-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
 pair-dispatcher+globals--greeting-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
 pair-dispatcher+globals--functions-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
 pair-dispatcher+globals--objects-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written

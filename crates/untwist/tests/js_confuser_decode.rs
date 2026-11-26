@@ -2,7 +2,8 @@ use untwist::{Options, Pipeline};
 use untwist_testing::js_files_in;
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
-const KEPT: [(&str, &str); 8] = [
+const KEPT: [(&str, &str); 9] = [
+    ("kept-integrity-key-read.js", "fnObject"),
     ("kept-altered-decoder.js", "_MAIN_STR("),
     ("kept-bom.js", "_MAIN_STR("),
     ("kept-early-call.js", "_MAIN_STR("),
@@ -33,7 +34,7 @@ fn unsafe_lane(source: &str) -> String {
 
 fn fixtures() -> Vec<(String, String)> {
     let fixtures = js_files_in("fixtures/js-confuser-decode");
-    assert_eq!(fixtures.len(), 11);
+    assert_eq!(fixtures.len(), 13);
     fixtures
 }
 
@@ -110,4 +111,13 @@ fn a_patched_built_in_keeps_the_default_lane_and_not_the_unsafe_lane() {
     let source = named(&fixtures(), "patched-slice.js");
     assert!(default_lane(&source).contains("_MAIN_STR("));
     assert!(!unsafe_lane(&source).contains("_MAIN_STR("));
+}
+
+#[test]
+fn an_integrity_check_that_passes_on_the_input_goes_in_both_lanes() {
+    let source = named(&fixtures(), "integrity.js");
+    for code in [default_lane(&source), unsafe_lane(&source)] {
+        assert!(!code.contains("fnObject"), "{code}");
+        assert!(!code.contains("while (true)"), "{code}");
+    }
 }

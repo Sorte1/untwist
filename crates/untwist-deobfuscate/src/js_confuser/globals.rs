@@ -11,7 +11,7 @@ use untwist_core::semantic::{has_module_syntax, is_foreign_global, may_call_eval
 use untwist_eval::fold::Const;
 
 use super::names::{names, Names};
-use super::refs::{inside, judge_replaced, names_observed, scan, Refs};
+use super::refs::{inside, judge_replaced, names_observed, no_op_helpers, scan, Refs};
 use super::templates::matches_get_global;
 use super::tokens::FIXED;
 use crate::pure_calls::literal_data;
@@ -101,9 +101,9 @@ struct Getter {
 
 fn getters(
     program: &Program<'_>,
-    refs: &Refs<'_>,
-    scoping: &Scoping,
+    (refs, scoping): (&Refs<'_>, &Scoping),
     names: &Names,
+    helpers: &FxHashSet<SymbolId>,
 ) -> Vec<Getter> {
     program
         .body
@@ -118,7 +118,9 @@ fn getters(
                     .filter(|(r, _)| inside(function.span, r.span))
                     .all(|(r, name)| match r.symbol {
                         None => FIXED.contains(name) && !is_foreign_global(name),
-                        Some(s) => inside(function.span, scoping.symbol_span(s)),
+                        Some(s) => {
+                            inside(function.span, scoping.symbol_span(s)) || helpers.contains(&s)
+                        }
                     })
         })
         .map(|(symbol, function)| Getter {
@@ -216,18 +218,20 @@ fn mapper_cases(
             let [Statement::ReturnStatement(ret)] = case.consequent.as_slice() else {
                 return None;
             };
-            let Some(Expression::ComputedMemberExpression(member)) = ret.argument.as_ref() else {
-                return None;
+            let (object, name) = match ret.argument.as_ref()? {
+                Expression::ComputedMemberExpression(member) => match &member.expression {
+                    Expression::StringLiteral(name) => {
+                        (&member.object, name.value.as_str()?.to_string())
+                    }
+                    _ => return None,
+                },
+                Expression::StaticMemberExpression(member) => {
+                    (&member.object, member.property.name.to_string())
+                }
+                _ => return None,
             };
-            let Expression::StringLiteral(name) = &member.expression else {
-                return None;
-            };
-            (symbol_of(&member.object, scoping) == Some(holder)).then(|| {
-                Some((
-                    key.value.as_str()?.to_string(),
-                    name.value.as_str()?.to_string(),
-                ))
-            })?
+            (symbol_of(object, scoping) == Some(holder))
+                .then(|| Some((key.value.as_str()?.to_string(), name)))?
         })
         .collect()
 }
@@ -282,7 +286,8 @@ fn analyse(program: &Program<'_>, scoping: &Scoping) -> Option<Plan> {
     }
     let refs = scan(program, scoping);
     let names = names(program, scoping);
-    let found = getters(program, &refs, scoping, &names);
+    let helpers = no_op_helpers(program, &refs, scoping);
+    let found = getters(program, (&refs, scoping), &names, &helpers);
     let (getter, holder) = found
         .iter()
         .find_map(|g| Some((g, holder(program, g, &refs, scoping)?)))?;

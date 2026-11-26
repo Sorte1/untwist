@@ -16,7 +16,7 @@ hex-numbers	9	9/9	9/9	-	0	-
 lock-anti-debug	9	0/9	0/9	-	0	jsc-anti-debug (18)
 lock-domain	9	9/9	9/9	-	0	-
 lock-end-date	9	9/9	9/9	-	0	-
-lock-integrity	9	0/9	0/9	-	0	jsc-integrity (18)
+lock-integrity	9	7/9	9/9	-	0	jsc-builtin-patched (2)
 lock-self-defending	9	7/9	9/9	-	0	jsc-builtin-patched (2)
 lock-start-date	9	9/9	9/9	-	0	-
 lock-tamper	9	0/9	0/9	-	0	jsc-tamper (18)
@@ -32,19 +32,19 @@ opaque-predicates	9	8/9	9/9	-	0	jsc-opaque-predicates (1)
 pack	9	9/9	9/9	-	0	-
 pair-dispatcher+globals	9	1/9	2/9	-	0	jsc-builtin-patched (8), jsc-dispatcher (7)
 pair-minify+dispatcher	9	2/9	2/9	-	0	jsc-dispatcher (14)
-pair-minify+globals	9	0/9	0/9	-	0	jsc-global-getter (18)
+pair-minify+globals	9	7/9	9/9	-	0	jsc-builtin-patched (2)
 pair-minify+scrambler	9	9/9	9/9	-	0	-
 pair-rename+dispatcher	9	2/9	2/9	-	0	jsc-dispatcher (14)
 pair-rename+globals	9	7/9	9/9	-	0	jsc-builtin-patched (2)
 pair-rename+minify	9	9/9	9/9	-	0	-
 pair-rename+scrambler	9	9/9	9/9	-	0	-
 pair-scrambler+dispatcher	9	2/9	2/9	-	0	jsc-dispatcher (14)
-pair-scrambler+globals	9	0/9	0/9	-	0	jsc-global-getter (18)
+pair-scrambler+globals	9	7/9	9/9	-	0	jsc-builtin-patched (2)
 pair-strings+dispatcher	9	1/9	2/9	-	0	jsc-builtin-patched (8), jsc-string-concealing (7)
 pair-strings+globals	9	0/9	0/9	-	0	jsc-builtin-patched (9), jsc-string-concealing (9)
 pair-strings+minify	9	7/9	9/9	-	0	jsc-builtin-patched (2)
 pair-strings+rename	9	7/9	9/9	-	0	jsc-builtin-patched (2)
-pair-strings+scrambler	9	0/9	0/9	-	0	jsc-string-concealing (18)
+pair-strings+scrambler	9	7/9	9/9	-	0	jsc-builtin-patched (2)
 preset-high	9	0/9	0/9	-	0	jsc-cff (18)
 preset-low	9	0/9	0/9	-	0	jsc-string-concealing (18)
 preset-medium	9	0/9	0/9	-	0	jsc-cff (18)
@@ -59,14 +59,12 @@ string-encoding	9	9/9	9/9	-	0	-
 string-splitting	9	9/9	9/9	-	0	-
 variable-masking	9	1/9	1/9	-	0	jsc-variable-masking (16)
 # cause	cells	fixtures	lane-runs	parity-gap-cells	reason
-jsc-builtin-patched	10	39	39	0	safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
+jsc-builtin-patched	14	47	47	0	safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
 jsc-dispatcher	6	42	77	0	dispatcher's name/flag/return-type function table and payload variable are not inlined back
-jsc-string-concealing	5	43	70	0	stringConcealing's base91 decoders over one packed string (UTF-8 through TextDecoder, Buffer or a fallback picked from the global object) are not decoded
+jsc-string-concealing	4	34	52	0	stringConcealing's base91 decoders over one packed string (UTF-8 through TextDecoder, Buffer or a fallback picked from the global object) are not decoded
 jsc-cff	4	30	60	0	controlFlowFlattening's state-vector dispatcher (while (sum(states) !== end) switch (sum(states))) is not undone
-jsc-global-getter	2	18	36	0	the getGlobal template (globalThis, global, window, Function("return this")) is left
 jsc-opaque-predicates	2	4	7	0	opaquePredicates' "key" in emptyFunction tests are not folded
 jsc-anti-debug	1	9	18	0	lock.antiDebug's debugger statements are kept
-jsc-integrity	1	9	18	0	lock.integrity hashes each protected function's source text (cyrb53 over toString() with spaces and punctuation removed) and hangs on a mismatch; the check is not proven against the input text, so it is kept, and a reformatted output may hang
 jsc-tamper	1	9	18	0	lock.tamperProtection's native-function check and strict-mode probe are not recognised
 jsc-variable-masking	1	8	16	0	variableMasking's rest-array parameters (args[0], args.length = n) are not turned back into named parameters and locals
 jsc-flatten	1	7	14	0	flatten's (object, [params]) bodies and getter/setter scope objects are not inlined back
