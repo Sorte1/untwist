@@ -4,9 +4,9 @@
 closure/advanced-es2015.js	google-closure-compiler@20251001.0.0	ADVANCED es2015	-	-	-	5592b89f0bc5af755b8ea806ed188f9a2a66fe851a2ab6a4164b393f47003e75
 closure/advanced-es5.js	google-closure-compiler@20251001.0.0	ADVANCED es5	-	-	-	9abbef1be2115d96932ca4861c770116e26754e93290f5a0f2ffdede8f509d83
 closure/simple.js	google-closure-compiler@20251001.0.0	SIMPLE es5	-	-	-	1c7ec590a3e328fec7276d26df6ef820c23c8285432744777cb7844da9c7f706
-encoders/aaencode.js	mangle-js-webpack-plugin@0.1.4 util/aaencode	-	"packed"	kept	kept	96607d3dacc251ae92ea23510b90839ca4975153ab40639b3f5e482b81a9ffd3
-encoders/jjencode-dollar.js	mangle-js-webpack-plugin@0.1.4 util/jjencode	prefix=$	"packed"	kept	kept	c9654bd38965e96a3e518c759b26a8fa8abfc5be0c6b1e5f3e916bac080f9f6c
-encoders/jjencode-word.js	mangle-js-webpack-plugin@0.1.4 util/jjencode	prefix=thinkzhan	"packed"	kept	kept	b3e663d648ce091d5e5e4e2fb5aa4325c86b09c34433f8315a50c85d47a61fd0
+encoders/aaencode.js	mangle-js-webpack-plugin@0.1.4 util/aaencode	-	"packed"	undone	undone	96607d3dacc251ae92ea23510b90839ca4975153ab40639b3f5e482b81a9ffd3
+encoders/jjencode-dollar.js	mangle-js-webpack-plugin@0.1.4 util/jjencode	prefix=$	"packed"	undone	undone	c9654bd38965e96a3e518c759b26a8fa8abfc5be0c6b1e5f3e916bac080f9f6c
+encoders/jjencode-word.js	mangle-js-webpack-plugin@0.1.4 util/jjencode	prefix=thinkzhan	"packed"	undone	undone	b3e663d648ce091d5e5e4e2fb5aa4325c86b09c34433f8315a50c85d47a61fd0
 encoders/jsfuck-eval.js	jsfuck@0.4.0	wrapWithEval	"packed"	kept	kept	f0c72d0621b3f32831977788ea150a9dbf50e75d7599ec68568b9a4f83ab4811
 js-confuser/v1-high.js	js-confuser@1.7.3	preset=high	"FizzBuzz"	kept	kept	a884f8500b81dab33646979143b5042387504679b34e30a3aceeebda142b4697
 js-confuser/v1-low.js	js-confuser@1.7.3	preset=low	"FizzBuzz"	kept	kept	5e86be896b342cdb4b3e18083cea5cb0ad3ef0d79ffc1d411fef38d07722cfed
@@ -20,7 +20,7 @@ krunker-like/obfuscator-4.js	javascript-obfuscator@4.2.2	dictionary i+6 of iíì
 loader/constructor-chain.js	gen.mjs	loader form	"packed"	undone	undone	0214fe56a14146b324bf0ec96f727516a65326d416c3c0deb767e79effd96ac2
 loader/eval-decodeuri.js	gen.mjs	loader form	"packed"	undone	undone	89bbb40e67d16fd541d4df2fc007c0f63ce754cf2d0901a2a56e92907657ae7d
 loader/eval-split-reverse.js	gen.mjs	loader form	"packed"	undone	undone	abb03fe5c75b3d116e47d86725276c6625740b0bb86c3d7129f41ec9845c9041
-loader/eval-xor.js	gen.mjs	loader form	"packed"	kept	kept	b9e27cbce5ceb02b4ddcef6503a02989e888c92605224c4fbff217748b8f4393
+loader/eval-xor.js	gen.mjs	loader form	"packed"	undone	undone	b9e27cbce5ceb02b4ddcef6503a02989e888c92605224c4fbff217748b8f4393
 loader/function-atob.js	gen.mjs	loader form	"packed"	undone	undone	72590753b632b7d9bf9109ea0f54e943ff2345b58776e527bac8a21682c5c713
 loader/indirect-eval-atob.js	gen.mjs	loader form	"packed"	undone	undone	8479b202df82c2759d57ef1e6ec43fd3edc37dfbd6eb2916e3c6eb81d2e84049
 loader/new-function-atob.js	gen.mjs	loader form	"packed"	undone	undone	30ae47b6d4c0d97965ef1d57f342645f5a026c364da78c0426fa043a171bf393

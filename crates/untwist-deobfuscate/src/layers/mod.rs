@@ -3,6 +3,7 @@ pub mod decode;
 pub mod eval;
 pub mod function;
 pub mod inline;
+pub mod loader;
 pub mod model;
 pub mod notes;
 mod observe;
@@ -35,7 +36,11 @@ pub fn decode(
         LayerForm::Eval => eval::decode(program, scoping, probe, cx),
         LayerForm::Function => function::decode(program, scoping, probe, cx),
         LayerForm::Packer => packer::decode(program, scoping, probe, cx),
-        LayerForm::InlineStmt | LayerForm::InlineExpr | LayerForm::InlineFunction => None,
+        LayerForm::LoaderFunction
+        | LayerForm::LoaderEval
+        | LayerForm::InlineStmt
+        | LayerForm::InlineExpr
+        | LayerForm::InlineFunction => None,
     }?;
     if is_strict(program) {
         return Some(Err(Refused {

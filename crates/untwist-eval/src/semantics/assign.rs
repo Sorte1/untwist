@@ -52,6 +52,9 @@ impl<'a> Interp<'a> {
         if let Some(bail) = self.realm.refused_write_target(obj, &key) {
             return Err(bail.into());
         }
+        if self.watch == crate::interp::sink::Watch::Note {
+            self.watched_write(obj);
+        }
         match write_property(self, obj, key, value) {
             Ok(()) => Ok(()),
             Err(bail) => self.refused_write(bail),

@@ -77,7 +77,7 @@ fn arguments_text<'s>(source: &'s str, arguments: &[Argument<'_>]) -> &'s str {
     source.get(start..end).unwrap_or("")
 }
 
-fn joined(texts: &[String], args: &str, arity: usize) -> Option<String> {
+pub(super) fn joined(texts: &[String], args: &str, arity: usize) -> Option<String> {
     let (body, params) = texts.split_last()?;
     let params = params.join(",");
     let text = format!("{HEAD}{params}\n) {{\n{body}\n}})({args});");
@@ -89,6 +89,20 @@ fn joined(texts: &[String], args: &str, arity: usize) -> Option<String> {
     shape.holds(&text).then_some(text)
 }
 
+pub(super) fn pooled(texts: &[String]) -> Option<String> {
+    let Some((body, params)) = texts.split_last() else {
+        return Some(format!("{HEAD}\n) {{\n\n}})"));
+    };
+    let params = params.join(",");
+    let text = format!("{HEAD}{params}\n) {{\n{body}\n}})");
+    let shape = Shape {
+        params: params.len(),
+        body: body.len(),
+        arity: 0,
+    };
+    shape.holds_bare(&text).then_some(text)
+}
+
 struct Shape {
     params: usize,
     body: usize,
@@ -97,6 +111,14 @@ struct Shape {
 
 impl Shape {
     fn holds(&self, text: &str) -> bool {
+        self.parsed(text, true)
+    }
+
+    fn holds_bare(&self, text: &str) -> bool {
+        self.parsed(text, false)
+    }
+
+    fn parsed(&self, text: &str, called: bool) -> bool {
         let alloc = Allocator::default();
         let parsed = parse_with(&alloc, text, SourceType::script());
         if has_error(&parsed.diagnostics) || !parsed.program.directives.is_empty() {
@@ -105,15 +127,18 @@ impl Shape {
         let [Statement::ExpressionStatement(only)] = parsed.program.body.as_slice() else {
             return false;
         };
-        let Expression::CallExpression(call) = &only.expression else {
+        let function = match (&only.expression, called) {
+            (Expression::CallExpression(call), true) if call.arguments.len() == self.arity => {
+                &call.callee
+            }
+            (bare, false) => bare,
+            _ => return false,
+        };
+        let Expression::FunctionExpression(function) = function else {
             return false;
         };
-        let Expression::FunctionExpression(function) = &call.callee else {
-            return false;
-        };
-        call.arguments.len() == self.arity
-            && self.spans_hold(function)
-            && !names_itself(function)
+        self.spans_hold(function)
+            && !names_itself(function, called)
             && SemanticBuilder::new()
                 .with_check_syntax_error(true)
                 .build(&parsed.program)
@@ -142,11 +167,11 @@ fn span_is(span: oxc_span::Span, start: usize, end: usize) -> bool {
     span.start as usize == start && span.end as usize == end
 }
 
-fn names_itself(function: &Function<'_>) -> bool {
+fn names_itself(function: &Function<'_>, peeled: bool) -> bool {
     let mut names = FreeNames::default();
     names.visit_formal_parameters(&function.params);
     if let Some(body) = &function.body {
         names.visit_function_body(body);
     }
-    names.names.contains(&NAME) || names.names.contains(&"eval")
+    names.names.contains(&NAME) || peeled && names.names.contains(&"eval")
 }

@@ -40,6 +40,11 @@ All notable changes to this project are documented in this file. The format is b
 - `new Array(n)` (an integer literal) and `new Array()` count as code that cannot call user code at
   the top of a file, when `Array` is the unbound global and no other input names it, so a
   known-bits seed declared after one is not refused for that reason.
+- Loader layers: a script whose last statement hands a computed text to `Function` or `eval`
+  (JSFuck, JScrewIt, jjencode, aaencode, or a loader that builds the text through a callback)
+  is peeled when the evaluator can run the statements before it and the text-building part
+  without observable effects; `Function` calls on the way are modelled exactly. Generated
+  fixtures for every encoder are in `fixtures/encoders/` (`tools/encoders/matrix.mjs`).
 
 ## [0.6.0] - 2026-11-24
 

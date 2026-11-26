@@ -1,4 +1,5 @@
 mod confuser;
+mod encoder;
 mod names;
 mod scan;
 mod shapes;
@@ -49,17 +50,27 @@ pub const SIMPLIFY: [&str; 8] = [
 ];
 
 pub use confuser::CONFUSER;
+pub use encoder::ENCODER;
 
 pub const CONFUSER_DIR: &str = "fixtures/js-confuser";
 
+pub const ENCODER_DIR: &str = "fixtures/encoders";
+
 pub fn all_machinery() -> Vec<&'static str> {
-    MACHINERY.iter().chain(CONFUSER.iter()).copied().collect()
+    MACHINERY
+        .iter()
+        .chain(CONFUSER.iter())
+        .chain(ENCODER.iter())
+        .copied()
+        .collect()
 }
 
 pub fn measure_in(dir: &str, source: &str) -> Found {
     let mut found = measure(source);
-    if dir == CONFUSER_DIR {
-        confuser::measure_into(source, &mut found);
+    match dir {
+        CONFUSER_DIR => confuser::measure_into(source, &mut found),
+        ENCODER_DIR => encoder::measure_into(source, &mut found),
+        _ => {}
     }
     found
 }

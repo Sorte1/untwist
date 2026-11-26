@@ -41,3 +41,4 @@ pub mod unmodelled;
 pub mod value;
 
 pub use interp::closed_script_value;
+pub use interp::sink::{function_text, run_sink, SinkCallee, SinkOutcome, SinkRun, SinkScript};

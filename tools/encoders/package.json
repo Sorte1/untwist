@@ -1,0 +1,10 @@
+{
+  "name": "untwist-encoder-matrix",
+  "private": true,
+  "description": "Pinned encoders (JSFuck, JScrewIt, aaencode/jjencode) for tools/encoders/matrix.mjs, which writes fixtures/encoders.",
+  "dependencies": {
+    "jscrewit": "3.5.1",
+    "jsfuck": "0.4.0",
+    "mangle-js-webpack-plugin": "0.1.4"
+  }
+}

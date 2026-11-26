@@ -226,6 +226,21 @@ pub static SHAPES: &[NativeShape] = &[
     entry("global", "parseInt", any_args(ANY2)),
     entry("global", "unescape", any_args(ANY1)),
     entry("hostile", "", REFUSED),
+    entry("sink:Array.prototype", "at", on(ARRAY, ANY1)),
+    entry("sink:String.prototype", "anchor", any_args(ANY1)),
+    entry("sink:String.prototype", "at", any_args(ANY1)),
+    entry("sink:String.prototype", "big", any_args(&[])),
+    entry("sink:String.prototype", "blink", any_args(&[])),
+    entry("sink:String.prototype", "bold", any_args(&[])),
+    entry("sink:String.prototype", "fixed", any_args(&[])),
+    entry("sink:String.prototype", "fontcolor", any_args(ANY1)),
+    entry("sink:String.prototype", "fontsize", any_args(ANY1)),
+    entry("sink:String.prototype", "italics", any_args(&[])),
+    entry("sink:String.prototype", "link", any_args(ANY1)),
+    entry("sink:String.prototype", "small", any_args(&[])),
+    entry("sink:String.prototype", "strike", any_args(&[])),
+    entry("sink:String.prototype", "sub", any_args(&[])),
+    entry("sink:String.prototype", "sup", any_args(&[])),
 ];
 
 pub fn lookup(owner: &str, name: &str) -> Option<&'static Shape> {

@@ -18,7 +18,8 @@ use crate::obf_matrix::expect::{self, judge, Verdict};
 use crate::obf_matrix::{pool, runner};
 use lanes::{observe_untwist, LaneRun, UNTWIST_LANES};
 use machinery::{
-    all_machinery, measure, measure_in, CONFUSER, CONFUSER_DIR, MACHINERY, OUTPUT_ONLY, SIMPLIFY,
+    all_machinery, measure, measure_in, CONFUSER, CONFUSER_DIR, ENCODER, ENCODER_DIR, MACHINERY,
+    OUTPUT_ONLY, SIMPLIFY,
 };
 use manifest::{Entry, DIR};
 
@@ -99,7 +100,10 @@ fn verify(root: &Path, entries: &[Entry]) -> Result<Vec<String>> {
     }
     let sources: BTreeSet<&str> = entries.iter().map(|e| e.source.as_str()).collect();
     let dir = entries.first().map_or(DIR, |e| e.dir.as_str());
-    let simplify: &[&'static str] = if dir == CONFUSER_DIR { &[] } else { &SIMPLIFY };
+    let simplify: &[&'static str] = match dir {
+        CONFUSER_DIR | ENCODER_DIR => &[],
+        _ => &SIMPLIFY,
+    };
     let classes: Vec<&str> = all_machinery()
         .into_iter()
         .chain(simplify.iter().copied())
@@ -252,6 +256,7 @@ fn harness_problems(root: &Path, request: &Request, entries: &mut [Entry]) -> Re
     let watched: Option<Vec<&'static str>> = match request.dir.as_str() {
         DIR => Some(MACHINERY.iter().chain(SIMPLIFY.iter()).copied().collect()),
         CONFUSER_DIR => Some(CONFUSER.to_vec()),
+        ENCODER_DIR => Some(ENCODER.to_vec()),
         _ => None,
     };
     if let Some(classes) = watched {

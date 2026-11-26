@@ -625,7 +625,7 @@ impl Pipeline {
         reservation: Reservation<'_>,
         layering: &mut Layering,
     ) -> Staged {
-        if let Some(peeled) = self.peel(site, &sem, layering) {
+        if let Some(peeled) = self.peel(site, &sem, layering, true) {
             return Staged::Peeled(peeled);
         }
         if !site.pass_opts.extended {
@@ -633,7 +633,7 @@ impl Pipeline {
             if site.pass_opts.round_cap_undo.get() == RoundCapUndo::Requested {
                 return Staged::Replay;
             }
-            if let Some(peeled) = self.peel(site, &sem, layering) {
+            if let Some(peeled) = self.peel(site, &sem, layering, false) {
                 return Staged::Peeled(peeled);
             }
             self.shaping_stages(site, sem, reservation);
