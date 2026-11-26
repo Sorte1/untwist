@@ -468,23 +468,29 @@ the playground's first choice are JSDoc.
 
 `--restore svelte -o DIR` reads the final output (each input, or each unpacked module) for components
 compiled by Svelte 5 for the client, as the compiler emits them (`import * as $ from
-'svelte/internal/client'`) or scope-hoisted into a Rollup or Vite bundle that is not minified, and
-writes each one as `<Name>.svelte` beside the file that holds it. It is a view for reading: the
+'svelte/internal/client'`) or scope-hoisted into a Rollup or Vite bundle, minified or not, and
+writes each one as `<Name>.svelte` beside the file that holds it. In a minified bundle the runtime
+functions are found by the shape of their code, from a small table built from Svelte 5.0.5, 5.25.12
+and 5.57.3 under Terser and esbuild; a function is used only when its shape matches one table row
+exactly and nothing else in the bundle has the same shape. It is a view for reading: the
 JavaScript output is the same with or without the flag.
 
 The markup is rebuilt from the template strings and the node walk (`first_child`, `child`,
 `sibling`), with text, attributes, `class:` and `style:` directives, events, `bind:` (value, checked,
 group, this and component props), `{#if}`, `{#each}` (keyed, indexed, destructured, `{:else}`),
-`{#key}`, `{#await}`, `{@html}`, `{@const}`, snippets and `{@render}`, child components with
-children, and `<svelte:window>`/`<svelte:document>` events. The script gets its runes back (`$state`,
+`{#key}`, `{#await}`, `{@html}`, `{@const}`, snippets (with parameter defaults) and `{@render}`,
+child components with children and `{...spread}` props, `{...spread}` attributes, `transition:`,
+`in:`, `out:` and `animate:`, `<svelte:element>`, `<svelte:boundary>`, nested and defaulted
+destructuring in `{#each}`, function bindings, and `<svelte:window>`/`<svelte:document>` events. The script gets its runes back (`$state`,
 `$state.raw`, `$derived`, `$derived.by`, `$effect`, `$effect.pre`, `$props` with defaults and
-`$bindable`), and the component's scoped CSS comes back in `<style>` without the `svelte-HASH`
+`$bindable` and a rest element), and the component's scoped CSS comes back in `<style>` without the `svelte-HASH`
 classes (a selector part that was global is written as `:global(...)`).
 
 A component with any statement, call or reference that has no Svelte spelling is left out with a
-note (`svelte: Name kept as JS: reason`); nothing is guessed. Legacy (non-runes) components,
-minified bundles (Terser inlines and renames the runtime) and `{...spread}` props are not restored
-yet. The round trip is checked by `tools/svelte-restore/harness.mjs`: every component in its corpus
+note (`svelte: Name kept as JS: reason`); nothing is guessed. In a bundle that also covers a reference
+to anything declared outside the component other than its child components, snippets and the
+`svelte/transition` and `svelte/animate` functions the table knows. Legacy (non-runes) components
+are not restored, and neither is a runtime function that Terser inlined into its only caller. The round trip is checked by `tools/svelte-restore/harness.mjs`: every component in its corpus
 is compiled, optionally bundled, restored, compiled again and rendered in jsdom beside the
 original under the same props and clicks, and the DOM, console output and styles must match.
 

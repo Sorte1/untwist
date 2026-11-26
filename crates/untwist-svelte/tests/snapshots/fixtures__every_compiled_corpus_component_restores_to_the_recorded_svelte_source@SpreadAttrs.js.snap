@@ -1,0 +1,12 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/SpreadAttrs.js
+---
+==== SpreadAttrs.svelte
+<script>
+	let extra = $state({ title: 'hello', 'data-n': 1 });
+</script>
+
+<div {...extra} class="box">spread</div>
+<button onclick={() => (extra = { ...extra, 'data-n': extra['data-n'] + 1 })}>bump</button>

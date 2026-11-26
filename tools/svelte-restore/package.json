@@ -4,11 +4,13 @@
   "type": "module",
   "description": "Pinned Svelte compiler, bundler and jsdom for the round-trip harness of untwist's Svelte restore (tools/svelte-restore/harness.mjs).",
   "dependencies": {
-    "svelte": "5.57.3",
-    "rollup": "4.66.0",
-    "rollup-plugin-svelte": "7.2.3",
     "@rollup/plugin-node-resolve": "16.0.3",
     "@rollup/plugin-terser": "0.4.4",
-    "jsdom": "26.1.0"
+    "jsdom": "26.1.0",
+    "rollup": "4.66.0",
+    "svelte": "5.57.3",
+    "svelte-5-0": "npm:svelte@5.0.5",
+    "svelte-5-25": "npm:svelte@5.25.12",
+    "vite": "7.3.8"
   }
 }

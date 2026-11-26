@@ -75,3 +75,43 @@ fn a_component_that_cannot_be_mapped_is_kept_with_a_note() {
     assert!(!outdir.join("Counter.svelte").exists());
     assert!(String::from_utf8_lossy(&out.stderr).contains("svelte: Counter kept as JS:"));
 }
+
+#[test]
+fn restore_svelte_reads_minified_terser_and_vite_bundles_without_changing_the_code() {
+    for (name, least) in [("bundle.terser.js", 6), ("bundle.vite.js", 7)] {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../untwist-svelte/tests/fixtures/raw")
+            .join(name);
+        let dir = tempfile::tempdir().unwrap();
+        let plain = dir.path().join("plain");
+        let restored = dir.path().join("restored");
+        let out = bin().arg("-o").arg(&plain).arg(&path).output().unwrap();
+        assert!(out.status.success());
+        let out = bin()
+            .args(["--restore", "svelte", "-o"])
+            .arg(&restored)
+            .arg(&path)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        let code =
+            |dir: &std::path::Path| std::fs::read_to_string(dir.join("deobfuscated.js")).unwrap();
+        assert_eq!(code(&plain), code(&restored));
+        let components = std::fs::read_dir(&restored)
+            .unwrap()
+            .filter(|entry| {
+                entry
+                    .as_ref()
+                    .is_ok_and(|entry| entry.path().extension().is_some_and(|ext| ext == "svelte"))
+            })
+            .count();
+        assert!(
+            components >= least,
+            "{name}: {components} components restored"
+        );
+    }
+}

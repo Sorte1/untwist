@@ -1,0 +1,7 @@
+
+pub fn lookup(hash: u64) -> Option<Rt> {
+    TABLE
+        .binary_search_by_key(&hash, |row| row.0)
+        .ok()
+        .map(|at| TABLE[at].1)
+}

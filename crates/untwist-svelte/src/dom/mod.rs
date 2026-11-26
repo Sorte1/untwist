@@ -7,6 +7,7 @@ use oxc_ast::ast::{
 use oxc_ast::AstKind;
 use oxc_semantic::{AstNodes, Scoping};
 use oxc_span::{GetSpan, Span};
+use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -21,6 +22,9 @@ use crate::text::{Reason, Rewriter};
 
 mod attrs;
 mod blocks;
+pub mod pattern;
+mod snippet;
+mod special;
 
 pub type R<T> = Result<T, Reason>;
 
@@ -40,6 +44,8 @@ pub struct Cx<'a, 's> {
     pub snippets: RefCell<Vec<SymbolId>>,
     pub children: RefCell<Vec<SymbolId>>,
     pub specials: RefCell<Vec<(&'static str, String)>>,
+    pub components: Vec<(Span, String)>,
+    pub consumed: RefCell<FxHashSet<SymbolId>>,
 }
 
 enum DKind {
@@ -173,6 +179,17 @@ impl<'a, 's> Cx<'a, 's> {
             AstKind::VariableDeclarator(declarator) => Some(declarator),
             _ => None,
         }
+    }
+
+    pub fn component_name(&self, symbol: SymbolId) -> Option<&str> {
+        let AstKind::Function(function) = self.nodes.kind(self.scoping.symbol_declaration(symbol))
+        else {
+            return None;
+        };
+        self.components
+            .iter()
+            .find(|(span, _)| *span == function.span)
+            .map(|(_, name)| name.as_str())
     }
 
     pub fn arrow(&self, symbol: SymbolId) -> Option<&'a ArrowFunctionExpression<'a>> {
@@ -328,6 +345,17 @@ impl<'a, 's> Cx<'a, 's> {
     }
 
     pub fn body(&self, code: Code<'a>, anchor: SymbolId, component: bool) -> R<(Vec<M>, bool)> {
+        self.body_seeded(code, anchor, component, None)
+            .map(|(nodes, popped, _)| (nodes, popped))
+    }
+
+    pub fn body_seeded(
+        &self,
+        code: Code<'a>,
+        anchor: SymbolId,
+        component: bool,
+        seed: Option<SymbolId>,
+    ) -> R<(Vec<M>, bool, Vec<String>)> {
         self.rw.forbid(anchor);
         let mut body = Body {
             anchor,
@@ -340,6 +368,20 @@ impl<'a, 's> Cx<'a, 's> {
             popped: false,
             consts: Vec::new(),
         };
+        if let Some(seed) = seed {
+            self.rw.forbid(seed);
+            body.dom.push(DNode {
+                kind: DKind::Element {
+                    name: "svelte:element".to_string(),
+                    svg: false,
+                },
+                parent: None,
+                children: Vec::new(),
+                attrs: Vec::new(),
+                fill: None,
+            });
+            body.refs.insert(seed, 0);
+        }
         match code {
             Code::Expr(expr) => self.expression(&mut body, expr)?,
             Code::Stmts(statements) => {
@@ -369,10 +411,19 @@ impl<'a, 's> Cx<'a, 's> {
             .collect();
         match body.result {
             Some(root) => nodes.extend(self.emit_root(&body, root)?),
-            None if body.dom.is_empty() => {}
+            None if body.dom.len() == usize::from(seed.is_some()) => {}
             None => return fail("the template is never appended to the anchor"),
         }
-        Ok((nodes, body.popped))
+        let attrs = match seed {
+            Some(_) => {
+                if body.dom[0].fill.is_some() || !body.dom[0].children.is_empty() {
+                    return fail("svelte:element content written through the element");
+                }
+                body.dom[0].attrs.clone()
+            }
+            None => Vec::new(),
+        };
+        Ok((nodes, body.popped, attrs))
     }
 
     fn forbid_declared(&self, statements: &[Statement<'_>]) {
@@ -397,6 +448,9 @@ impl<'a, 's> Cx<'a, 's> {
                 for declarator in &declaration.declarations {
                     let symbol = binding(&declarator.id)
                         .ok_or("a destructuring declaration in the template code")?;
+                    if self.consumed.borrow().contains(&symbol) {
+                        continue;
+                    }
                     match declarator
                         .init
                         .as_ref()
@@ -408,8 +462,8 @@ impl<'a, 's> Cx<'a, 's> {
                         Some(Expression::CallExpression(call))
                             if self.rt(&call.callee) == Some(Rt::Derived) =>
                         {
-                            if !body.dom.is_empty() {
-                                return fail("a {@const} after the template is built");
+                            if body.component {
+                                return fail("a derived value declared inside the template code");
                             }
                             let value = arg(call, 0)
                                 .and_then(thunk_body)
@@ -572,6 +626,14 @@ impl<'a, 's> Cx<'a, 's> {
                 let root = self.fragment(body, &[Node::Text(String::new())], false);
                 Ok(body.dom[root].children[0])
             }
+            Some(Rt::Text) if call.arguments.len() == 1 => {
+                let text = arg(call, 0)
+                    .and_then(string)
+                    .filter(|text| !text.contains(['<', '&']))
+                    .ok_or("a text node with computed or markup content")?;
+                let root = self.fragment(body, &[Node::Text(text.to_string())], false);
+                Ok(body.dom[root].children[0])
+            }
             Some(Rt::FirstChild | Rt::Child | Rt::OnlyChild) => {
                 let parent =
                     self.node_expr(body, arg(call, 0).ok_or("a child() without a node")?)?;
@@ -690,6 +752,11 @@ impl<'a, 's> Cx<'a, 's> {
             Rt::Await => self.await_block(body, call),
             Rt::Html => self.html_tag(body, call),
             Rt::Snippet => self.dynamic_render(body, call),
+            Rt::AttributeEffect => self.spread_attrs(body, call),
+            Rt::Transition => self.transition(body, call),
+            Rt::Animation => self.animation(body, call),
+            Rt::Element => self.dynamic_element(body, call),
+            Rt::Boundary => self.boundary(body, call),
             other => fail(format!(
                 "the runtime call {other:?} has no template meaning here"
             )),

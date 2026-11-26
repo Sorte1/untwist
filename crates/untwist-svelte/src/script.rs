@@ -32,6 +32,8 @@ pub struct Facts {
     pub props: FxHashMap<SymbolId, Prop>,
     pub props_objects: FxHashSet<SymbolId>,
     pub states: FxHashSet<SymbolId>,
+    pub aliases: FxHashMap<SymbolId, SymbolId>,
+    pub handlers: FxHashSet<SymbolId>,
 }
 
 pub fn binding(pattern: &BindingPattern<'_>) -> Option<SymbolId> {
@@ -125,6 +127,8 @@ struct Classify<'f> {
     runtime: &'f Runtime,
     scoping: &'f Scoping,
     facts: Facts,
+    arrows: FxHashMap<SymbolId, Vec<SymbolId>>,
+    hoisted: Vec<(SymbolId, Vec<SymbolId>)>,
 }
 
 impl<'f> Classify<'f> {
@@ -159,7 +163,7 @@ impl<'f> Classify<'f> {
         if let (Some(symbol), Some(init)) = (binding(&declarator.id), declarator.init.as_ref()) {
             match init.without_parentheses() {
                 Expression::CallExpression(call) => match self.rt(&call.callee) {
-                    Some(Rt::State | Rt::Derived) => {
+                    Some(Rt::State | Rt::Derived | Rt::DerivedSafeEqual) => {
                         self.facts.classes.insert(symbol, Class::Signal);
                         if self.rt(&call.callee) == Some(Rt::State) {
                             self.facts.states.insert(symbol);
@@ -186,17 +190,119 @@ impl<'f> Classify<'f> {
                     _ => {}
                 },
                 Expression::ArrowFunctionExpression(arrow) => {
-                    for param in arrow.params.items.iter().skip(1) {
-                        let noop = param
-                            .initializer
-                            .as_ref()
-                            .is_some_and(|init| self.rt(init) == Some(Rt::Noop));
-                        if let (true, Some(symbol)) = (noop, binding(&param.pattern)) {
-                            self.facts.classes.insert(symbol, Class::Getter);
-                        }
+                    if let Some(params) = param_symbols(&arrow.params) {
+                        self.arrows.insert(symbol, params);
                     }
                 }
                 _ => {}
+            }
+        }
+    }
+
+    fn item_getters(&self, statements: &[Statement<'_>]) -> Vec<SymbolId> {
+        let mut out = Vec::new();
+        for statement in statements {
+            let Statement::VariableDeclaration(declaration) = statement else {
+                break;
+            };
+            let [declarator] = declaration.declarations.as_slice() else {
+                break;
+            };
+            match declarator
+                .init
+                .as_ref()
+                .map(Expression::without_parentheses)
+            {
+                Some(Expression::ArrowFunctionExpression(arrow))
+                    if arrow.params.items.is_empty() && arrow.get_expression().is_some() =>
+                {
+                    out.extend(binding(&declarator.id));
+                }
+                Some(Expression::CallExpression(call))
+                    if matches!(
+                        self.rt(&call.callee),
+                        Some(Rt::Derived | Rt::DerivedSafeEqual)
+                    ) => {}
+                _ => break,
+            }
+        }
+        out
+    }
+
+    fn on_arrow<'a>(&mut self, arrow: &ArrowFunctionExpression<'a>) {
+        for param in arrow.params.items.iter().skip(1) {
+            let noop = param
+                .initializer
+                .as_ref()
+                .is_some_and(|init| self.rt(init) == Some(Rt::Noop));
+            if let (true, Some(symbol)) = (noop, binding(&param.pattern)) {
+                self.facts.classes.insert(symbol, Class::Getter);
+            }
+        }
+    }
+
+    fn on_assignment<'a>(&mut self, assign: &oxc_ast::ast::AssignmentExpression<'a>) {
+        let oxc_ast::ast::AssignmentTarget::StaticMemberExpression(member) = &assign.left else {
+            return;
+        };
+        if !member.property.name.starts_with("__") {
+            return;
+        }
+        let Expression::ArrayExpression(array) = assign.right.without_parentheses() else {
+            return;
+        };
+        let symbols: Option<Vec<SymbolId>> = array
+            .elements
+            .iter()
+            .map(
+                |element| match element.as_expression().map(Expression::without_parentheses) {
+                    Some(Expression::Identifier(ident)) => symbol_of(ident, self.scoping),
+                    _ => None,
+                },
+            )
+            .collect();
+        if let Some((handler, args)) = symbols.as_deref().and_then(<[SymbolId]>::split_first) {
+            self.hoisted.push((*handler, args.to_vec()));
+        }
+    }
+
+    fn settle_hoisted(&mut self) {
+        let mut seen: FxHashMap<SymbolId, Option<SymbolId>> = FxHashMap::default();
+        let mut uses: FxHashMap<SymbolId, usize> = FxHashMap::default();
+        for (handler, _) in &self.hoisted {
+            *uses.entry(*handler).or_default() += 1;
+        }
+        for (handler, count) in uses {
+            if self.arrows.contains_key(&handler)
+                && self.scoping.get_resolved_reference_ids(handler).len() == count
+            {
+                self.facts.handlers.insert(handler);
+            }
+        }
+        for (handler, args) in std::mem::take(&mut self.hoisted) {
+            let Some(params) = self.arrows.get(&handler) else {
+                continue;
+            };
+            if params.len() != args.len() + 1 {
+                continue;
+            }
+            for (param, arg) in params.iter().skip(1).zip(args) {
+                let entry = seen.entry(*param).or_insert(Some(arg));
+                if *entry != Some(arg) {
+                    *entry = None;
+                }
+            }
+        }
+        for (param, arg) in seen {
+            let Some(arg) = arg else {
+                continue;
+            };
+            if let Some(class) = self.facts.classes.get(&arg).copied() {
+                self.facts.classes.insert(param, class);
+            }
+            if self.facts.props_objects.contains(&arg) {
+                self.facts.props_objects.insert(param);
+                self.facts.aliases.insert(param, arg);
             }
         }
     }
@@ -216,7 +322,7 @@ impl<'f> Classify<'f> {
                 if let Some(Expression::ArrowFunctionExpression(render)) =
                     arg(call, 4).map(Expression::without_parentheses)
                 {
-                    for symbol in leading_getters(arrow_statements(render)) {
+                    for symbol in self.item_getters(arrow_statements(render)) {
                         self.facts.classes.insert(symbol, Class::Getter);
                     }
                 }
@@ -275,6 +381,7 @@ struct Sites<'f> {
     source: &'f str,
     sites: Vec<Site>,
     refs: Vec<(Span, SymbolId)>,
+    shorthands: Vec<u32>,
     keys: FxHashMap<SymbolId, Vec<String>>,
     bare: Option<Span>,
 }
@@ -284,32 +391,29 @@ fn lit(text: impl Into<String>) -> Piece {
 }
 
 impl<'f> Sites<'f> {
-    fn class_of(&self, expr: &Expression<'_>) -> Option<(SymbolId, Class, String)> {
+    fn class_of(&self, expr: &Expression<'_>) -> Option<(SymbolId, Class, Piece)> {
         let Expression::Identifier(ident) = expr.without_parentheses() else {
             return None;
         };
         let symbol = symbol_of(ident, self.scoping)?;
         let class = *self.facts.classes.get(&symbol)?;
-        Some((symbol, class, ident.name.to_string()))
+        Some((symbol, class, Piece::Name(symbol, ident.name.to_string())))
     }
 
-    fn signal(&self, expr: Option<&Expression<'_>>) -> Option<String> {
+    fn signal(&self, expr: Option<&Expression<'_>>) -> Option<Piece> {
         match self.class_of(expr?)? {
             (_, Class::Signal, name) => Some(name),
             _ => None,
         }
     }
 
-    fn assign(&self, span: Span, target: String, value: Piece) -> Site {
+    fn assign(&self, span: Span, target: Piece, value: Piece) -> Site {
         let bare = self.bare == Some(span);
-        let mut pieces = vec![
-            lit(if bare {
-                format!("{target} = ")
-            } else {
-                format!("({target} = ")
-            }),
-            value,
-        ];
+        let mut pieces = Vec::new();
+        if !bare {
+            pieces.push(lit("("));
+        }
+        pieces.extend([target, lit(" = "), value]);
         if !bare {
             pieces.push(lit(")"));
         }
@@ -333,7 +437,7 @@ impl<'f> Sites<'f> {
         let span = call.span;
         let site = |pieces: Vec<Piece>| Some(Site { span, pieces });
         match self.runtime.resolve(&call.callee, self.scoping)? {
-            Rt::Get if call.arguments.len() == 1 => site(vec![lit(self.signal(arg(call, 0))?)]),
+            Rt::Get if call.arguments.len() == 1 => site(vec![self.signal(arg(call, 0))?]),
             Rt::Set if (2..=3).contains(&call.arguments.len()) => {
                 let target = self.signal(arg(call, 0))?;
                 Some(self.assign(span, target, Piece::Src(arg(call, 1)?.span())))
@@ -342,8 +446,8 @@ impl<'f> Sites<'f> {
                 let target = self.signal(arg(call, 0))?;
                 let op = self.delta(call)?;
                 match self.runtime.resolve(&call.callee, self.scoping)? {
-                    Rt::Update => site(vec![lit(format!("{target}{op}"))]),
-                    _ => site(vec![lit(format!("{op}{target}"))]),
+                    Rt::Update => site(vec![target, lit(op)]),
+                    _ => site(vec![lit(op), target]),
                 }
             }
             Rt::State if call.arguments.is_empty() => site(vec![lit("$state()")]),
@@ -400,8 +504,8 @@ impl<'f> Sites<'f> {
                 }
                 let op = self.delta(call)?;
                 match self.runtime.resolve(&call.callee, self.scoping)? {
-                    Rt::UpdateProp => site(vec![lit(format!("{target}{op}"))]),
-                    _ => site(vec![lit(format!("{op}{target}"))]),
+                    Rt::UpdateProp => site(vec![target, lit(op)]),
+                    _ => site(vec![lit(op), target]),
                 }
             }
             Rt::Snapshot if call.arguments.len() == 1 => site(vec![
@@ -421,7 +525,7 @@ impl<'f> Sites<'f> {
         match call.arguments.len() {
             0 => Some(Site {
                 span: call.span,
-                pieces: vec![lit(name)],
+                pieces: vec![name],
             }),
             1 => Some(self.assign(call.span, name, Piece::Src(arg(call, 0)?.span()))),
             _ => None,
@@ -473,7 +577,8 @@ impl<'f> Sites<'f> {
                 .filter(|symbol| self.facts.props_objects.contains(symbol))
             {
                 let key = member.property.name.to_string();
-                self.keys.entry(symbol).or_default().push(key.clone());
+                let owner = self.facts.aliases.get(&symbol).copied().unwrap_or(symbol);
+                self.keys.entry(owner).or_default().push(key.clone());
                 self.sites.push(Site {
                     span: member.span,
                     pieces: vec![lit(key)],
@@ -500,6 +605,7 @@ pub struct Collected {
     pub facts: Facts,
     pub sites: Vec<Site>,
     pub refs: Vec<(Span, SymbolId)>,
+    pub shorthands: Vec<u32>,
     pub keys: FxHashMap<SymbolId, Vec<String>>,
 }
 
@@ -521,6 +627,20 @@ impl<'f, 'g, 'a> Visit<'a> for Pass<'f, 'g> {
             pass.on_variable_declarator(declarator);
         }
         walk::walk_variable_declarator(self, declarator);
+    }
+
+    fn visit_arrow_function_expression(&mut self, arrow: &ArrowFunctionExpression<'a>) {
+        if let Pass::Classify(pass) = self {
+            pass.on_arrow(arrow);
+        }
+        walk::walk_arrow_function_expression(self, arrow);
+    }
+
+    fn visit_assignment_expression(&mut self, assign: &oxc_ast::ast::AssignmentExpression<'a>) {
+        if let Pass::Classify(pass) = self {
+            pass.on_assignment(assign);
+        }
+        walk::walk_assignment_expression(self, assign);
     }
 
     fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
@@ -564,6 +684,23 @@ impl<'f, 'g, 'a> Visit<'a> for Pass<'f, 'g> {
             pass.on_identifier_reference(ident);
         }
     }
+
+    fn visit_object_property(&mut self, property: &oxc_ast::ast::ObjectProperty<'a>) {
+        if let (Pass::Sites(pass), true) = (&mut *self, property.shorthand) {
+            pass.shorthands.push(property.value.span().start);
+        }
+        walk::walk_object_property(self, property);
+    }
+
+    fn visit_assignment_target_property_identifier(
+        &mut self,
+        property: &oxc_ast::ast::AssignmentTargetPropertyIdentifier<'a>,
+    ) {
+        if let Pass::Sites(pass) = self {
+            pass.shorthands.push(property.binding.span.start);
+        }
+        walk::walk_assignment_target_property_identifier(self, property);
+    }
 }
 
 pub fn collect(program: &Program<'_>, runtime: &Runtime, scoping: &Scoping) -> Collected {
@@ -571,8 +708,11 @@ pub fn collect(program: &Program<'_>, runtime: &Runtime, scoping: &Scoping) -> C
         runtime,
         scoping,
         facts: Facts::default(),
+        arrows: FxHashMap::default(),
+        hoisted: Vec::new(),
     };
     Pass::Classify(&mut classify).visit_program(program);
+    classify.settle_hoisted();
     let facts = classify.facts;
     let mut sites = Sites {
         runtime,
@@ -581,15 +721,17 @@ pub fn collect(program: &Program<'_>, runtime: &Runtime, scoping: &Scoping) -> C
         source: program.source_text,
         sites: Vec::new(),
         refs: Vec::new(),
+        shorthands: Vec::new(),
         keys: FxHashMap::default(),
         bare: None,
     };
     Pass::Sites(&mut sites).visit_program(program);
-    let (sites_found, refs, keys) = (sites.sites, sites.refs, sites.keys);
+    let (found, refs, shorthands, keys) = (sites.sites, sites.refs, sites.shorthands, sites.keys);
     Collected {
         facts,
-        sites: sites_found,
+        sites: found,
         refs,
+        shorthands,
         keys,
     }
 }
@@ -608,36 +750,4 @@ pub fn is_primitive(expr: &Expression<'_>) -> bool {
         }
         _ => false,
     }
-}
-
-pub fn leading_getters(statements: &[Statement<'_>]) -> Vec<SymbolId> {
-    let mut out = Vec::new();
-    for statement in statements {
-        let Statement::VariableDeclaration(declaration) = statement else {
-            break;
-        };
-        let getters: Option<Vec<SymbolId>> = declaration
-            .declarations
-            .iter()
-            .map(|declarator| {
-                match declarator
-                    .init
-                    .as_ref()
-                    .map(Expression::without_parentheses)
-                {
-                    Some(Expression::ArrowFunctionExpression(arrow))
-                        if arrow.params.items.is_empty() && arrow.get_expression().is_some() =>
-                    {
-                        binding(&declarator.id)
-                    }
-                    _ => None,
-                }
-            })
-            .collect();
-        match getters {
-            Some(getters) => out.extend(getters),
-            None => break,
-        }
-    }
-    out
 }

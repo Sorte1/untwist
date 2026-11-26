@@ -1,0 +1,1 @@
+{ "steps": [{ "click": "button" }, { "wait": 20 }] }

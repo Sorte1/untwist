@@ -1,0 +1,13 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/DynamicElement.js
+---
+==== DynamicElement.svelte
+<script>
+	let tag = $state('h1');
+	let attrs = $state({ title: 'x' });
+</script>
+
+<svelte:element this={tag} class="dyn" {...attrs}>heading</svelte:element>
+<button onclick={() => (tag = tag === 'h1' ? 'h2' : 'h1')}>swap</button>
