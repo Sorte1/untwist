@@ -1,9 +1,31 @@
 pub fn restore(code: &str, hash: &str) -> Option<String> {
     let code = strip_unused(code)?;
+    let code = global_frames(&code, hash);
     let code = code.replace(&format!("{hash}-"), "");
     let mut out = String::new();
     block(&code, hash, 1, &mut out)?;
-    Some(out)
+    (!out.contains(hash)).then_some(out)
+}
+
+fn global_frames(code: &str, hash: &str) -> String {
+    const HEAD: &str = "@keyframes ";
+    let scoped = format!("{hash}-");
+    let mut out = String::new();
+    let mut rest = code;
+    while let Some(at) = rest.find(HEAD) {
+        let name_at = at + HEAD.len();
+        out.push_str(&rest[..name_at]);
+        let name = rest[name_at..].trim_start();
+        if !name.starts_with(&scoped) && !name.starts_with('{') {
+            out.push_str(&rest[name_at..rest.len() - name.len()]);
+            out.push_str("-global-");
+            rest = name;
+            continue;
+        }
+        rest = &rest[name_at..];
+    }
+    out.push_str(rest);
+    out
 }
 
 fn strip_unused(code: &str) -> Option<String> {
@@ -98,6 +120,8 @@ fn block(text: &str, hash: &str, depth: usize, out: &mut String) -> Option<()> {
             }
             out.push_str(&format!("\n{pad}}}"));
         } else if head.starts_with('@') {
+            return None;
+        } else if body.contains('{') {
             return None;
         } else {
             let selectors: Option<Vec<String>> = split_top(head, ',')
@@ -194,7 +218,17 @@ fn complex(selector: &str, hash: &str) -> Option<String> {
 fn scoped(compound: &str, hash: &str) -> Option<String> {
     let class = format!(".{hash}");
     let wrapped = format!(":where({class})");
-    if compound.contains(&wrapped) || compound.contains(&class) {
+    let found = [&wrapped, &class]
+        .into_iter()
+        .filter_map(|marker| compound.find(marker.as_str()).map(|at| (at, marker.len())))
+        .min();
+    let Some((at, len)) = found else {
+        return Some(format!(":global({compound})"));
+    };
+    let before = &compound[..at];
+    let after = &compound[at + len..];
+    let before = if before.is_empty() { "*" } else { before };
+    if after.contains(hash) {
         let bare = compound.replace(&wrapped, "").replace(&class, "");
         return Some(if bare.is_empty() {
             "*".to_string()
@@ -202,7 +236,23 @@ fn scoped(compound: &str, hash: &str) -> Option<String> {
             bare
         });
     }
-    Some(format!(":global({compound})"))
+    match simple_outside_parens(after) {
+        true => Some(format!("{before}:global({after})")),
+        false => Some(format!("{before}{after}")),
+    }
+}
+
+fn simple_outside_parens(text: &str) -> bool {
+    let mut depth = 0i32;
+    for c in text.chars() {
+        match c {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            '.' | '#' | '[' if depth == 0 => return true,
+            _ => {}
+        }
+    }
+    false
 }
 
 #[cfg(test)]
@@ -226,10 +276,44 @@ mod tests {
     fn keeps_keyframes_and_media_blocks() {
         let css = restore("@media (min-width: 10px) {p.svelte-x {color:red;}}@keyframes svelte-x-spin {from {opacity:0;}to {opacity:1;}}p.svelte-x {animation:svelte-x-spin 1s;}", "svelte-x").unwrap();
         assert!(css.contains("@keyframes spin {"), "{css}");
+        assert!(!css.contains("-global-"), "{css}");
         assert!(css.contains("animation: spin 1s;"), "{css}");
         assert!(
             css.contains("\t@media (min-width: 10px) {\n\t\tp {"),
             "{css}"
         );
+    }
+
+    #[test]
+    fn a_class_after_the_hash_came_from_global() {
+        let css = restore(
+            "span.svelte-x.dyn {color:teal;}p.svelte-x.x:hover {left:0}p.svelte-x:hover {top:0}",
+            "svelte-x",
+        )
+        .unwrap();
+        assert!(css.contains("span:global(.dyn) {"), "{css}");
+        assert!(css.contains("p:global(.x:hover) {"), "{css}");
+        assert!(css.contains("p:hover {"), "{css}");
+    }
+
+    #[test]
+    fn unscoped_keyframes_are_global() {
+        let css = restore(
+            "@keyframes pulse { from { opacity: 0 } }span.svelte-x { animation: pulse 2s;}",
+            "svelte-x",
+        )
+        .unwrap();
+        assert!(css.contains("@keyframes -global-pulse {"), "{css}");
+        assert!(css.contains("animation: pulse 2s;"), "{css}");
+    }
+
+    #[test]
+    fn nested_rules_are_refused() {
+        assert!(restore(
+            ".box.svelte-x {& p:where(.svelte-x) {color:green;}}",
+            "svelte-x"
+        )
+        .is_none());
+        assert!(restore(".box.svelte-x {.q {right:1px;}}", "svelte-x").is_none());
     }
 }
