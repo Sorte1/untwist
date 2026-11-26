@@ -16,5 +16,11 @@ pub use locks::{boxed as locks_boxed, PASS as LOCKS_PASS};
 pub use strings::{boxed as strings_boxed, PASS as STRINGS_PASS};
 
 pub fn ctors<'a>() -> Vec<untwist_core::pass::PassCtor<'a>> {
-    vec![integrity_boxed, locks_boxed, strings_boxed, globals_boxed, helpers_boxed]
+    vec![
+        integrity_boxed,
+        locks_boxed,
+        strings_boxed,
+        globals_boxed,
+        helpers_boxed,
+    ]
 }
