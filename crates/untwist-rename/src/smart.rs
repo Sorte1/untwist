@@ -10,6 +10,7 @@ use crate::base_name::{base_name, structural_base, Context, FALLBACK_BASE};
 use crate::collect::{BindingInfo, BindingRole, Collected, InitKind};
 use crate::evidence::{collect_evidence, Evidence};
 use crate::evidence_namer::EvidenceNamer;
+use crate::export_names::export_names;
 use crate::generate::{lower_camel, strip_accessor_prefix, to_identifier, uid_candidates};
 use crate::human::looks_human_written;
 use crate::oracle::{NameOracle, OuterRule};
@@ -330,15 +331,26 @@ fn decide_with_limit(
         namer: Some(&namer),
         config,
     };
+    let exported = export_names(program, scoping);
+    let named_by_export = |info: &BindingInfo| {
+        exported
+            .get(&info.symbol)
+            .filter(|_| !collected.pinned.contains(&info.symbol))
+    };
     let candidates: Vec<&BindingInfo> = collected
         .bindings
         .iter()
         .filter(|info| !text_read.contains(&info.symbol))
-        .filter(|info| smart_renameable(info, collected, config))
+        .filter(|info| named_by_export(info).is_some() || smart_renameable(info, collected, config))
         .collect();
     let mut planned: Vec<(&BindingInfo, String)> = candidates
         .iter()
-        .filter_map(|info| smart_base(info, &cx, &evidence).map(|base| (*info, base)))
+        .filter_map(|info| {
+            named_by_export(info)
+                .cloned()
+                .or_else(|| smart_base(info, &cx, &evidence))
+                .map(|base| (*info, base))
+        })
         .collect();
     flow_arguments(&mut planned, (collected, &evidence, &usage));
     let flowed = flowed_hex_tokens(&candidates, &planned, (collected, &evidence, &usage));

@@ -204,3 +204,47 @@ fn an_entry_of_caches_is_a_cache() {
     let code = smart("function f(_0x1) { const _0x2 = _0x1.caches.get('a'); return _0x2; }");
     assert_has(&code, &["const cache = "]);
 }
+
+#[test]
+fn a_module_exports_key_names_a_misleadingly_named_binding() {
+    let code = smart(
+        "function computeSessionDigest_a1b(key) { return key + 1; }\nconst sealPrimaryLedger_c2d = 7;\nmodule.exports = { tryUnlock: computeSessionDigest_a1b, SCOPE: sealPrimaryLedger_c2d };\nconsole.log(computeSessionDigest_a1b(sealPrimaryLedger_c2d));",
+    );
+    assert_has(
+        &code,
+        &[
+            "function tryUnlock2(",
+            "const SCOPE = 7",
+            "tryUnlock: tryUnlock2",
+            "console.log(tryUnlock2(SCOPE))",
+        ],
+    );
+    assert_lacks(
+        &code,
+        &["computeSessionDigest_a1b", "sealPrimaryLedger_c2d"],
+    );
+}
+
+#[test]
+fn an_export_key_does_not_name_a_binding_exported_twice_or_a_local_module() {
+    let twice = smart(
+        "function decodeLedger_a1b(x) { return x; }\nmodule.exports = { first: decodeLedger_a1b, second: decodeLedger_a1b };",
+    );
+    assert_has(&twice, &["function decodeLedger_a1b("]);
+    let local = smart(
+        "const module = { exports: {} };\nfunction decodeLedger_a1b(x) { return x; }\nmodule.exports = { first: decodeLedger_a1b };",
+    );
+    assert_has(&local, &["function decodeLedger_a1b("]);
+    let keyword = smart(
+        "function decodeLedger_a1b(x) { return x; }\nmodule.exports = { default: decodeLedger_a1b };",
+    );
+    assert_has(&keyword, &["function decodeLedger_a1b("]);
+}
+
+#[test]
+fn an_export_key_names_a_function_exactly_in_a_module() {
+    let code = smart(
+        "import x from \"y\";\nfunction computeSessionDigest_a1b(key) { return key + x; }\nmodule.exports = { tryUnlock: computeSessionDigest_a1b };",
+    );
+    assert_has(&code, &["function tryUnlock("]);
+}

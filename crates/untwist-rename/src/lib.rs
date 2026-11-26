@@ -7,6 +7,7 @@ pub mod collisions;
 pub mod commonjs;
 pub mod evidence;
 mod evidence_namer;
+mod export_names;
 pub mod fingerprint;
 #[cfg(feature = "test-hooks")]
 pub mod fresh;
