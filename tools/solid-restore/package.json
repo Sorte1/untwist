@@ -1,0 +1,17 @@
+{
+  "name": "untwist-solid-restore-harness",
+  "private": true,
+  "type": "module",
+  "description": "Pinned Solid compiler, bundlers and jsdom for the round-trip harness of untwist's Solid restore (tools/solid-restore/harness.mjs).",
+  "dependencies": {
+    "@babel/core": "7.28.5",
+    "@rollup/plugin-babel": "6.1.0",
+    "@rollup/plugin-node-resolve": "16.0.3",
+    "@rollup/plugin-terser": "0.4.4",
+    "babel-preset-solid": "1.9.19",
+    "jsdom": "26.1.0",
+    "rollup": "4.66.0",
+    "solid-js": "1.9.19",
+    "vite": "7.3.8"
+  }
+}

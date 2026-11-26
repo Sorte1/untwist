@@ -128,6 +128,7 @@ Common flags:
 | `--modern BASELINE` | Opt-in: remove core-js polyfills of features that are native in `BASELINE` (see [Modern mode](#modern-mode)). |
 | `--types[=jsdoc\|ts]` | Experimental, opt-in: annotate only types that hold for every value on every run, as JSDoc (the default) or TypeScript (see [Proven types](#proven-types)). |
 | `--restore svelte` | Opt-in, needs `-o`: also write each compiled Svelte 5 component back as a `.svelte` file (see [Svelte restore](#svelte-restore)). |
+| `--restore solid` | Opt-in, needs `-o`: also write each compiled SolidJS component back as a `.jsx` file (see [Solid restore](#solid-restore)). Both frameworks: `--restore svelte,solid`. |
 | `--rename MODE` | `none` (default), `mangle`, `simple`, `smart` or `unique`. `-m` is short for `--rename mangle`. |
 | `--no-deobfuscate`, `--no-unminify`, `--no-unpack`, `--no-jsx` | Skip a stage. |
 | `--split-hoisted` | Also split Rollup/Vite scope-hoisted bundles, when the split provably keeps behaviour. |
@@ -493,6 +494,33 @@ to anything declared outside the component other than its child components, snip
 are not restored, and neither is a runtime function that Terser inlined into its only caller. The round trip is checked by `tools/svelte-restore/harness.mjs`: every component in its corpus
 is compiled, optionally bundled, restored, compiled again and rendered in jsdom beside the
 original under the same props and clicks, and the DOM, console output and styles must match.
+
+## Solid restore
+
+`--restore solid -o DIR` reads the final output for components compiled by `babel-preset-solid`
+(dom-expressions) for the browser, as the compiler emits them (`import { template as _$template }
+from "solid-js/web"`) or scope-hoisted into a Rollup bundle that keeps the runtime names, and writes
+each component as `<Name>.jsx` beside the file that holds it. It is a view for reading: the
+JavaScript output is the same with or without the flag.
+
+The JSX is rebuilt from the `template()` strings and the node walk (`firstChild`, `nextSibling`),
+with `insert()` children (before their marker, appended or alone), attributes and properties from
+`effect()` and plain setters (`setAttribute`, `className`, `classList`, `style`,
+`setStyleProperty`, `setAttributeNS`, `setBoolAttribute`, `prop:`/`attr:`/`bool:`), delegated and
+native events (`onClick`, `onClick={[handler, data]}`, `on:name`, `oncapture:name`), `ref`, `use:`
+directives, `{...spread}` attributes, `createComponent()` with getters, `mergeProps` spreads,
+children and render functions (`Show`, `For`, `Index`, `Switch`/`Match`, `Dynamic`, `Portal`,
+`ErrorBoundary`, `Suspense`, context providers), `memo()` conditions back to `a ? <b/> : <c/>` and
+`a && <b/>`, fragments, SVG templates and `textContent`/`innerHTML`. Helpers the component reads
+from its module are copied in; module state that several components read (a context, a store) goes
+to `shared.jsx`, which they import.
+
+A component with any statement, call or reference that has no JSX spelling is left out with a note
+(`solid: Name kept as JS: reason`), and so is a component whose child is left out. The round trip is
+checked by `tools/solid-restore/harness.mjs` (solid-js and babel-preset-solid 1.9.19): every
+component in its corpus is compiled, optionally bundled, restored, compiled again and rendered in
+jsdom beside the original under the same props and interactions, and the DOM, form values and
+console output must match.
 
 ## Playground
 

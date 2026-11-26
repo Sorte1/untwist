@@ -1,0 +1,1 @@
+{ "steps": [{ "input": ["input", "milk"] }, { "click": ".add" }, { "input": ["input", "eggs"] }, { "click": ".add" }, { "click": ".rm" }] }

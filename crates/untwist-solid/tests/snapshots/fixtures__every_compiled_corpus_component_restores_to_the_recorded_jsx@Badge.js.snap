@@ -1,0 +1,9 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/Badge.js
+---
+==== Badge.jsx
+export default function Badge(props) {
+  return <span class="badge" data-tone={props.tone ?? "plain"}>{props.label}{props.children}</span>;
+}

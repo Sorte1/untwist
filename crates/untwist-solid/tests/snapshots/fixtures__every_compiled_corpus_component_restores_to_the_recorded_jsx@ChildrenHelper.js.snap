@@ -1,0 +1,28 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/ChildrenHelper.js
+---
+==== Wrap.jsx
+import { children } from "solid-js";
+
+export default function Wrap(props) {
+  const resolved = children(() => props.children);
+  return <div class="wrap" data-count={resolved.toArray().length}>{resolved()}</div>;
+}
+==== ChildrenHelper.jsx
+import { createSignal } from "solid-js";
+import Wrap from "./Wrap.jsx";
+
+export default function ChildrenHelper() {
+  const [n, setN] = createSignal(1);
+  return (
+    <section>
+      <Wrap>
+        <i>one</i>
+        <i>two {n()}</i>
+      </Wrap>
+      <button onClick={() => setN(n() + 1)}>inc</button>
+    </section>
+  );
+}

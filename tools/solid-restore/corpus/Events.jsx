@@ -1,0 +1,17 @@
+import { createSignal } from "solid-js";
+
+export default function Events() {
+  const [log, setLog] = createSignal("");
+  const add = (word) => setLog(log() + word);
+  const handler = (data, event) => add(data + event.type);
+  return (
+    <div>
+      <button class="a" onClick={() => add("a")}>a</button>
+      <button class="b" onClick={[handler, "b"]}>b</button>
+      <button class="c" on:click={() => add("c")}>c</button>
+      <button class="d" onMouseDown={() => add("d")} onclick={() => add("x")}>d</button>
+      <button class="e" onFocus={() => add("f")}>e</button>
+      <p>{log()}</p>
+    </div>
+  );
+}

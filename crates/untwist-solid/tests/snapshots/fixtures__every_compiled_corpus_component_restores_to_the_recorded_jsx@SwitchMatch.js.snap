@@ -1,0 +1,20 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/SwitchMatch.js
+---
+==== SwitchMatch.jsx
+import { createSignal, Switch, Match } from "solid-js";
+
+export default function SwitchMatch() {
+  const [n, setN] = createSignal(0);
+  return (
+    <div>
+      <Switch fallback={<p>many</p>}>
+        <Match when={n() === 0}><p>zero</p></Match>
+        <Match when={n() === 1}><p>one</p></Match>
+      </Switch>
+      <button onClick={() => setN(n() + 1)}>next</button>
+    </div>
+  );
+}

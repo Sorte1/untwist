@@ -1,0 +1,16 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/Portal.js
+---
+==== PortalTest.jsx
+import { Portal } from "solid-js/web";
+
+export default function PortalTest() {
+  return (
+    <div>
+      <p>inside</p>
+      <Portal mount={document.querySelector("main")}><p class="portal">teleported</p></Portal>
+    </div>
+  );
+}

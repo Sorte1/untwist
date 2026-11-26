@@ -1695,6 +1695,8 @@ dependencies = [
  "untwist-eval",
  "untwist-jsx",
  "untwist-rename",
+ "untwist-restore",
+ "untwist-solid",
  "untwist-svelte",
  "untwist-testing",
  "untwist-types",
@@ -1856,6 +1858,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "untwist-restore"
+version = "0.6.0"
+dependencies = [
+ "oxc_allocator",
+ "oxc_ast",
+ "oxc_ast_visit",
+ "oxc_semantic",
+ "oxc_span",
+ "oxc_syntax",
+ "rustc-hash",
+]
+
+[[package]]
+name = "untwist-solid"
+version = "0.6.0"
+dependencies = [
+ "insta",
+ "oxc_allocator",
+ "oxc_ast",
+ "oxc_semantic",
+ "oxc_span",
+ "oxc_syntax",
+ "rustc-hash",
+ "untwist-core",
+ "untwist-restore",
+]
+
+[[package]]
 name = "untwist-svelte"
 version = "0.6.0"
 dependencies = [
@@ -1868,6 +1898,7 @@ dependencies = [
  "oxc_syntax",
  "rustc-hash",
  "untwist-core",
+ "untwist-restore",
 ]
 
 [[package]]

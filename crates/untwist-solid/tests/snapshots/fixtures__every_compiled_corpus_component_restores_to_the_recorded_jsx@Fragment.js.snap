@@ -1,0 +1,31 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/Fragment.js
+---
+==== Pair.jsx
+export default function Pair(props) {
+  return (
+    <>
+      <dt>{props.term}</dt>
+      <dd>{props.children}</dd>
+    </>
+  );
+}
+==== Fragment.jsx
+import { createSignal } from "solid-js";
+import Pair from "./Pair.jsx";
+
+export default function Fragment() {
+  const [n, setN] = createSignal(1);
+  return (
+    <>
+      <dl>
+        <Pair term="one">first</Pair>
+        <Pair term="two">second {n()}</Pair>
+      </dl>
+      text after
+      <button onClick={() => setN(n() * 2)}>double</button>
+    </>
+  );
+}

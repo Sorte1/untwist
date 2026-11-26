@@ -1,0 +1,1 @@
+{ "props": { "href": "https://example.com", "locked": true, "kind": "wide", "id": "b1" }, "steps": [{ "click": "button" }, { "click": "button" }] }

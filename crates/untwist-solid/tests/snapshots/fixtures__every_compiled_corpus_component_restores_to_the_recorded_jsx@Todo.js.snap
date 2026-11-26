@@ -1,0 +1,40 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/Todo.js
+---
+==== Todo.jsx
+import { createSignal, For, Show } from "solid-js";
+
+export default function Todo() {
+  const [todos, setTodos] = createSignal([]);
+  const [draft, setDraft] = createSignal("");
+  let next = 0;
+  const add = () => {
+    if (!draft()) return;
+    setTodos([...todos(), {
+      id: next++,
+      text: draft()
+    }]);
+    setDraft("");
+  };
+  return (
+    <div class="todo">
+      <input value={draft()} onInput={e => setDraft(e.currentTarget.value)} />
+      <button class="add" onClick={add}>add</button>
+      <Show when={todos().length} fallback={<p>nothing to do</p>}>
+        <ul>
+          <For each={todos()}>
+            {todo => (
+              <li>
+                {todo.text}
+                <button class="rm" onClick={() => setTodos(todos().filter(t => t.id !== todo.id))}>x</button>
+              </li>
+            )}
+          </For>
+        </ul>
+        <p>{todos().length} left</p>
+      </Show>
+    </div>
+  );
+}

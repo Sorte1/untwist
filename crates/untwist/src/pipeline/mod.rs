@@ -12,12 +12,12 @@ mod refusal;
 #[cfg(feature = "refusal-spans")]
 mod refusal_spans;
 mod relex;
+mod restore;
 mod rounds;
 mod shared_scan;
 mod shell;
 mod snapshots;
 mod stages;
-mod svelte;
 mod trail;
 mod types;
 mod unpack;
@@ -44,8 +44,11 @@ use input::InputResult;
 use ladder::Ladder;
 #[cfg(feature = "refusal-spans")]
 pub use refusal_spans::{RefusalSite, SiteAt};
+pub use restore::{
+    RestoreHolder, RestoredFile, SvelteFile, SvelteHolder, SOLID_NOT_BUILT, SOLID_PASS,
+    SVELTE_NOT_BUILT, SVELTE_PASS,
+};
 pub use snapshots::{Snapshot, SnapshotCode};
-pub use svelte::{SvelteFile, SvelteHolder, SVELTE_NOT_BUILT, SVELTE_PASS};
 pub(crate) use types::{kept_names_note, specifier_list};
 pub use types::{TYPES_KEPT_JS_NAMES, TYPES_NOT_BUILT, TYPES_PASS, TYPES_WITH_SOURCE_MAPS};
 
@@ -91,6 +94,7 @@ pub struct Output {
     pub source_map_link: Option<crate::maps::MapLink>,
     pub types: Option<crate::types::TypesReport>,
     pub svelte: Vec<SvelteFile>,
+    pub solid: Vec<RestoredFile>,
 }
 
 pub(crate) fn admits_reparse(text: &str) -> bool {
@@ -299,6 +303,7 @@ impl OutputParts {
             source_map_link: None,
             types: None,
             svelte: Vec::new(),
+            solid: Vec::new(),
         }
     }
 }
@@ -380,7 +385,7 @@ impl Pipeline {
                 wasm_check: self.options.wasm_check,
                 ..parts.into_output(bundle, self.options.single_file)
             };
-            self.svelte_stage(&mut output);
+            self.restore_stage(&mut output);
             self.types_stage(&mut output);
             output
         })

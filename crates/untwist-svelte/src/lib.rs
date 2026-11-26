@@ -1,13 +1,12 @@
 mod component;
 mod css;
 mod dom;
-mod fingerprint;
 mod fingerprints;
-mod html;
 mod markup;
 mod runtime;
 mod script;
-mod text;
+
+use untwist_restore::{fingerprint, html, text};
 
 use oxc_allocator::Allocator;
 use oxc_ast::AstKind;
@@ -18,17 +17,7 @@ use runtime::Runtime;
 use script::{component_params, Class};
 use text::Rewriter;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Component {
-    pub name: String,
-    pub text: String,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct Restore {
-    pub components: Vec<Component>,
-    pub kept: Vec<(String, String)>,
-}
+pub use untwist_restore::{Component, Restore};
 
 const MARKERS: &[&str] = &["from_html", "svelte/internal", "from_svg", "<!>"];
 
@@ -75,7 +64,7 @@ pub fn fingerprint_rows(code: &str) -> Vec<FingerprintRow> {
             })
             .collect();
     let marks = fingerprint::Marks::of(nodes, scoping);
-    runtime::bound_functions(program.source_text, &marks, scoping, nodes)
+    fingerprint::bound_functions(program.source_text, &marks, scoping, nodes)
         .into_iter()
         .map(|(symbol, print)| {
             let used_by_component = scoping.get_resolved_references(symbol).any(|reference| {
@@ -117,7 +106,13 @@ pub fn restore(code: &str) -> Restore {
         return Restore::default();
     }
     let collected = script::collect(program, &runtime, scoping);
-    let rw = Rewriter::new(code, collected.sites, collected.refs, collected.shorthands);
+    let rw = Rewriter::new(
+        code,
+        "Svelte",
+        collected.sites,
+        collected.refs,
+        collected.shorthands,
+    );
     for symbol in runtime
         .namespaces
         .iter()

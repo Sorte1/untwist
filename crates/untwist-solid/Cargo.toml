@@ -1,0 +1,26 @@
+[package]
+name = "untwist-solid"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+readme.workspace = true
+rust-version.workspace = true
+keywords = ["javascript", "solidjs", "decompiler", "deobfuscator"]
+categories = ["development-tools", "parser-implementations"]
+description = "Restore compiled SolidJS components to readable JSX"
+
+[dependencies]
+untwist-core = { path = "../untwist-core", version = "0.6.0" }
+untwist-restore = { path = "../untwist-restore", version = "0.6.0" }
+oxc_allocator.workspace = true
+oxc_ast.workspace = true
+oxc_semantic.workspace = true
+oxc_span.workspace = true
+oxc_syntax.workspace = true
+rustc-hash.workspace = true
+
+[dev-dependencies]
+insta.workspace = true

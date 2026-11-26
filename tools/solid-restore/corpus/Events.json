@@ -1,0 +1,1 @@
+{ "steps": [{ "click": ".a" }, { "click": ".b" }, { "click": ".c" }, { "click": ".d" }, { "event": [".d", "mousedown"] }, { "event": [".e", "focus"] }] }

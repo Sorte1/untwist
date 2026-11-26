@@ -1,0 +1,21 @@
+import { createSignal, Show, For } from "solid-js";
+
+export default function Mixed(props) {
+  const [open, setOpen] = createSignal(true);
+  const [tags, setTags] = createSignal(["x"]);
+  return (
+    <div class="mixed" classList={{ open: open() }}>
+      <h3 onClick={() => setOpen(!open())}>{props.heading}</h3>
+      <Show when={open()}>
+        <For each={tags()}>
+          {(tag) => (
+            <Show when={tag !== "hide"} fallback={<s>hidden</s>}>
+              <span class="tag">{tag}</span>
+            </Show>
+          )}
+        </For>
+        <button onClick={() => setTags([...tags(), "hide", "y"])}>more</button>
+      </Show>
+    </div>
+  );
+}

@@ -1,0 +1,31 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/Memo.js
+---
+==== Memo.jsx
+import { createSignal, createMemo, createEffect, on, untrack, batch } from "solid-js";
+
+export default function Memo() {
+  const [a, setA] = createSignal(1);
+  const [b, setB] = createSignal(2);
+  const sum = createMemo(() => a() + b());
+  createEffect(() => console.log("sum", sum()));
+  createEffect(on(a, (value, prev) => console.log("a", value, prev), {
+    defer: true
+  }));
+  createEffect(() => console.log("b only", b(), untrack(a)));
+  return (
+    <p>
+      {a()} + {b()} = {sum()}
+      <button
+        onClick={() => batch(() => {
+          setA(a() + 1);
+          setB(b() + 1);
+        })}
+      >
+        both
+      </button>
+    </p>
+  );
+}

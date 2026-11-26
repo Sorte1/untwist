@@ -1,0 +1,15 @@
+import { createSignal } from "solid-js";
+
+function highlight(el, value) {
+  el.dataset.color = value();
+}
+
+export default function Directive() {
+  const [color] = createSignal("yellow");
+  return (
+    <div>
+      <p use:highlight={color()}>marked</p>
+      <p use:highlight={"blue"}>blue</p>
+    </div>
+  );
+}
