@@ -329,3 +329,37 @@ pub(super) fn no_op_helpers(
         .map(|(symbol, _)| symbol)
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use oxc_allocator::Allocator;
+    use untwist_core::parse::parse_program;
+    use untwist_core::semantic::build_scoping;
+
+    use super::*;
+
+    fn helper_names(source: &str) -> Vec<String> {
+        let alloc = Allocator::default();
+        let parsed = parse_program(&alloc, source);
+        let sem = build_scoping(&parsed.program);
+        let refs = scan(&parsed.program, &sem.scoping);
+        let mut names: Vec<String> = no_op_helpers(&parsed.program, &refs, &sem.scoping)
+            .into_iter()
+            .map(|symbol| sem.scoping.symbol_name(symbol).to_string())
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn empty_and_self_emptying_functions_are_no_op_helpers() {
+        let source = "function a(){} function b(x, y){b = function(){}} a(1); b(2, 3);";
+        assert_eq!(helper_names(source), ["a", "b"]);
+    }
+
+    #[test]
+    fn helpers_that_do_or_become_something_else_are_refused() {
+        let source = "function a(){a = function(){ return 1 }} function b(){} b = 2; function c(x = f()){} function d(){ return 1 }";
+        assert!(helper_names(source).is_empty());
+    }
+}
