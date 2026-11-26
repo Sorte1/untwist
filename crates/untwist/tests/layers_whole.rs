@@ -204,11 +204,17 @@ fn each_whole_program_eval_condition_refuses_its_layer() {
     let rows = [
         (
             "eval((function () { var eval; return 'console.log(1)'; })());",
-            Some(refused(LAYER_SHAPE)),
+            Some(Outcome {
+                peels: 1,
+                refused: None,
+            }),
         ),
         (
             "eval(atob((function (atob) {}, 'Y29uc29sZS5sb2coMSk=')));",
-            Some(refused(LAYER_SHAPE)),
+            Some(Outcome {
+                peels: 1,
+                refused: None,
+            }),
         ),
         (
             "eval(atob('Y29uc29sZS5sb2coMSk='));",
@@ -304,7 +310,11 @@ fn each_scanned_form_keeps_a_declaring_payload_for_unsafe() {
             refused(LAYER_NEEDS_UNSAFE),
             "{source}"
         );
-        assert_eq!(whole_program_peels(&source, true), 1, "{source}");
+        let layers = match observer.starts_with("Function(") {
+            true => 2,
+            false => 1,
+        };
+        assert_eq!(whole_program_peels(&source, true), layers, "{source}");
     }
     let clean = [
         "var x = 1; console.log(x);",

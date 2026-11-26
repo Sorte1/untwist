@@ -4,6 +4,7 @@ mod call;
 pub(crate) use call::{detach_when_scope_ends, function_expression_name};
 pub mod lexical;
 mod shared;
+pub mod sink;
 
 use oxc_ast::ast::{Program, Statement};
 use std::rc::Rc;
@@ -60,6 +61,8 @@ pub struct Interp<'a> {
     pub(crate) functions: crate::compile::FnTable<'a>,
     regexes: shared::SharedRegexes,
     sources: shared::SharedSources,
+    pub(crate) sink: Option<Box<sink::SinkState<'a>>>,
+    pub(crate) watch: sink::Watch,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -119,6 +122,8 @@ impl<'a> Interp<'a> {
             functions: crate::compile::FnTable::default(),
             regexes: shared::SharedRegexes::default(),
             sources: shared::SharedSources::default(),
+            sink: None,
+            watch: sink::Watch::Off,
         }
     }
 
@@ -287,8 +292,29 @@ impl<'a> Interp<'a> {
                 self.sources.keep(node, &text);
                 Ok(text)
             }
+            None if self.sink.is_some() => self.native_source(obj),
             None => Err(Bail::Unsupported(&"the source text of a built-in").into()),
         }
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn native_source(&mut self, obj: &ObjRef<'a>) -> Eval<'a, JsString> {
+        let id = match obj.borrow().kind {
+            ObjKind::Native(id, _) => id,
+            _ => return Err(Bail::Unsupported(&"the source text of a built-in").into()),
+        };
+        let name = match self.realm.is_bailing_native(id) {
+            true => Some(crate::builtins::native_hostile_name(obj)),
+            false => self.realm.natives().name(id).map(str::to_string),
+        };
+        let Some(name) = name else {
+            return Err(Bail::Unsupported(&"the source text of a built-in").into());
+        };
+        let text = format!("function {name}() {{ [native code] }}");
+        let units: Vec<u16> = text.encode_utf16().collect();
+        let charge = self.reserve(text_bytes(units.len()))?;
+        Ok(JsString::charged(units, charge))
     }
 }
 
@@ -534,10 +560,15 @@ impl<'a> Host<'a> for Interp<'a> {
             Value::Number(_) => {
                 refuse_primitive_miss(target, key, self.realm.number_prototype_member(key)?)
             }
-            Value::Bool(_) => refuse_boolean_member(),
+            Value::Bool(_) => match self.sink_boolean_member(key) {
+                Some(value) => Ok(value),
+                None => refuse_boolean_member(),
+            },
             Value::Object(obj) => {
                 if let Some(name) = self.realm.hostile_name(obj) {
-                    return Err(Bail::hostile_global(name).into());
+                    if !self.sink_reads_hostile(obj) {
+                        return Err(Bail::hostile_global(name).into());
+                    }
                 }
                 let own = lookup_property(obj, key)?;
                 if matches!(own, Some(Value::Undefined)) {
@@ -579,6 +610,11 @@ impl<'a> Host<'a> for Interp<'a> {
 
     fn function_source(&mut self, target: &Value<'a>) -> Eval<'a, JsString> {
         if crate::builtins::function::unwrap_bound(target).is_some() {
+            if self.sink.is_some() {
+                let units: Vec<u16> = "function () { [native code] }".encode_utf16().collect();
+                let charge = self.reserve(text_bytes(units.len()))?;
+                return Ok(JsString::charged(units, charge));
+            }
             return Err(Bail::Unsupported(&"the source text of a bound function").into());
         }
         self.own_function_source(target)

@@ -1,0 +1,18 @@
+# encoders option matrix baseline, written by cargo xtask obf-options --baseline
+# safe, unsafe and webcrack count fixtures that are perfect: they run, keep no obfuscator machinery, simplify every expression back and print what the original prints
+# cell	fixtures	safe	unsafe	webcrack	parity-gaps	causes (lane runs)
+aaencode	7	0/7	7/7	-	0	enc-prefix (7)
+jjencode-dollar	7	0/7	7/7	-	0	enc-prefix (7)
+jjencode-word	7	0/7	7/7	-	0	enc-prefix (7)
+jscrewit	7	5/7	6/7	-	0	enc-eval-lexical (1), enc-express (2)
+jscrewit-eval	7	6/7	7/7	-	0	enc-eval-lexical (1)
+jscrewit-node	7	0/7	0/7	-	0	enc-array-iterator (14)
+jsfuck	7	4/7	4/7	-	0	enc-global-text (6)
+loader-reverse	7	5/7	7/7	-	0	enc-prefix (2)
+loader-xor	7	6/7	7/7	-	0	enc-eval-lexical (1)
+# cause	cells	fixtures	lane-runs	parity-gap-cells	reason
+enc-prefix	4	23	23	0	the default lane keeps the encoder's setup statements, whose writes go to globals another script could read
+enc-eval-lexical	3	3	3	0	the eval text declares let, const or class at top level, which become script bindings when it is peeled, so only --unsafe peels it
+enc-array-iterator	1	7	14	0	JScrewIt's NODE_22 output reads the text of an array iterator ([].entries() + ""), which the evaluator does not model
+enc-global-text	1	3	6	0	JSFuck 0.4.0 reads [ from the text of the global object (Function("return this")() + ""), which depends on the host
+enc-express	1	1	2	0	JScrewIt calls console through Function("return console")() instead of handing a text to a code runner, so there is no layer to peel

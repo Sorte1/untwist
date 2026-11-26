@@ -352,17 +352,36 @@ impl Pipeline {
         site: &mut StageCx<'_, '_>,
         sem: &Semantics,
         layering: &mut Layering,
+        pristine: bool,
     ) -> Option<Peeled> {
         if !self.layers_enabled() || untwist_core::budget::check().is_err() {
             return None;
         }
         let program: &Program<'_> = site.program;
-        let probe = layers::probe(program)?;
-        let scoped = site.pass_opts.nested_root && calls_eval_directly(probe.expression);
         let index = layering.peeled().saturating_add(1);
-        let started = self.begin(LAYER_PASS);
         let cx = layering.cx(self.options.unsafe_transforms);
-        let decoded = self.decode_layer(program, sem, probe, &cx)?;
+        let nested = site.pass_opts.nested_root;
+        let (decoded, scoped, started) = match layers::probe(program) {
+            Some(probe) => {
+                let scoped = site.pass_opts.nested_root && calls_eval_directly(probe.expression);
+                let started = self.begin(LAYER_PASS);
+                let decoded = match self.decode_layer(program, sem, probe, &cx)? {
+                    Err(refused) if pristine && !nested && loader_may_help(refused) => {
+                        match layers::loader::decode(program, &cx) {
+                            Some(Ok(layer)) => Ok(layer),
+                            _ => Err(refused),
+                        }
+                    }
+                    decoded => decoded,
+                };
+                (decoded, scoped, started)
+            }
+            None if nested || !pristine => return None,
+            None => {
+                let decoded = layers::loader::decode(program, &cx)?;
+                (decoded, false, self.begin(LAYER_PASS))
+            }
+        };
         let source = program.source_text;
         let bytes_in = source.len();
         let admitted = decoded.and_then(|layer| {
@@ -414,6 +433,13 @@ impl Pipeline {
     ) -> Decoded {
         layers::decode(program, &sem.scoping, probe, cx)
     }
+}
+
+fn loader_may_help(refused: Refused) -> bool {
+    matches!(
+        refused.reason,
+        Refusal::Bailed | Refusal::NotAString | Refusal::Shape
+    )
 }
 
 fn calls_eval_directly(expression: &oxc_ast::ast::Expression<'_>) -> bool {

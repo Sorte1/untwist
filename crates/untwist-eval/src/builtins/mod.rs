@@ -14,6 +14,7 @@ mod pattern_hooks;
 pub mod regexp;
 pub mod regexp_syntax;
 pub mod shape;
+pub(crate) mod sink_members;
 pub mod string;
 pub mod string_match;
 
@@ -50,6 +51,7 @@ pub type NativeFn<'a> = fn(&mut dyn Host<'a>, Value<'a>, &[Value<'a>]) -> Eval<'
 #[derive(Default)]
 pub struct NativeTable<'a> {
     entries: Vec<(NativeFn<'a>, &'static Shape)>,
+    names: Vec<Option<String>>,
     unlisted: usize,
 }
 
@@ -63,7 +65,12 @@ impl<'a> NativeTable<'a> {
             }
         };
         self.entries.push((function, shape));
+        self.names.push(native_name(owner, name));
         NativeId((self.entries.len() - 1) as u16)
+    }
+
+    pub fn name(&self, id: NativeId) -> Option<&str> {
+        self.names.get(id.0 as usize)?.as_deref()
     }
 
     pub fn len(&self) -> usize {
@@ -81,6 +88,15 @@ impl<'a> NativeTable<'a> {
     pub fn get(&self, id: NativeId) -> Option<(NativeFn<'a>, &'static Shape)> {
         self.entries.get(id.0 as usize).copied()
     }
+}
+
+fn native_name(owner: &str, name: &str) -> Option<String> {
+    let named = match name {
+        "" if !owner.contains('.') && owner != "hostile" => owner,
+        "" => return None,
+        name => name,
+    };
+    Some(named.to_string())
 }
 
 pub const OUTSIDE_SHAPE: &str =
@@ -245,6 +261,7 @@ pub struct Realm<'a> {
     locally_pure_natives: FxHashSet<NativeId>,
     heap: Option<Rc<HeapLedger>>,
     units: charged::UnitStrings,
+    sink_members: sink_members::SinkMembers,
 }
 
 #[inline(never)]
@@ -329,6 +346,7 @@ impl<'a> Realm<'a> {
             locally_pure_natives: FxHashSet::default(),
             heap: None,
             units: charged::UnitStrings::default(),
+            sink_members: sink_members::SinkMembers::default(),
         };
         let mut globals = Globals::default();
         realm.install_values(&mut globals);
@@ -342,6 +360,7 @@ impl<'a> Realm<'a> {
         json::install(&mut realm, &mut globals, &mut table);
         function::install(&mut realm, &mut table);
         regexp::install(&mut realm, &mut globals, &mut table);
+        realm.sink_members = sink_members::register(&mut table);
         realm.natives = Rc::new(table);
         realm.link_constructors(&globals);
         realm.namespaces = namespace_objects(&globals);
@@ -407,6 +426,16 @@ impl<'a> Realm<'a> {
             .iter()
             .filter(|weak| weak.strong_count() > 0);
         (objects.count(), frames.count())
+    }
+
+    pub(crate) fn live_object_addresses(&self) -> FxHashSet<usize> {
+        self.registry
+            .borrow()
+            .objects
+            .iter()
+            .filter(|weak| weak.strong_count() > 0)
+            .map(|weak| weak.as_ptr() as usize)
+            .collect()
     }
 
     pub fn track(&self, obj: &ObjRef<'a>) {
@@ -504,6 +533,44 @@ impl<'a> Realm<'a> {
             .chain(globals.objects().into_iter().map(|(obj, _)| obj))
         {
             obj.borrow_mut().props.shrink_to_fit();
+        }
+    }
+
+    pub(crate) fn link_sink_constructors(&mut self, constructors: [Option<Value<'a>>; 3]) {
+        let protos = [OBJECT_PROTO, NUMBER_PROTO, REGEXP_PROTO];
+        for (proto, constructor) in protos.into_iter().zip(constructors) {
+            if let Some(constructor) = constructor {
+                define_builtin(&self.protos[proto], "constructor", constructor);
+            }
+        }
+        let array = self.new_object(
+            ObjKind::Native(self.bail_id, 0),
+            Some(self.protos[FUNCTION_PROTO].clone()),
+        );
+        if let Some(obj) = array.as_object() {
+            let name_key = StoredKey::named("name", Attrs::FUNCTION_NAME);
+            define_prop(obj, name_key, Value::Str(JsString::from_str("Array")));
+        }
+        define_builtin(&self.protos[ARRAY_PROTO], "constructor", array);
+        let members: Vec<(usize, &'static str, NativeId)> = self
+            .sink_members
+            .strings
+            .iter()
+            .map(|(name, id)| (STRING_PROTO, *name, *id))
+            .chain(
+                self.sink_members
+                    .arrays
+                    .iter()
+                    .map(|(name, id)| (ARRAY_PROTO, *name, *id)),
+            )
+            .collect();
+        for (proto, name, id) in members {
+            let value = self.new_object(
+                ObjKind::Native(id, 0),
+                Some(self.protos[FUNCTION_PROTO].clone()),
+            );
+            self.mark_pure(id);
+            define_builtin(&self.protos[proto], name, value);
         }
     }
 

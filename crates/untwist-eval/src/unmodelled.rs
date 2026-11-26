@@ -300,8 +300,23 @@ pub fn is_intrinsic_object(obj: &ObjRef<'_>) -> bool {
     }
 }
 
+const TO_PRIMITIVE: &str = "@@toPrimitive";
+
+thread_local! {
+    static SINK_MISSES: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+pub(crate) fn set_sink_misses(on: bool) {
+    SINK_MISSES.with(|flag| flag.set(on));
+}
+
 fn intrinsic_miss(key: &PropKey) -> bool {
-    matches!(key, PropKey::Name(name) if !ascii_eq(name.units(), HAS_INSTANCE))
+    let PropKey::Name(name) = key else {
+        return false;
+    };
+    let units = name.units();
+    !ascii_eq(units, HAS_INSTANCE)
+        && !(SINK_MISSES.with(|flag| flag.get()) && ascii_eq(units, TO_PRIMITIVE))
 }
 
 fn object_miss(obj: &ObjRef<'_>, key: &PropKey) -> bool {

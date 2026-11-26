@@ -140,7 +140,7 @@ impl Pipeline {
         if site.pass_opts.round_cap_undo.get() == RoundCapUndo::Requested {
             return Some(Staged::Replay);
         }
-        self.peel(site, sem, layering).map(Staged::Peeled)
+        self.peel(site, sem, layering, false).map(Staged::Peeled)
     }
 
     fn next_round<'a>(
@@ -169,7 +169,7 @@ impl Pipeline {
             site.pass_opts.round_cap_undo.set(RoundCapUndo::Replay);
             return Next::Settled(settled_back(site, probe, sem, true));
         }
-        if let Some(peeled) = self.peel(site, &front, layering) {
+        if let Some(peeled) = self.peel(site, &front, layering, false) {
             return Next::Exit(Staged::Peeled(peeled));
         }
         if !decoded {

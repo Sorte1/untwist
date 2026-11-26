@@ -8,6 +8,7 @@ use crate::builtins::args::{adopt_charge, slot_bytes};
 use crate::env::{declare, declare_if_absent};
 use crate::frame::FrameRef;
 use crate::host::Host;
+use crate::interp::sink::Watch;
 use crate::interp::{Interp, NativeCoercion};
 use crate::names::Name;
 use crate::stack;
@@ -63,6 +64,7 @@ impl<'a> Interp<'a> {
         match kind {
             Callable::Closure(closure) => self.invoke_closure(callee.clone(), &closure, this, args),
             Callable::Native(id) => match self.hostile_global_bail(obj, id) {
+                Some(_) if self.sink_constructs(obj) => self.sink_function(args),
                 Some(abrupt) => Err(abrupt),
                 None => self.call_native(id, this, args),
             },
@@ -89,6 +91,9 @@ impl<'a> Interp<'a> {
         this: Value<'a>,
         args: &[Value<'a>],
     ) -> Eval<'a, Value<'a>> {
+        if self.watch != Watch::Off {
+            self.watched_native(id, &this)?;
+        }
         let table = self.realm.natives();
         let Some((function, shape)) = table.get(id) else {
             return Err(Bail::Unsupported(&"unknown native function").into());
@@ -116,6 +121,9 @@ impl<'a> Interp<'a> {
     ) -> Eval<'a, Value<'a>> {
         if closure.is_generator_or_async() {
             return Err(Bail::Unsupported(&"a call of a generator or an async function").into());
+        }
+        if self.watch != Watch::Off {
+            self.watched_closure(closure)?;
         }
         self.check_heap()?;
         let compiled = self.compiled(closure)?;
@@ -253,6 +261,9 @@ impl<'a> Interp<'a> {
     pub fn construct(&mut self, callee: &Value<'a>, args: &[Value<'a>]) -> Eval<'a, Value<'a>> {
         if let Some(obj) = callee.as_object() {
             if let Some(name) = self.realm.hostile_name(obj) {
+                if self.sink_constructs(obj) {
+                    return self.sink_function(args);
+                }
                 return Err(Bail::hostile_global(name).into());
             }
         }

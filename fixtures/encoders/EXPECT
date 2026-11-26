@@ -1,0 +1,15 @@
+# fixture-glob	lane-glob (safe|unsafe)	check (runs|machinery|simplified|node)	xfail|allow	cause-key: reason
+# An xfail that passes fails the run: remove its line when the cause is fixed. cargo xtask obf-options --dir fixtures/encoders --baseline fixtures/encoders/BASELINE ranks the cause keys.
+aaencode--*	safe	machinery	xfail	enc-prefix: the default lane keeps the encoder's setup statements, whose writes go to globals another script could read
+jjencode-dollar--*	safe	machinery	xfail	enc-prefix: the default lane keeps the encoder's setup statements, whose writes go to globals another script could read
+jjencode-word--*	safe	machinery	xfail	enc-prefix: the default lane keeps the encoder's setup statements, whose writes go to globals another script could read
+loader-reverse--closures-1.js	safe	machinery	xfail	enc-prefix: the default lane keeps the encoder's setup statements, whose writes go to globals another script could read
+loader-reverse--greeting-1.js	safe	machinery	xfail	enc-prefix: the default lane keeps the encoder's setup statements, whose writes go to globals another script could read
+jscrewit--lexical-1.js	safe	machinery	xfail	enc-eval-lexical: the eval text declares let, const or class at top level, which become script bindings when it is peeled, so only --unsafe peels it
+jscrewit-eval--lexical-1.js	safe	machinery	xfail	enc-eval-lexical: the eval text declares let, const or class at top level, which become script bindings when it is peeled, so only --unsafe peels it
+loader-xor--lexical-1.js	safe	machinery	xfail	enc-eval-lexical: the eval text declares let, const or class at top level, which become script bindings when it is peeled, so only --unsafe peels it
+jsfuck--closures-1.js	*	machinery	xfail	enc-global-text: JSFuck 0.4.0 reads [ from the text of the global object (Function("return this")() + ""), which depends on the host
+jsfuck--greeting-1.js	*	machinery	xfail	enc-global-text: JSFuck 0.4.0 reads [ from the text of the global object (Function("return this")() + ""), which depends on the host
+jsfuck--tiny-1.js	*	machinery	xfail	enc-global-text: JSFuck 0.4.0 reads [ from the text of the global object (Function("return this")() + ""), which depends on the host
+jscrewit-node--*	*	machinery	xfail	enc-array-iterator: JScrewIt's NODE_22 output reads the text of an array iterator ([].entries() + ""), which the evaluator does not model
+jscrewit--empty-log-1.js	*	machinery	xfail	enc-express: JScrewIt calls console through Function("return console")() instead of handing a text to a code runner, so there is no layer to peel
