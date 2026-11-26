@@ -1,0 +1,131 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/bundle.vite.untwisted.js
+---
+==== Nt.svelte
+<script>
+	let { tone: n = "info", children, label, onpick } = $props();
+</script>
+
+<span class="badge {n}">
+	{label} {@render children?.()}
+	<button onclick={() => onpick?.(label)}>pick</button>
+</span>
+==== Component.svelte
+<script>
+	import Nt from './Nt.svelte';
+
+	let t = $state("none");
+	let n = $state(1);
+</script>
+
+<Nt label="first" onpick={(u) => (t = u)}>inner {n}</Nt>
+<Nt label="second" tone="warn" />
+<p>picked {t}</p>
+<button class="more" onclick={() => n++}>more</button>
+==== Ti.svelte
+<script>
+	let t = $state(0);
+	const n = $derived(t * 2);
+
+	function r() {
+		t = t + 1;
+	}
+</script>
+
+<button onclick={r}>clicks: {t}</button>
+<p>doubled is {n}</p>
+==== Oi.svelte
+<script>
+	let t = $state([{
+		id: 1,
+		pos: { x: 3 }
+	}, {
+		id: 2,
+		pos: {}
+	}]);
+</script>
+
+{#each t as { id: u, pos: { x: a = 9 } }, o (u)}
+	<p>{o}: {u} at {a}</p>
+{/each}
+{#each [[1, 2], [3]] as [u, a = 0]}
+	<span>{u}-{a}</span>
+{/each}
+<button onclick={() => t.reverse()}>flip</button>
+==== Pi.svelte
+<script>
+	let n = $state(false);
+
+	function r() {
+		if (n) {
+			throw new Error("boom");
+		}
+		return "fine";
+	}
+</script>
+
+<svelte:boundary>
+	{#snippet failed(u, a)}
+		<p class="err">{u.message}</p>
+	{/snippet}
+	<p>{r()}</p>
+</svelte:boundary>
+<button onclick={() => (n = true)}>break</button>
+==== Ii.svelte
+<script>
+	import Nt from './Nt.svelte';
+
+	let t = $state({
+		label: "spread",
+		tone: "warn"
+	});
+</script>
+
+<Nt {...t} />
+<button class="swap" onclick={() => (t = { label: "other" })}>swap</button>
+==== Bi.svelte
+<script>
+	let n = $state([{
+		id: 1,
+		text: "write",
+		done: false
+	}]);
+
+	let r = $state("");
+	let i = 2;
+	const s = $derived(n.filter((v) => !v.done).length);
+
+	function l() {
+		if (r) {
+			n.push({
+				id: i++,
+				text: r,
+				done: false
+			});
+			r = "";
+		}
+	}
+
+	function f(v) {
+		n = n.filter((b) => b.id !== v);
+	}
+</script>
+
+<input placeholder="new todo" bind:value={r} />
+<button class="add" onclick={l}>add</button>
+<ul>
+	{#each n as b (b.id)}
+		<li class:done={b.done}>
+			<input type="checkbox" bind:checked={b.done} /> {b.text} <button class="remove" onclick={() => f(b.id)}>x</button>
+		</li>
+	{/each}
+</ul>
+<p>{s} left</p>
+
+<style>
+	.done {
+		text-decoration: line-through;
+	}
+</style>

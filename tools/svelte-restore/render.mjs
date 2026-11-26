@@ -13,6 +13,9 @@ for (const key of Object.getOwnPropertyNames(window)) {
     } catch {}
   }
 }
+for (const key of ["Event", "CustomEvent", "EventTarget"]) {
+  Object.defineProperty(globalThis, key, { value: window[key], configurable: true, writable: true });
+}
 globalThis.window = window;
 globalThis.document = window.document;
 Object.defineProperty(globalThis, "navigator", { value: window.navigator, configurable: true });
@@ -21,7 +24,7 @@ const logs = [];
 console.log = (...args) => logs.push(args.map((arg) => String(arg)).join(" "));
 console.warn = () => {};
 
-const { mount, flushSync, tick } = await import("svelte");
+const { mount, flushSync, tick } = await import(process.env.SVELTE_PKG ?? "svelte");
 const Component = (await import(pathToFileURL(componentPath).href)).default;
 const target = document.createElement("main");
 document.body.appendChild(target);

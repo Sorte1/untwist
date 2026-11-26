@@ -1,0 +1,110 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/bundle.terser.untwisted.js
+---
+==== Nn.svelte
+<script>
+	let { tone: n = "info", children, label, onpick } = $props();
+</script>
+
+<span class="badge {n}">
+	{label} {@render children?.()}
+	<button onclick={() => onpick?.(label)}>pick</button>
+</span>
+==== Component.svelte
+<script>
+	import Nn from './Nn.svelte';
+
+	let t = $state("none");
+	let n = $state(1);
+</script>
+
+<Nn label="first" onpick={(e) => (t = e)}>inner {n}</Nn>
+<Nn label="second" tone="warn" />
+<p>picked {t}</p>
+<button class="more" onclick={() => n++}>more</button>
+==== Component2.svelte
+<script>
+	let t = $state(0);
+	const n = $derived(t * 2);
+</script>
+
+<button onclick={function () {
+        t = t + 1;
+      }}>clicks: {t}</button>
+<p>doubled is {n}</p>
+==== Component4.svelte
+<script>
+	let n = $state(false);
+</script>
+
+<svelte:boundary>
+	{#snippet failed(t, n)}
+		<p class="err">{t.message}</p>
+	{/snippet}
+	<p>
+		{function () {
+            if (n) {
+              throw new Error("boom");
+            }
+            return "fine";
+          }()}
+	</p>
+</svelte:boundary>
+<button onclick={() => (n = true)}>break</button>
+==== Component5.svelte
+<script>
+	import Nn from './Nn.svelte';
+
+	let t = $state({
+		label: "spread",
+		tone: "warn"
+	});
+</script>
+
+<Nn {...t} />
+<button class="swap" onclick={() => (t = { label: "other" })}>swap</button>
+==== Component6.svelte
+<script>
+	let n = $state([{
+		id: 1,
+		text: "write",
+		done: false
+	}]);
+
+	let r = $state("");
+	let i = 2;
+	const s = $derived(n.filter((e) => !e.done).length);
+</script>
+
+<input placeholder="new todo" bind:value={r} />
+<button class="add" onclick={function () {
+        if (r) {
+          n.push({
+            id: i++,
+            text: r,
+            done: false
+          });
+          r = "";
+        }
+      }}>add</button>
+<ul>
+	{#each n as t (t.id)}
+		<li class:done={t.done}>
+			<input type="checkbox" bind:checked={t.done} /> {t.text} <button class="remove" onclick={() => {
+          const e = t.id;
+          n = n.filter((t) => t.id !== e);
+          return;
+        }}>x</button>
+		</li>
+	{/each}
+</ul>
+<p>{s} left</p>
+
+<style>
+	.done {
+		text-decoration: line-through;
+	}
+</style>
+==== Component3 kept as JS: `he(() => v(Ut(t).pos.x, 9))` is not a template walk

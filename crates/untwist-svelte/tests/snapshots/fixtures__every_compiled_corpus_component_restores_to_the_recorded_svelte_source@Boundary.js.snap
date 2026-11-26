@@ -1,0 +1,23 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/Boundary.js
+---
+==== Boundary.svelte
+<script>
+	let broken = $state(false);
+
+	function explode() {
+		if (broken) throw new Error('boom');
+	
+		return 'fine';
+	}
+</script>
+
+<svelte:boundary>
+	{#snippet failed(error, reset)}
+		<p class="err">{error.message}</p>
+	{/snippet}
+	<p>{explode()}</p>
+</svelte:boundary>
+<button onclick={() => (broken = true)}>break</button>

@@ -1,0 +1,11 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/RestProps.js
+---
+==== RestProps.svelte
+<script>
+	let { label, ...rest } = $props();
+</script>
+
+<p {...rest}>{label}</p>

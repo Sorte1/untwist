@@ -1,0 +1,17 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/Transition.js
+---
+==== Transition.svelte
+<script>
+	import { fade, fly } from 'svelte/transition';
+
+	let show = $state(true);
+</script>
+
+{#if show}
+	<p transition:fade={{ duration: 0 }}>both</p>
+	<p in:fly={{ y: 10, duration: 0 }} out:fade|global={{ duration: 0 }}>split</p>
+{/if}
+<button onclick={() => (show = !show)}>toggle</button>
