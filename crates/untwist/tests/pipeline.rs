@@ -364,7 +364,8 @@ fn no_pipeline_note_is_a_substring_of_another() {
 
 #[test]
 fn all_pass_ctors_holds_every_group() {
-    let expected = untwist_unminify::prepare_ctors().len()
+    let expected = untwist_deobfuscate::js_confuser::ctors().len()
+        + untwist_unminify::prepare_ctors().len()
         + untwist_unminify::transpile_ctors().len()
         + untwist_unminify::unminify_ctors().len()
         + untwist_unminify::lexical_ctors().len()

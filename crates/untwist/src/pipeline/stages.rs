@@ -408,12 +408,7 @@ impl Pipeline {
             return (sem, PreparedSlot::default());
         }
         let started = self.begin("prepare");
-        let mut ctors: Vec<PassCtor<'a>> = vec![
-            untwist_deobfuscate::js_confuser::locks_boxed,
-            untwist_deobfuscate::js_confuser::strings_boxed,
-            untwist_deobfuscate::js_confuser::globals_boxed,
-            untwist_deobfuscate::js_confuser::helpers_boxed,
-        ];
+        let mut ctors: Vec<PassCtor<'a>> = untwist_deobfuscate::js_confuser::ctors();
         ctors.extend(prepare_ctors());
         let mut group = PassGroup::from_ctors(&ctors, site.pass_opts.clone());
         let (sem, report, last) =
