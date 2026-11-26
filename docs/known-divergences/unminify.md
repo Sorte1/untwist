@@ -54,8 +54,11 @@
   comparison, `x >>> y`, arithmetic with such a side, a `Math` call or constant). Then a BigInt in
   the other operand throws a `TypeError` in both forms after the same coercions; only the engine
   text of the message differs. Two operands that may both be BigInts stay a call, since
-  `Math.pow(2n, 3n)` throws and `2n ** 3n` does not. By default the rewrite waits for the built-in
-  scan to show that no input replaces anything on `Math`; `--unsafe` assumes it is not replaced.
+  `Math.pow(2n, 3n)` throws and `2n ** 3n` does not. By default the rewrite is made only when the program names
+  neither the global object (`globalThis`, `window`, `self`, `global`, `top`, `parent`, `frames`) nor
+  a code runner (`eval`, `Function`, `Reflect`, a timer) and the built-in scan shows that no input
+  replaces anything on `Math`; the name check keeps the scan, which costs a whole-program walk, off
+  the many programs it would refuse anyway. `--unsafe` assumes `Math` is not replaced.
   `x = x ** e` and `o.p = o.p ** e` (with `o` a plain name) then become `x **= e` and `o.p **= e`.
 - **Babel's array loops become `for...of` only with `--unsafe`.** `for (var _i = 0, _a = s; _i <
   _a.length; _i++) { var v = _a[_i]; … }` and loose mode's `for (var _it =

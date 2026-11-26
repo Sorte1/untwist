@@ -7,7 +7,7 @@ use oxc_syntax::scope::ScopeFlags;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::pass::{Cx, ExpressionKind, ExpressionVariants, Interest, Locality, Pass};
-use untwist_core::semantic::builtins::{Reliance, Unpatched};
+use untwist_core::semantic::builtins::{intact, patched_by_another_input, Reliance};
 use untwist_core::semantic::has_module_syntax;
 
 static RELIED_ON: Reliance = Reliance {
@@ -19,19 +19,27 @@ const MATH_CONSTANTS: [&str; 8] = [
     "E", "LN10", "LN2", "LOG10E", "LOG2E", "PI", "SQRT1_2", "SQRT2",
 ];
 const NUMERIC_GLOBALS: [&str; 3] = ["undefined", "NaN", "Infinity"];
+const REALM_NAMES: [&str; 14] = [
+    "globalThis",
+    "window",
+    "self",
+    "global",
+    "top",
+    "parent",
+    "frames",
+    "eval",
+    "Function",
+    "Reflect",
+    "setTimeout",
+    "setInterval",
+    "setImmediate",
+    "execScript",
+];
 
+#[derive(Default)]
 pub struct Exponentiation {
-    unpatched: Unpatched,
+    unpatched: Option<bool>,
     aliases: FxHashSet<SymbolId>,
-}
-
-impl Default for Exponentiation {
-    fn default() -> Self {
-        Self {
-            unpatched: Unpatched::new(&RELIED_ON),
-            aliases: FxHashSet::default(),
-        }
-    }
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
@@ -264,6 +272,13 @@ impl<'a> Visit<'a> for Aliases<'_> {
     }
 }
 
+fn reaches_the_realm(scoping: &Scoping) -> bool {
+    scoping
+        .root_unresolved_references()
+        .keys()
+        .any(|name| REALM_NAMES.contains(&name.as_str()))
+}
+
 fn may_alias(text: &str) -> bool {
     text.match_indices("Math.pow").any(|(at, found)| {
         let rest = text[at + found.len()..].trim_start();
@@ -328,6 +343,10 @@ const ACTED_ON_EXPRESSIONS: ExpressionVariants = ExpressionVariants::of(&[
 ]);
 
 impl Exponentiation {
+    fn holds(&self, cx: &Cx<'_, '_>) -> bool {
+        cx.opts.unsafe_transforms || self.unpatched == Some(true)
+    }
+
     fn rewrite_call<'a>(&mut self, node: &mut Expression<'a>, cx: &mut Cx<'a, '_>) -> bool {
         let Expression::CallExpression(call) = &*node else {
             return false;
@@ -347,7 +366,7 @@ impl Exponentiation {
             return false;
         };
         let numeric = classify.numeric(base) || classify.numeric(exponent);
-        if call.optional || !callee || !numeric || !self.unpatched.holds(cx) {
+        if call.optional || !callee || !numeric || !self.holds(cx) {
             return false;
         }
         let Expression::CallExpression(call) = node else {
@@ -410,10 +429,14 @@ impl<'a> Pass<'a> for Exponentiation {
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
-        if program.source_text.contains("pow") {
-            self.unpatched.learn_now(program, cx);
-        } else {
-            self.unpatched.learn(program, cx);
+        let asks = !cx.opts.unsafe_transforms && program.source_text.contains("pow");
+        if self.unpatched.is_none() && asks {
+            let scoping = cx.scoping();
+            let module = has_module_syntax(program);
+            let proven = !reaches_the_realm(scoping)
+                && !patched_by_another_input(&RELIED_ON)
+                && intact(program, scoping, module, &RELIED_ON);
+            self.unpatched = Some(proven);
         }
         self.aliases = find_aliases(program, cx.scoping());
     }
