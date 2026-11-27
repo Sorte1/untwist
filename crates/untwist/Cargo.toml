@@ -16,13 +16,14 @@ description = "Fast JavaScript deobfuscator, unminifier and unbundler that never
 bench = false
 
 [features]
-default = ["parallel", "modern", "boundaries", "types", "svelte", "solid"]
+default = ["parallel", "modern", "boundaries", "types", "svelte", "solid", "library-imports"]
 modern = ["untwist-rename/modern"]
 boundaries = ["untwist-unpack/boundaries"]
 parallel = ["dep:rayon"]
 types = ["dep:untwist-types"]
 svelte = ["dep:untwist-svelte"]
 solid = ["dep:untwist-solid"]
+library-imports = []
 refusal-spans = ["untwist-deobfuscate/refusal-spans"]
 libraries-all = ["untwist-rename/libraries-all"]
 test-hooks = ["refusal-spans", "untwist-core/test-hooks", "untwist-deobfuscate/test-hooks", "untwist-eval/test-hooks", "untwist-rename/test-hooks", "untwist-unminify/test-hooks", "untwist-types?/test-hooks"]

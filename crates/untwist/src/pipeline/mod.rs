@@ -394,12 +394,16 @@ impl Pipeline {
         })
     }
 
+    #[cfg(feature = "library-imports")]
     fn imports_stage(&self, output: &mut Output) {
         if !self.options.library_imports || self.options.single_file {
             return;
         }
         output.library_imports = output.bundle.as_mut().map(crate::library_imports::apply);
     }
+
+    #[cfg(not(feature = "library-imports"))]
+    fn imports_stage(&self, _output: &mut Output) {}
 
     fn limits(&self) -> Limits {
         Limits {
