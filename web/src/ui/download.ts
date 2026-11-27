@@ -3,6 +3,8 @@ import { byId, setText } from '../dom';
 import type { AppState } from '../state';
 import type { Store } from '../store';
 import { downloadText } from './details/export';
+import { restoredComponents } from './components-tab';
+import type { RestoredComponent } from './components/components';
 import { currentBundle, type BundleInfo } from './module-tree';
 
 export function isSafeRelative(path: string): boolean {
@@ -28,24 +30,33 @@ const withoutFinalNewline = (text: string): string => (text.endsWith('\n') ? tex
 const DEOBFUSCATED = 'deobfuscated.js';
 const DEOBFUSCATED_TS = 'deobfuscated.ts';
 
-export function zipPlan(bundleJson: string, bundle: BundleInfo, codes: readonly string[], stdout: string): ZipPlan {
-  const files: Zippable = Object.assign(Object.create(null) as Zippable, {
-    [BUNDLE_JSON]: strToU8(bundleJson),
-    [DEOBFUSCATED]: strToU8(withoutFinalNewline(stdout)),
-  });
+function place(files: Zippable, refused: string[], path: string, text: string): void {
+  if (isSafeRelative(path) && !Object.hasOwn(files, path)) {
+    files[path] = strToU8(text);
+  } else {
+    refused.push(path);
+  }
+}
+
+export function zipPlan(bundleJson: string | null, bundle: BundleInfo | null, codes: readonly string[], stdout: string, components: readonly RestoredComponent[] = []): ZipPlan {
+  const files: Zippable = Object.assign(Object.create(null) as Zippable, { [DEOBFUSCATED]: strToU8(withoutFinalNewline(stdout)) });
+  if (bundleJson !== null) {
+    files[BUNDLE_JSON] = strToU8(bundleJson);
+  }
   const refused: string[] = [];
-  bundle.modules.forEach((module, index) => {
-    if (isSafeRelative(module.path) && !Object.hasOwn(files, module.path)) {
-      files[module.path] = strToU8(codes[index] ?? '');
-    } else {
-      refused.push(module.path);
-    }
-  });
+  bundle?.modules.forEach((module, index) => place(files, refused, module.path, codes[index] ?? ''));
+  for (const component of components) {
+    place(files, refused, component.path, component.code);
+  }
   return { files, refused };
 }
 
-function zipping(state: AppState): boolean {
+function bundled(state: AppState): boolean {
   return currentBundle(state) !== null && state.run.result?.bundleJson !== null && !state.settings.single;
+}
+
+function zipping(state: AppState): boolean {
+  return bundled(state) || restoredComponents(state).files.length > 0;
 }
 
 export function mountDownload(store: Store<AppState>, shown: () => string): void {
@@ -60,12 +71,13 @@ export function mountDownload(store: Store<AppState>, shown: () => string): void
     }
     const index = state.selectedModule;
     const stdout = index === null ? shown() : result.stdout;
-    if (!zipping(state) || bundle === null || result.bundleJson === null) {
+    if (!zipping(state)) {
       downloadText(state.settings.types === 'ts' ? DEOBFUSCATED_TS : DEOBFUSCATED, withoutFinalNewline(stdout), 'text/javascript');
       return;
     }
     const codes = index === null ? result.modules : result.modules.map((code, at) => (at === index ? shown() : code));
-    const plan = zipPlan(result.bundleJson, bundle, codes, stdout);
+    const tree = bundled(state) ? bundle : null;
+    const plan = zipPlan(tree === null ? null : result.bundleJson, tree, codes, stdout, restoredComponents(state).files);
     import('fflate').then(
       ({ zipSync }) => downloadText('deobfuscated.zip', zipSync(plan.files, { level: 6 }), 'application/zip'),
       () => {

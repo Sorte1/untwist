@@ -36,14 +36,15 @@ function generated(seed: number): Settings {
     mem: pick([null, 512, 4096], seed >> 8),
     time: pick([null, 30], seed >> 9),
     types: pick(TYPES_CHOICES, seed >> 10),
+    svelte: bit(15),
   };
 }
 
 describe('flagsFrom', () => {
   it('emits nothing for the CLI defaults, and --unsafe for the site defaults, which open in Unsafe', () => {
     expect(flagsFrom(CLI_DEFAULTS)).toBe('');
-    expect(flagsFrom(DEFAULTS)).toBe('--unsafe --disable library-names,library-rename');
-    expect(CLI_DEFAULTS).toEqual({ ...DEFAULTS, unsafe: false, libs: true });
+    expect(flagsFrom(DEFAULTS)).toBe('--unsafe --disable library-names,library-rename --restore svelte');
+    expect(CLI_DEFAULTS).toEqual({ ...DEFAULTS, unsafe: false, libs: true, svelte: false });
   });
 
   it('leaves library naming out unless Library names is on, merging with the passes already off', () => {

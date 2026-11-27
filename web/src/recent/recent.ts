@@ -93,7 +93,7 @@ export function ago(time: number, now: number): string {
 
 export function settingsLine(hash: string): string {
   const settings = parseHash(hash).settings;
-  const flags = flagsFrom({ ...settings, libs: true })
+  const flags = flagsFrom({ ...settings, libs: true, svelte: false })
     .split(' ')
     .filter((word) => word !== '' && word !== '--unsafe')
     .join(' ');

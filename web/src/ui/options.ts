@@ -5,7 +5,7 @@ import { DEFAULT_FUEL, MODERN_CHARS, MODERN_PRESETS, RENAME_HINTS, TYPES_HINTS, 
 import type { AppState } from '../state';
 import type { Store } from '../store';
 
-type BooleanKey = 'unpack' | 'jsx' | 'unsafe' | 'deob' | 'unmin' | 'human' | 'single' | 'libs' | 'split' | 'assume' | 'smap' | 'imap';
+type BooleanKey = 'unpack' | 'jsx' | 'unsafe' | 'deob' | 'unmin' | 'human' | 'single' | 'libs' | 'split' | 'assume' | 'smap' | 'imap' | 'svelte';
 
 const COPIED_MS = 1200;
 const MODERN_CUSTOM = 'custom';

@@ -68,6 +68,7 @@
 <div class="opt" title="Split webpack, Browserify and Vite bundles into one file per module"><span class="opt-name">Unpack bundles</span><button type="button" role="switch" class="switch" data-key="unpack" aria-checked="true" aria-label="Unpack bundles"><span></span></button></div>
 <div class="opt" id="split-opt"><span class="opt-text"><span class="opt-name">Split hoisted bundles</span><span class="hint" id="split-hint">Also split Rollup and Vite output into modules by its top-level declarations (--split-hoisted)</span></span><button type="button" role="switch" class="switch" data-key="split" aria-checked="false" aria-label="Split hoisted bundles" aria-describedby="split-hint"><span></span></button></div>
 <div class="opt" id="assume-opt"><span class="opt-text"><span class="opt-name">Assume ES modules</span><span class="hint" id="assume-hint">With the split, read the tree as ES modules: splits wrapped bundles, Rollup commonjs wrappers and inferred module boundaries; drops classic-script timing and document.currentScript (--split-assume-modules)</span></span><button type="button" role="switch" class="switch" data-key="assume" aria-checked="false" aria-label="Assume ES modules" aria-describedby="assume-hint"><span></span></button></div>
+<div class="opt" id="svelte-opt"><span class="opt-text"><span class="opt-name">Restore Svelte</span><span class="hint" id="svelte-hint">Rebuild compiled Svelte 5 components as .svelte files in the Components tab; the code output stays the same (--restore svelte)</span></span><button type="button" role="switch" class="switch" data-key="svelte" aria-checked="true" aria-label="Restore Svelte" aria-describedby="svelte-hint"><span></span></button></div>
 <div class="opt" id="jsx-opt"><span class="opt-text"><span class="opt-name">Decompile JSX</span><span class="hint" id="jsx-hint">Turn createElement calls back into JSX</span></span><button type="button" role="switch" class="switch" data-key="jsx" aria-checked="true" aria-label="Decompile JSX" aria-describedby="jsx-hint"><span></span></button></div>
 <div class="stack-opt" id="modern-opt" title="--modern: only modules recognised exactly as core-js are touched; the output then assumes such an engine with its own built-ins">
 <span class="opt-text"><span class="opt-name" id="modern-title">Modern baseline</span><span class="hint" id="modern-hint">Replace core-js polyfills with native features for these browsers</span></span>
@@ -284,12 +285,14 @@
 <div class="grow"></div>
 <span class="chip" id="summary-chip" hidden></span>
 <button type="button" class="btn btn-small" id="strings-tab" aria-expanded="false" aria-controls="strings-table" hidden>Strings <span class="muted" id="strings-count"></span></button>
+<button type="button" class="btn btn-small" id="components-tab" aria-expanded="false" aria-controls="components-panel" hidden>Components <span class="muted" id="components-count"></span></button>
 <button type="button" class="btn btn-small" id="libraries-tab" aria-expanded="false" aria-controls="libraries-panel">Libraries <span class="muted" id="libraries-count"></span></button>
 <button type="button" class="btn btn-small" id="details-tab" aria-expanded="false" aria-controls="details">Details</button>
 </div>
 <div class="diag-scroll">
 <div class="diag-list" id="diag-list"><div class="diag-note">Paste some code and press Run.</div></div>
 <div class="strings-table" id="strings-table" role="region" aria-label="Decoded strings" hidden></div>
+<div class="components-panel" id="components-panel" role="region" aria-label="Restored components" hidden></div>
 <div class="libraries-panel" id="libraries-panel" role="region" aria-label="Libraries" hidden></div>
 <div class="details" id="details" hidden></div>
 </div>

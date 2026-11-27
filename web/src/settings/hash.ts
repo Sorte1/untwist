@@ -73,6 +73,7 @@ const CODECS: Readonly<Record<Key, Codec>> = {
   theme: { read: (raw) => (raw === 'dark' || raw === 'light' ? raw : undefined), write: (value) => String(value) },
   input: choice(['shown', 'hidden']),
   libs: flag,
+  svelte: flag,
 };
 
 const KEYS = Object.keys(CODECS) as Key[];
