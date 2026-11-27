@@ -4,7 +4,12 @@ use std::io::Write;
 use std::process::{Command, Stdio};
 
 pub fn bin() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_untwist"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_untwist"));
+    command.env(
+        "UNTWIST_LIBRARY_CACHE",
+        std::env::temp_dir().join("untwist-tests-no-library-cache"),
+    );
+    command
 }
 
 pub fn stdin_output(source: &str, args: &[&str]) -> std::process::Output {

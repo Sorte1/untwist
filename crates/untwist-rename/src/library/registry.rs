@@ -15,13 +15,13 @@ struct Attached {
     source: Option<Box<dyn ShardSource>>,
     loaded: BTreeMap<(usize, usize), Table>,
     curated: BTreeSet<(usize, usize)>,
-    tried: FxHashSet<usize>,
+    tried: FxHashSet<(usize, usize)>,
     failures: Vec<String>,
 }
 
 impl Attached {
     fn pending(&self) -> bool {
-        self.source.is_some() && self.tried.len() < self.collection.packages().len()
+        self.source.is_some() && self.tried.len() < self.collection.shard_count()
     }
 
     fn loaded_packages(&self) -> Vec<String> {
@@ -46,38 +46,51 @@ impl Attached {
             .any(|(known, _)| *known == package)
     }
 
-    fn fetch(&mut self, package: usize, base: &Table, built_in: &[String]) -> Vec<Table> {
-        self.tried.insert(package);
-        let Some(source) = &self.source else {
-            return Vec::new();
-        };
-        let curated = self.collection.packages()[package].curated;
-        if curated && built_in.contains(&self.collection.packages()[package].id) {
-            return Vec::new();
+    fn has_shard(&self, slot: (usize, usize)) -> bool {
+        self.loaded.contains_key(&slot) || self.curated.contains(&slot)
+    }
+
+    fn built_in(&self, package: usize, built_in: &[String]) -> bool {
+        let entry = &self.collection.packages()[package];
+        entry.curated && built_in.contains(&entry.id) && !self.has_loaded(package)
+    }
+
+    fn fetch(
+        &mut self,
+        (package, index): (usize, usize),
+        base: &Table,
+        built_in: &[String],
+    ) -> Option<Table> {
+        self.tried.insert((package, index));
+        let source = self.source.as_ref()?;
+        if self.built_in(package, built_in) {
+            return None;
         }
-        let shards = self.collection.packages()[package].shards.clone();
-        let mut adopted = Vec::new();
-        for (index, shard) in shards.iter().enumerate() {
-            let table = source
-                .read(shard)
-                .map_err(|reason| CollectionError::Shard {
-                    file: shard.file.clone(),
-                    reason,
-                })
-                .and_then(|bytes| shard_table(shard, &bytes));
-            match (table, curated) {
-                (Ok(table), true) => {
-                    self.curated.insert((package, index));
-                    adopted.push(table);
-                }
-                (Ok(table), false) => {
-                    self.loaded
-                        .insert((package, index), table.into_collection(base));
-                }
-                (Err(error), _) => self.failures.push(error.to_string()),
+        let entry = &self.collection.packages()[package];
+        let curated = entry.curated;
+        let shard = entry.shards[index].clone();
+        let table = source
+            .read(&shard)
+            .map_err(|reason| CollectionError::Shard {
+                file: shard.file.clone(),
+                reason,
+            })
+            .and_then(|bytes| shard_table(&shard, &bytes));
+        match (table, curated) {
+            (Ok(table), true) => {
+                self.curated.insert((package, index));
+                Some(table)
+            }
+            (Ok(table), false) => {
+                self.loaded
+                    .insert((package, index), table.into_collection(base));
+                None
+            }
+            (Err(error), _) => {
+                self.failures.push(error.to_string());
+                None
             }
         }
-        adopted
     }
 }
 
@@ -223,24 +236,24 @@ pub fn wanting(loose: &FxHashSet<u32>) -> Arc<Table> {
         let Some(attached) = loaded.attached.as_mut() else {
             return Arc::clone(&loaded.table);
         };
-        let wanted: Vec<usize> = attached
+        let wanted: Vec<(usize, usize)> = attached
             .collection
-            .wanted_by_keys(loose)
+            .shards_wanted_by_keys(loose)
             .into_iter()
-            .filter(|package| !attached.tried.contains(package))
+            .filter(|slot| !attached.tried.contains(slot))
             .collect();
         if wanted.is_empty() {
             return Arc::clone(&loaded.table);
         }
         let before = attached.loaded.len();
         let mut adopted = Vec::new();
-        for package in wanted {
-            let tables = attached.fetch(package, &loaded.base, &loaded.ids);
-            let id = attached.collection.packages()[package].id.clone();
-            adopted.push((id, tables));
+        for slot in wanted {
+            if let Some(table) = attached.fetch(slot, &loaded.base, &loaded.ids) {
+                let id = attached.collection.packages()[slot.0].id.clone();
+                adopted.push((id, vec![table]));
+            }
         }
-        let changed =
-            attached.loaded.len() != before || adopted.iter().any(|(_, tables)| !tables.is_empty());
+        let changed = attached.loaded.len() != before || !adopted.is_empty();
         for (id, tables) in adopted {
             loaded.adopt(id, tables);
         }
@@ -257,15 +270,20 @@ pub fn wanted(text: &str, loose: &FxHashSet<u32>) -> Vec<String> {
             return Vec::new();
         };
         let collection = &attached.collection;
-        let mut packages = collection.wanted_by_text(text);
-        packages.extend(collection.wanted_by_keys(loose));
-        packages.sort_unstable();
-        packages.dedup();
-        packages
+        let mut slots: Vec<(usize, usize)> = collection
+            .wanted_by_text(text)
             .into_iter()
-            .filter(|&package| !attached.has_loaded(package))
-            .map(|package| collection.packages()[package].id.clone())
-            .filter(|id| !loaded.ids.contains(id))
+            .flat_map(|package| {
+                (0..collection.packages()[package].shards.len()).map(move |shard| (package, shard))
+            })
+            .collect();
+        slots.extend(collection.shards_wanted_by_keys(loose));
+        slots.sort_unstable();
+        slots.dedup();
+        slots
+            .into_iter()
+            .filter(|&slot| !attached.has_shard(slot) && !attached.built_in(slot.0, &loaded.ids))
+            .map(|(package, shard)| collection.packages()[package].shards[shard].sha256.clone())
             .collect()
     })
 }
@@ -289,7 +307,7 @@ pub fn load_shard(bytes: &[u8]) -> Result<String, CollectionError> {
         let table = shard_table(shard, bytes)?;
         let id = attached.collection.packages()[package].id.clone();
         if attached.collection.packages()[package].curated {
-            let built_in = loaded.ids.contains(&id) && !attached.has_loaded(package);
+            let built_in = attached.built_in(package, &loaded.ids);
             if built_in || !attached.curated.insert((package, index)) {
                 return Ok(id);
             }

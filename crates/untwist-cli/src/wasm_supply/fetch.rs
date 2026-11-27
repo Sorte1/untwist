@@ -20,6 +20,8 @@ pub struct Limits {
     pub redirects: usize,
     pub phase: Duration,
     pub request: Duration,
+    pub flag: &'static str,
+    pub items: &'static str,
 }
 
 pub const LIMITS: Limits = Limits {
@@ -29,6 +31,8 @@ pub const LIMITS: Limits = Limits {
     redirects: 3,
     phase: Duration::from_secs(120),
     request: Duration::from_secs(30),
+    flag: "--fetch-wasm",
+    items: "wasm modules",
 };
 
 #[derive(Debug)]
@@ -149,18 +153,22 @@ impl Fetcher {
     pub fn exhausted(&self) -> Option<String> {
         if self.attempts >= self.limits.references {
             return Some(format!(
-                "--fetch-wasm fetches at most {} wasm modules in one run",
-                self.limits.references
+                "{} fetches at most {} {} in one run",
+                self.limits.flag, self.limits.references, self.limits.items
             ));
         }
         if self.budget() == 0 {
             return Some(format!(
-                "--fetch-wasm fetches at most {} in one run",
+                "{} fetches at most {} in one run",
+                self.limits.flag,
                 size(self.limits.total_bytes)
             ));
         }
         if self.remaining().is_none() {
-            return Some(format!("--fetch-wasm stops after {:?}", self.limits.phase));
+            return Some(format!(
+                "{} stops after {:?}",
+                self.limits.flag, self.limits.phase
+            ));
         }
         None
     }
@@ -185,7 +193,7 @@ impl Fetcher {
     fn request(&mut self, target: &str) -> Result<Reply, String> {
         let left = self
             .remaining()
-            .ok_or_else(|| format!("--fetch-wasm stops after {:?}", self.limits.phase))?;
+            .ok_or_else(|| format!("{} stops after {:?}", self.limits.flag, self.limits.phase))?;
         let response = self
             .agent
             .get(target)
@@ -231,8 +239,9 @@ impl Fetcher {
     fn too_large(&self, allowed: u64) -> String {
         match allowed < self.limits.response_bytes {
             true => format!(
-                "it would pass the {} that --fetch-wasm fetches in one run",
-                size(self.limits.total_bytes)
+                "it would pass the {} that {} fetches in one run",
+                size(self.limits.total_bytes),
+                self.limits.flag
             ),
             false => format!("it is larger than {}", size(self.limits.response_bytes)),
         }

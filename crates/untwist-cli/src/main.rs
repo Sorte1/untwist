@@ -3,6 +3,8 @@ pub(crate) mod budget;
 pub(crate) mod channel;
 pub(crate) mod hooks;
 pub(crate) mod libraries;
+mod library_cache;
+mod library_command;
 mod output;
 mod preflight;
 pub(crate) mod reruns;
@@ -511,6 +513,9 @@ fn main() -> ExitCode {
 }
 
 pub(crate) fn main_with(parsed: &dyn Fn(), finished: &dyn Fn()) -> ExitCode {
+    if let Some(code) = library_command::dispatch() {
+        return code;
+    }
     let role = hooks::role(worker::is_worker(), hooks::supervisor_hook());
     if !matches!(role, Role::Supervisor(_)) {
         raise_glibc_dynamic_mmap_and_trim_thresholds_by_freeing_one_untouched_block();

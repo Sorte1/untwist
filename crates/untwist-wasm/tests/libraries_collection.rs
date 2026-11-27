@@ -25,11 +25,23 @@ fn the_page_loads_a_collection_asks_what_it_wants_and_passes_the_shards_in() {
     let first = run_report(&source, "--unsafe", false);
     let wanted: Vec<String> =
         serde_json::from_str(&untwist_wasm::library_wanted(&first.stdout())).expect("a json list");
-    assert!(wanted.contains(&"eventemitter3".to_string()), "{wanted:?}");
+    let shard_of = |id: &str| -> serde_json::Value {
+        json["packages"]
+            .as_array()
+            .expect("packages")
+            .iter()
+            .find(|package| package["id"] == id)
+            .expect("the package")["shards"][0]
+            .clone()
+    };
+    let eventemitter3 = shard_of("eventemitter3");
+    let sha = eventemitter3["sha256"].as_str().expect("a hash");
+    assert!(wanted.iter().any(|known| known == sha), "{wanted:?}");
     assert_eq!(untwist_wasm::load_library_shard(b"not a shard"), "");
     for package in json["packages"].as_array().expect("packages") {
-        if wanted.iter().any(|id| package["id"] == id.as_str()) {
-            let file = package["shards"][0]["file"].as_str().expect("a shard");
+        let shard = &package["shards"][0];
+        if wanted.iter().any(|known| shard["sha256"] == known.as_str()) {
+            let file = shard["file"].as_str().expect("a shard");
             assert_eq!(
                 untwist_wasm::load_library_shard(&read(file)),
                 package["id"].as_str().unwrap()

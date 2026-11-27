@@ -169,3 +169,31 @@ fn every_fixture_shard_is_a_v2_table_named_by_its_hash() {
         assert!(Table::parse(&text).is_some());
     }
 }
+
+#[test]
+fn a_shard_bloom_selects_only_its_own_shard() {
+    use untwist_rename::library::collection::shard_bloom_id;
+    let shard = |hex: char| {
+        format!(
+            "{{\"file\": \"shards/{0}.utl\", \"bytes\": 1, \"sha256\": \"{0}\"}}",
+            hex.to_string().repeat(64)
+        )
+    };
+    let blooms = bloom_file(&[
+        (shard_bloom_id("three", 0), Bloom::with_keys(&[11])),
+        (shard_bloom_id("three", 1), Bloom::with_keys(&[22])),
+    ]);
+    let sha = sha256_hex(&blooms);
+    let index = format!(
+        "{{\"schema\": \"untwist.library-collection/1\", \"version\": \"t\", \"shape_epoch\": {SHAPE_EPOCH}, \"packages\": [{{\"id\": \"three\", \"label\": \"three\", \"shards\": [{}, {}]}}], \"filters\": {{\"file\": \"shards/{sha}.bloom\", \"sha256\": \"{sha}\"}}}}",
+        shard('a'),
+        shard('b')
+    );
+    let mut collection = Collection::parse(&index).expect("the index parses");
+    collection.attach_filters(&blooms).expect("the filters load");
+    let keys = |key: u32| -> FxHashSet<u32> { [key].into_iter().collect() };
+    assert_eq!(collection.shards_wanted_by_keys(&keys(11)), [(0, 0)]);
+    assert_eq!(collection.shards_wanted_by_keys(&keys(22)), [(0, 1)]);
+    assert_eq!(collection.wanted_by_keys(&keys(22)), [0]);
+    assert_eq!(collection.shard_count(), 2);
+}

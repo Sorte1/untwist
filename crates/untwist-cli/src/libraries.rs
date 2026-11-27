@@ -4,24 +4,30 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 use untwist::libraries::{self, Collection, Shard, ShardSource, INDEX};
 
+use crate::library_cache;
+
 const BUILTIN: &str = "builtin";
 const NONE: &str = "none";
+const CACHE: &str = "cache";
 const CORE_JS: &str = "core-js";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Source {
     Builtin,
     None,
+    Cache,
     Path(PathBuf),
+    Url(String),
 }
 
 pub fn source(value: &str) -> Result<Source, String> {
     match value {
         BUILTIN => Ok(Source::Builtin),
         NONE => Ok(Source::None),
-        "" => Err("expected builtin, none or a path".to_string()),
+        CACHE => Ok(Source::Cache),
+        "" => Err("expected builtin, none, cache, a path or an http(s) URL".to_string()),
         _ if value.starts_with("http://") || value.starts_with("https://") => {
-            Err("library collections are read from a local path in this version".to_string())
+            Ok(Source::Url(value.to_string()))
         }
         path => Ok(Source::Path(PathBuf::from(path))),
     }
@@ -53,6 +59,22 @@ fn load_table(path: &Path) -> Result<()> {
     let tables = libraries::LibraryTables::from_gz_bytes(&bytes)
         .with_context(|| format!("{} is not a library table", path.display()))?;
     libraries::load(tables);
+    Ok(())
+}
+
+fn attach_cache(err: &mut dyn Write) -> Result<()> {
+    let Some(dir) = library_cache::cache_dir() else {
+        return Ok(());
+    };
+    match library_cache::cached_index(&dir) {
+        Some(_) => attach_collection(&dir, err),
+        None => Ok(()),
+    }
+}
+
+fn attach_url(url: &str, err: &mut dyn Write) -> Result<()> {
+    let opened = library_cache::open_remote(url, err)?;
+    libraries::attach(opened.collection, Some(Box::new(opened.source)));
     Ok(())
 }
 
@@ -95,24 +117,31 @@ fn attach_collection(path: &Path, err: &mut dyn Write) -> Result<()> {
 
 pub fn configure(sources: &[Source], err: &mut dyn Write) -> Result<()> {
     if sources.is_empty() {
-        return Ok(());
+        return attach_cache(err);
     }
     let builtin = !sources.contains(&Source::None) || sources.contains(&Source::Builtin);
     libraries::use_builtin(builtin);
     let mut collections = 0;
     for source in sources {
-        let Source::Path(path) = source else {
-            continue;
-        };
-        if is_table(path) {
-            load_table(path)?;
+        if let Source::Path(path) = source {
+            if is_table(path) {
+                load_table(path)?;
+                continue;
+            }
+        }
+        if matches!(source, Source::Builtin | Source::None) {
             continue;
         }
         collections += 1;
         if collections > 1 {
-            bail!("--libraries takes one collection directory");
+            bail!("--libraries takes one collection (a directory, cache or a URL)");
         }
-        attach_collection(path, err)?;
+        match source {
+            Source::Path(path) => attach_collection(path, err)?,
+            Source::Cache => attach_cache(err)?,
+            Source::Url(url) => attach_url(url, err)?,
+            Source::Builtin | Source::None => {}
+        }
     }
     Ok(())
 }
@@ -120,7 +149,7 @@ pub fn configure(sources: &[Source], err: &mut dyn Write) -> Result<()> {
 pub fn require_core_js(modern: bool) -> Result<()> {
     if modern && !libraries::provides(CORE_JS) {
         bail!(
-            "core-js fingerprints are not available: pass `--libraries DIR` with a collection that has core-js, or build with `libraries-corejs`"
+            "core-js fingerprints are not available: run `untwist libraries update` or build with `libraries-corejs`"
         );
     }
     Ok(())

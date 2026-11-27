@@ -66,7 +66,7 @@ pub use untwist_rename::RenameMode;
 
 pub mod libraries {
     pub use untwist_rename::library::collection::{
-        Collection, CollectionError, Index, Package, Shard, INDEX, SCHEMA,
+        sha256_hex, Collection, CollectionError, Index, Package, Shard, INDEX, SCHEMA,
     };
     pub use untwist_rename::library::registry::{
         attach, collection_status, load_shard, provides, use_builtin, wanted, CollectionStatus,
