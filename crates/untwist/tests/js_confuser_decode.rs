@@ -2,7 +2,8 @@ use untwist::{Options, Pipeline};
 use untwist_testing::js_files_in;
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
-const KEPT: [(&str, &str); 22] = [
+const KEPT: [(&str, &str); 23] = [
+    ("kept-custom-free-name.js", "_MAIN_STR("),
     ("kept-integrity-key-read.js", "fnObject"),
     ("kept-integrity-key-prototype.js", "TAMPERED"),
     ("kept-return-newline-integrity.js", "TAMPERED"),
@@ -47,7 +48,7 @@ fn unsafe_lane(source: &str) -> String {
 
 fn fixtures() -> Vec<(String, String)> {
     let fixtures = js_files_in("fixtures/js-confuser-decode");
-    assert_eq!(fixtures.len(), 28);
+    assert_eq!(fixtures.len(), 30);
     fixtures
 }
 
@@ -159,4 +160,12 @@ fn a_patched_iterator_keeps_flatten_in_the_default_lane_only() {
     let source = named(&fixtures(), "patched-flat-iterator.js");
     assert!(default_lane(&source).contains("_flat_twice("));
     assert!(!unsafe_lane(&source).contains("_flat_twice("));
+}
+fn a_custom_string_encoding_decodes_by_evaluation_in_both_lanes() {
+    let source = named(&fixtures(), "custom-encoding.js");
+    for code in [default_lane(&source), unsafe_lane(&source)] {
+        assert!(code.contains("hello, "), "{code}");
+        assert!(!code.contains("_STR("), "{code}");
+        assert!(!code.contains("TextDecoder"), "{code}");
+    }
 }
