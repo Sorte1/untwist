@@ -1,22 +1,26 @@
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
     Argument, ArrowFunctionExpression, AssignmentTarget, BindingIdentifier, CallExpression, Class,
-    Expression, ForInStatement, ForOfStatement, Function, IdentifierReference, Program,
-    SimpleAssignmentTarget, Statement, UnaryExpression, WithStatement,
+    ComputedMemberExpression, Expression, ForInStatement, ForOfStatement, Function,
+    IdentifierReference, Program, SimpleAssignmentTarget, Statement, StaticMemberExpression,
+    StringLiteral, TemplateElement, ThisExpression, UnaryExpression, WithStatement,
 };
 use oxc_ast_visit::{walk, Visit};
 use oxc_semantic::{Semantic, SemanticBuilder};
 use oxc_span::GetSpan;
 use oxc_syntax::operator::UnaryOperator;
 use oxc_syntax::scope::ScopeFlags;
+use untwist_core::ast_util::js_text::js_text;
 use untwist_core::parse::{has_error, parse_with, SourceType};
 use untwist_core::semantic::{other_inputs_given, program_is_strict};
 use untwist_eval::{function_text, run_sink, SinkCallee, SinkOutcome, SinkScript};
 
 use super::decode::sloppy_script;
+use super::eval::declared_names;
 use super::eval::verdict;
 use super::function::{joined, pooled};
 use super::model::{DecodeCx, Decoded, Layer, LayerForm, Refusal, Refused};
+use super::scope::{declared_by, is_direct_eval, reaches_module_scope, Runs};
 
 const POOL_CAP: usize = 64;
 
@@ -167,6 +171,7 @@ fn probed(site: &Site<'_, '_>, parts: &Parts<'_, '_>, cx: &DecodeCx) -> Probed {
         heap: 0,
         clean: false,
     };
+    let declared = declared_by(site.prefix);
     loop {
         let left = cx.fuel.saturating_sub(spent.steps);
         if left == 0 {
@@ -181,14 +186,20 @@ fn probed(site: &Site<'_, '_>, parts: &Parts<'_, '_>, cx: &DecodeCx) -> Probed {
                 if pool.len() >= POOL_CAP || pool.contains(&texts) {
                     return Probed::Refused(Refusal::Cap);
                 }
-                if pooled(&texts).is_none() {
+                let Some(function) = pooled(&texts) else {
                     return Probed::Refused(Refusal::Injection);
+                };
+                if reaches_module_scope(&function, &declared, Runs::InFunction) {
+                    return Probed::Refused(Refusal::Scope);
                 }
                 pool.push(texts);
             }
             SinkOutcome::Reached { callee, texts } if callee == parts.shape.callee() => {
                 if !cx.unsafe_transforms && other_inputs_given() {
                     return Probed::Refused(Refusal::NeedsUnsafe);
+                }
+                if let Some(reason) = scope_refusal(site, parts, &declared, &texts) {
+                    return Probed::Refused(reason);
                 }
                 let prefix = match spent.clean && cx.unsafe_transforms {
                     true => kept_prefix(site, prefix, parts, &texts),
@@ -207,6 +218,55 @@ fn probed(site: &Site<'_, '_>, parts: &Parts<'_, '_>, cx: &DecodeCx) -> Probed {
             SinkOutcome::Reached { .. } | SinkOutcome::Refused => return Probed::Missed,
         }
     }
+}
+
+fn scope_refusal(
+    site: &Site<'_, '_>,
+    parts: &Parts<'_, '_>,
+    declared: &[String],
+    texts: &[String],
+) -> Option<Refusal> {
+    let reaches = match parts.shape {
+        Shape::Called => pooled(texts)
+            .is_none_or(|function| reaches_module_scope(&function, declared, Runs::InFunction)),
+        Shape::Evaluated => {
+            let [text] = texts else {
+                return Some(Refusal::Shape);
+            };
+            let indirect = !is_direct_eval(parts.callee)
+                && reaches_module_scope(text, declared, Runs::IndirectEval);
+            indirect || hoists_over_prefix(site, parts, text)
+        }
+    };
+    reaches.then_some(Refusal::Scope)
+}
+
+fn hoists_over_prefix(site: &Site<'_, '_>, parts: &Parts<'_, '_>, text: &str) -> bool {
+    let alloc = Allocator::default();
+    let parsed = parse_with(&alloc, text, SourceType::script());
+    if has_error(&parsed.diagnostics) {
+        return true;
+    }
+    if program_is_strict(&parsed.program) {
+        return false;
+    }
+    let declared = declared_names(&parsed.program);
+    if declared.is_empty() {
+        return false;
+    }
+    let mut named = Syntax {
+        names: Some(Vec::new()),
+        ..Syntax::default()
+    };
+    for statement in site.prefix {
+        named.visit_statement(statement);
+    }
+    named.visit_expression(parts.callee);
+    for arg in &parts.args {
+        named.visit_expression(arg);
+    }
+    let named = named.names.unwrap_or_default();
+    declared.iter().any(|name| named.contains(name))
 }
 
 fn region_text(source: &str, parts: &Parts<'_, '_>) -> String {
@@ -331,11 +391,16 @@ fn bindings_stay_inside(semantic: &Semantic<'_>, region: u32) -> bool {
 }
 
 #[derive(Default)]
-struct Syntax {
+pub(super) struct Syntax {
     functions: bool,
     writes_out: bool,
     unwatched: bool,
     names: Option<Vec<String>>,
+    pub(super) bindings: Vec<String>,
+    words: Option<Vec<String>>,
+    depth: usize,
+    pub(super) this: bool,
+    pub(super) arguments: bool,
 }
 
 impl Syntax {
@@ -353,12 +418,58 @@ impl Syntax {
             names.push(name.to_string());
         }
     }
+
+    fn spell(&mut self, text: &str) {
+        let Some(words) = self.words.as_mut() else {
+            return;
+        };
+        let spelled = text
+            .split(|c: char| !(c.is_alphanumeric() || c == '_' || c == '$'))
+            .filter(|word| !word.is_empty())
+            .map(str::to_string);
+        words.extend(spelled);
+    }
 }
 
 impl<'a> Visit<'a> for Syntax {
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
         self.functions = true;
+        self.depth += 1;
         walk::walk_function(self, it, flags);
+        self.depth -= 1;
+    }
+
+    fn visit_this_expression(&mut self, _it: &ThisExpression) {
+        self.this |= self.depth == 0;
+    }
+
+    fn visit_string_literal(&mut self, it: &StringLiteral<'a>) {
+        self.spell(&js_text(it.value));
+    }
+
+    fn visit_template_element(&mut self, it: &TemplateElement<'a>) {
+        self.spell(it.value.raw.as_str());
+        if let Some(cooked) = &it.value.cooked {
+            self.spell(&js_text(*cooked));
+        }
+    }
+
+    fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
+        self.spell(&it.property.name);
+        walk::walk_static_member_expression(self, it);
+    }
+
+    fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
+        let named = matches!(
+            it.expression.without_parentheses(),
+            Expression::Identifier(_)
+                | Expression::NumericLiteral(_)
+                | Expression::StringLiteral(_)
+        );
+        if !named {
+            self.spell("constructor");
+        }
+        walk::walk_computed_member_expression(self, it);
     }
 
     fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
@@ -406,10 +517,12 @@ impl<'a> Visit<'a> for Syntax {
     }
 
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.arguments |= self.depth == 0 && it.name == "arguments";
         self.name(&it.name);
     }
 
     fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+        self.bindings.push(it.name.to_string());
         self.name(&it.name);
     }
 }
@@ -483,8 +596,9 @@ fn kept_prefix<'s>(
     }
 }
 
-const REFLECTIVE: [&str; 11] = [
+const REFLECTIVE: [&str; 12] = [
     "eval",
+    "constructor",
     "Function",
     "globalThis",
     "window",
@@ -503,7 +617,10 @@ fn outside_names(text: &str) -> Option<Vec<String>> {
     if has_error(&parsed.diagnostics) {
         return None;
     }
-    let mut with = Syntax::default();
+    let mut with = Syntax {
+        words: Some(Vec::new()),
+        ..Syntax::default()
+    };
     with.visit_program(&parsed.program);
     if with.unwatched {
         return None;
@@ -522,6 +639,7 @@ fn outside_names(text: &str) -> Option<Vec<String>> {
             .iter()
             .map(|(name, _)| name.to_string()),
     );
+    names.extend(with.words.unwrap_or_default());
     Some(names)
 }
 

@@ -4,7 +4,7 @@ use untwist::{Options, Output, Pipeline};
 use untwist_core::pass::NoteKind;
 use untwist_deobfuscate::layers::notes::{
     LAYER_BAILED, LAYER_CAP, LAYER_CYCLE, LAYER_FUEL, LAYER_INJECTION, LAYER_NEEDS_UNSAFE,
-    LAYER_NOT_A_STRING, LAYER_SHAPE, LAYER_TOO_DEEP, LAYER_UNPARSABLE,
+    LAYER_NOT_A_STRING, LAYER_SCOPE, LAYER_SHAPE, LAYER_TOO_DEEP, LAYER_UNPARSABLE,
 };
 use untwist_testing::node_rows::{mismatches, node_or_skip, Mode};
 
@@ -43,6 +43,7 @@ fn reason_text(name: &str) -> &'static str {
         "LAYER_INJECTION" => LAYER_INJECTION,
         "LAYER_NEEDS_UNSAFE" => LAYER_NEEDS_UNSAFE,
         "LAYER_NOT_A_STRING" => LAYER_NOT_A_STRING,
+        "LAYER_SCOPE" => LAYER_SCOPE,
         "LAYER_SHAPE" => LAYER_SHAPE,
         "LAYER_TOO_DEEP" => LAYER_TOO_DEEP,
         "LAYER_UNPARSABLE" => LAYER_UNPARSABLE,
@@ -117,6 +118,7 @@ fn observed(out: &Output) -> Outcome {
             LAYER_INJECTION,
             LAYER_NEEDS_UNSAFE,
             LAYER_NOT_A_STRING,
+            LAYER_SCOPE,
             LAYER_SHAPE,
             LAYER_TOO_DEEP,
             LAYER_UNPARSABLE,
@@ -310,11 +312,7 @@ fn each_scanned_form_keeps_a_declaring_payload_for_unsafe() {
             refused(LAYER_NEEDS_UNSAFE),
             "{source}"
         );
-        let layers = match observer.starts_with("Function(") {
-            true => 2,
-            false => 1,
-        };
-        assert_eq!(whole_program_peels(&source, true), layers, "{source}");
+        assert_eq!(whole_program_peels(&source, true), 1, "{source}");
     }
     let clean = [
         "var x = 1; console.log(x);",

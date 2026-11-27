@@ -96,6 +96,33 @@ pub fn verdict(
     Ok(false)
 }
 
+pub(super) fn var_names(program: &Program<'_>) -> Vec<String> {
+    TopLevel::of(&program.body).var_names
+}
+
+pub(super) fn declared_names(program: &Program<'_>) -> Vec<String> {
+    let mut names = var_names(program);
+    for statement in &program.body {
+        names.extend(lexical_names(statement));
+    }
+    names
+}
+
+fn lexical_names(statement: &Statement<'_>) -> Vec<String> {
+    match statement {
+        Statement::VariableDeclaration(decl) if !is_var(decl) => decl
+            .declarations
+            .iter()
+            .flat_map(|declarator| declarator.id.get_binding_identifiers())
+            .map(|id| id.name.to_string())
+            .collect(),
+        Statement::ClassDeclaration(class) => {
+            class.id.iter().map(|id| id.name.to_string()).collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
 #[derive(Default)]
 struct TopLevel {
     var: bool,

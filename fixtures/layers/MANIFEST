@@ -12,9 +12,9 @@ eval/decl-let.js	W-eval	hand	needs-unsafe	ab2b03175b1cf04273b0423ebeac1d4eeffe7b
 eval/decl-var.js	W-eval	hand	peel	1665767ab37f34593224d1e804efda1169585a7b2603885a21a0e6143bd9907d
 eval/decl-with.js	W-eval	hand	needs-unsafe:a-l1-witness	d08b48db7e95cd73b61043c873bcd16778ac708714491838ae4a779c1a8cf08f
 eval/fromcharcode.js	W-eval	gen.mjs	peel	2db701fd45ca2c0edae1cf92094533c55fde3a1f81a49ced64d6dc693a7fbd65
-eval/indirect-comma.js	W-eval	hand	peel	2e3247791f334fe64160f0fde22f65ce28af23e0fafc0f6add60939173051b4e
+eval/indirect-comma.js	W-eval	hand	refuse:LAYER_SCOPE	2e3247791f334fe64160f0fde22f65ce28af23e0fafc0f6add60939173051b4e
 eval/indirect-globalthis.js	W-eval	hand	peel	2b1380760c657e7fb0d5833bcc5bcd01c3df93521dc74bcccae39b02e9bf5f5c
-eval/indirect-this.js	W-eval	hand	peel	b197f208d86fba730e7b865c1fbdaad47c4e1e07311c249583a81068b9cfb1f0
+eval/indirect-this.js	W-eval	hand	refuse:LAYER_SCOPE	b197f208d86fba730e7b865c1fbdaad47c4e1e07311c249583a81068b9cfb1f0
 eval/join.js	W-eval	hand	peel	d76d88fc570b716853320ace295dadd87c31fbf814b006cf5a2f93ffac951f12
 eval/limit-k3-deep.js	W-eval	gen.mjs	refuse:LAYER_TOO_DEEP	9486f4fbc81662115ebf5cf8964154782ca585d8b07fd6e7429021bec0e991e9
 eval/limit-k8-fuel.js	W-eval	hand	refuse:LAYER_FUEL	50968307a28cc92fa40391282c4ff5f53fe86b25d0437733db5f7477db52061d
