@@ -1,0 +1,6 @@
+collapse.min.js	uglify-js@3.19.3	{"compress":true,"mangle":true}
+collapse.top.js	uglify-js@3.19.3	{"compress":{"toplevel":true,"passes":2},"mangle":{"toplevel":true}}
+merge-vars.min.js	uglify-js@3.19.3	{"compress":true,"mangle":true}
+merge-vars.top.js	uglify-js@3.19.3	{"compress":{"toplevel":true,"passes":2},"mangle":{"toplevel":true}}
+registry.min.js	uglify-js@3.19.3	{"compress":true,"mangle":true}
+registry.top.js	uglify-js@3.19.3	{"compress":{"toplevel":true,"passes":2},"mangle":{"toplevel":true}}

@@ -8,9 +8,9 @@ use untwist_core::semantic::{Semantics, Shape};
 
 use crate::{
     block_statements, computed_properties, for_to_while, function_to_arrow, infinity,
-    invert_boolean_logic, json_parse, let_to_const, logical_to_if, merge_else_if, merge_strings,
-    number_expressions, remove_double_not, sequence, split_for_loop_vars,
-    split_variable_declarations, string_literal_in_template, ternary_to_if,
+    invert_boolean_logic, json_parse, lead_assignment, let_to_const, logical_to_if, merge_else_if,
+    merge_strings, number_expressions, remove_double_not, sequence, split_for_loop_vars,
+    split_merged_vars, split_variable_declarations, string_literal_in_template, ternary_to_if,
     truncate_number_literal, typeof_undefined, unary_expressions, unminify_booleans, untranspile,
     unwrap_comma_call, var_to_let, void_to_undefined, yoda,
 };
@@ -28,8 +28,10 @@ pub fn unminify_ctors<'a>() -> Vec<PassCtor<'a>> {
         merge_strings::boxed,
         number_expressions::boxed,
         remove_double_not::boxed,
+        lead_assignment::boxed,
         sequence::boxed,
         split_for_loop_vars::boxed,
+        split_merged_vars::boxed,
         split_variable_declarations::boxed,
         string_literal_in_template::boxed,
         ternary_to_if::boxed,

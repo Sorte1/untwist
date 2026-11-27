@@ -26,6 +26,13 @@ fn is_candidate(stmt: &Statement<'_>) -> bool {
             .all(|declarator| matches!(declarator.id, BindingPattern::BindingIdentifier(_)))
 }
 
+fn is_written(symbol: oxc_syntax::symbol::SymbolId, scoping: &Scoping) -> bool {
+    scoping
+        .get_resolved_reference_ids(symbol)
+        .iter()
+        .any(|reference| scoping.get_reference(*reference).is_write())
+}
+
 fn hoistable_prefix_len(node: &ForStatement<'_>, scoping: &Scoping) -> usize {
     let Some(ForStatementInit::VariableDeclaration(declaration)) = &node.init else {
         return 0;
@@ -43,7 +50,7 @@ fn hoistable_prefix_len(node: &ForStatement<'_>, scoping: &Scoping) -> usize {
             .update
             .as_ref()
             .is_some_and(|update| references_symbol(update, scoping, symbol));
-        if used_in_test || used_in_update {
+        if used_in_update || (used_in_test && is_written(symbol, scoping)) {
             break;
         }
         count += 1;
