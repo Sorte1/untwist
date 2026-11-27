@@ -20,7 +20,7 @@ use untwist_core::semantic::{
 use self::rewrite::{Restore, Rewrite};
 use self::shape::{member, Ctx, Key, Machine};
 use self::sites::{Kind, Sites};
-use super::refs::{inside, names_observed, scan, unpatched_outside, Refs};
+use super::refs::{inside, names_observed, scan, shared_elsewhere, unpatched_outside, Refs};
 use crate::calls::agnostic::{global_reach, ReachWatch};
 
 pub const PASS: &str = "inline-js-confuser-dispatcher";
@@ -329,12 +329,20 @@ fn names<'a>(planned: &Planned, cx: &mut Cx<'a, '_>) -> Option<Vec<String>> {
         .collect()
 }
 
-fn shared(scoping: &Scoping, planned: &Planned, fresh: &[String]) -> bool {
+fn shared(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    nested_root: bool,
+    (planned, fresh): (&Planned, &[String]),
+) -> bool {
     let machine = &planned.candidate.machine;
-    [machine.dispatcher, machine.payload, machine.cache]
+    shared_elsewhere(
+        program,
+        scoping,
+        nested_root,
+        &[machine.dispatcher, machine.payload, machine.cache],
+    ) || fresh
         .iter()
-        .map(|s| scoping.symbol_name(*s))
-        .chain(fresh.iter().map(String::as_str))
         .any(|name| is_shared_global(name) || is_foreign_global(name))
 }
 
@@ -464,7 +472,14 @@ impl<'a> Pass<'a> for InlineDispatcher {
                 );
                 continue;
             };
-            if planned.candidate.top && shared(cx.scoping(), planned, &fresh) {
+            if planned.candidate.top
+                && shared(
+                    program,
+                    cx.scoping(),
+                    cx.opts.nested_root,
+                    (planned, &fresh),
+                )
+            {
                 cx.note("js-confuser dispatcher kept: another input names its machinery or a name it would add", None);
                 continue;
             }

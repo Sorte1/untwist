@@ -13,15 +13,13 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::pass::{Cx, Interest, Pass};
 use untwist_core::semantic::builtins::Reliance;
-use untwist_core::semantic::{
-    build_scoping, has_module_syntax, is_foreign_global, is_shared_global, may_call_eval,
-};
+use untwist_core::semantic::{build_scoping, has_module_syntax, may_call_eval};
 
 use self::rewrite::{take_flat, Install, Sites as SiteEdits, Taken};
 use self::shape::{Flat, Wrapper};
 use self::sites::Sites;
 use super::ast::Ctx;
-use super::refs::{names_observed, scan, unpatched_outside};
+use super::refs::{names_observed, scan, shared_elsewhere, unpatched_outside};
 use super::resolution::{holds, record_function, Expected};
 use crate::calls::agnostic::{global_reach, ReachWatch};
 
@@ -113,7 +111,7 @@ fn single_use(refs: &super::refs::Refs<'_>, symbol: SymbolId, scoping: &Scoping)
     uses.len() == 1 && !uses[0].write && scoping.symbol_redeclarations(symbol).is_empty()
 }
 
-fn analyse(program: &Program<'_>, scoping: &Scoping) -> Analysis {
+fn analyse(program: &Program<'_>, scoping: &Scoping, nested_root: bool) -> Analysis {
     let mut analysis = Analysis {
         plans: Vec::new(),
         expected: Expected::default(),
@@ -156,7 +154,7 @@ fn analyse(program: &Program<'_>, scoping: &Scoping) -> Analysis {
             Some("the flattened function or its scope object is used elsewhere")
         } else if flat.strict != wrapper.scope_strict {
             Some("the flattened function and its wrapper differ in strictness")
-        } else if is_shared_global(&name) || is_foreign_global(&name) {
+        } else if shared_elsewhere(program, scoping, nested_root, &[flat.symbol]) {
             Some("another input names the flattened function")
         } else {
             None
@@ -269,7 +267,7 @@ impl<'a> Pass<'a> for InlineFlatten {
             return;
         }
         self.settled = true;
-        let mut analysis = analyse(program, cx.scoping());
+        let mut analysis = analyse(program, cx.scoping(), cx.opts.nested_root);
         for note in &analysis.notes {
             cx.note(note.clone(), None);
         }
