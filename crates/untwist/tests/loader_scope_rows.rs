@@ -37,6 +37,26 @@ fn a_loader_text_keeps_the_scope_function_or_eval_gives_it_as_commonjs_and_as_a_
 }
 
 #[test]
+fn a_loader_text_keeps_the_scope_function_or_eval_gives_it_in_explicit_commonjs_input() {
+    let Some(node) = node_or_skip() else {
+        return;
+    };
+    let programs = rows(ROWS);
+    let lane = |unsafe_transforms: bool| Options {
+        unsafe_transforms,
+        commonjs_goal: true,
+        ..Options::default()
+    };
+    let safe = lane(false);
+    let unsafe_transforms = lane(true);
+    let run_safe = |source: &str| transformed(&safe, source);
+    let run_unsafe = |source: &str| transformed(&unsafe_transforms, source);
+    let modes: [Mode<'_>; 2] = [("default", &run_safe), ("unsafe", &run_unsafe)];
+    let wrong = node_rows::commonjs_mismatches(&node, &programs, &modes);
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
+#[test]
 fn a_direct_eval_loader_that_reads_module_bindings_is_still_peeled() {
     let source =
         "var k = \"A\"; eval([\"console.log(typeof k, \", \"typeof module)\"].join(\"\"));";
