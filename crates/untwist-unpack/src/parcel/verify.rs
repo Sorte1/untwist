@@ -11,7 +11,8 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::semantic::build_scoping;
 
-use super::layout::{Def, DefFunction, Hoisted, Layout, Registry};
+use super::callee::{global_object, GLOBAL_NAMES};
+use super::layout::{definition_head, Def, DefFunction, Hoisted, Layout, Registry};
 use super::links::{loader, module_name, require_name, ParcelView};
 use super::slot::reaches_slot;
 use super::{
@@ -226,8 +227,9 @@ impl<'a> Policy<'a> for Rules<'_, '_> {
 
     fn binding(&mut self, it: &BindingIdentifier<'a>) {
         let own = it.symbol_id.get();
-        let shadows = (it.name == self.names[0] && own != self.require)
-            || (it.name == self.names[1] && own != self.register);
+        let shadows =
+            (self.mode == Mode::Factory && it.name == self.names[0] && own != self.require)
+                || (it.name == self.names[1] && own != self.register);
         self.ok &= !shadows;
     }
 
@@ -325,7 +327,7 @@ struct Context<'s, 'l> {
     ids: FxHashSet<&'l str>,
     view: Option<&'l ParcelView>,
     global: &'l str,
-    hoisted: Option<(SymbolId, SymbolId, [&'l str; 2])>,
+    hoisted: Option<(Option<SymbolId>, Option<SymbolId>, [&'l str; 2])>,
     helpers: FxHashMap<SymbolId, usize>,
     moved: FxHashSet<SymbolId>,
     builtins: bool,
@@ -336,7 +338,7 @@ struct Context<'s, 'l> {
 impl<'s, 'l> Context<'s, 'l> {
     fn rules(&self, mode: Mode) -> Rules<'s, '_> {
         let (require, register, names) = match self.hoisted {
-            Some((require, register, names)) => (Some(require), Some(register), names),
+            Some((require, register, names)) => (require, register, names),
             None => (None, None, ["", ""]),
         };
         Rules {
@@ -528,19 +530,24 @@ fn hoisted(
     layout: &Hoisted<'_, '_>,
     view: Option<&ParcelView>,
 ) -> bool {
-    let (Some(require), Some(register)) = (
-        layout.require.symbol_id.get(),
-        layout.register.symbol_id.get(),
-    ) else {
+    let symbol = |id: Option<&BindingIdentifier<'_>>| match id {
+        Some(id) => id.symbol_id.get().map(Some),
+        None => Some(None),
+    };
+    let (Some(require), Some(register)) = (symbol(layout.require), symbol(layout.register)) else {
         return false;
     };
     let Some(ids) = ids(&layout.defs, view) else {
         return false;
     };
-    if !declared_once(scoping, [Some(require), Some(register)]) {
+    let present = [require, register].into_iter().flatten().map(Some);
+    if !declared_once(scoping, present) || !runtime_sound(scoping, top, layout) {
         return false;
     }
-    let names = [layout.require.name.as_str(), layout.register.name.as_str()];
+    let names = [
+        layout.require.map_or("", |id| id.name.as_str()),
+        layout.register.map_or("", |id| id.name.as_str()),
+    ];
     let candidates = candidates(top, layout);
     let helpers = candidate_symbols(top, &candidates);
     let mut context = Context {
@@ -575,6 +582,109 @@ fn hoisted(
         return false;
     }
     entry_sound(&context, top, layout, &moved)
+}
+
+struct Counted<'s> {
+    scoping: &'s Scoping,
+    symbol: SymbolId,
+    count: usize,
+}
+
+impl<'a> VisitJs<'a> for Counted<'_> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        let found = it
+            .reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
+        self.count += usize::from(found == Some(self.symbol));
+    }
+}
+
+fn root_symbol(scoping: &Scoping, name: &str) -> Option<SymbolId> {
+    scoping.get_root_binding(Ident::from(name))
+}
+
+fn empty_declarator(top: &[Statement<'_>], symbol: SymbolId) -> bool {
+    let found: Vec<&VariableDeclarator<'_>> = top
+        .iter()
+        .filter_map(|statement| match statement {
+            Statement::VariableDeclaration(declaration) => Some(&declaration.declarations),
+            _ => None,
+        })
+        .flatten()
+        .filter(|declarator| {
+            matches!(&declarator.id, BindingPattern::BindingIdentifier(id)
+                if id.symbol_id.get() == Some(symbol))
+        })
+        .collect();
+    matches!(found.as_slice(), [declarator] if matches!(
+        &declarator.init,
+        Some(Expression::ObjectExpression(object)) if object.properties.is_empty()
+    ))
+}
+
+fn global_declarator(top: &[Statement<'_>], symbol: SymbolId) -> bool {
+    top.iter()
+        .filter_map(|statement| match statement {
+            Statement::VariableDeclaration(declaration)
+                if declaration.kind == VariableDeclarationKind::Var =>
+            {
+                Some(&declaration.declarations)
+            }
+            _ => None,
+        })
+        .flatten()
+        .any(|declarator| {
+            matches!(&declarator.id, BindingPattern::BindingIdentifier(id)
+                if id.symbol_id.get() == Some(symbol))
+                && declarator.init.as_ref().is_some_and(global_object)
+        })
+}
+
+fn unwritten(scoping: &Scoping, symbol: SymbolId) -> bool {
+    scoping.symbol_redeclarations(symbol).is_empty()
+        && scoping
+            .get_resolved_references(symbol)
+            .all(|reference| !reference.is_write())
+}
+
+fn stores_sound(scoping: &Scoping, top: &[Statement<'_>], layout: &Hoisted<'_, '_>) -> bool {
+    let (Some(stores), Some(at)) = (&layout.stores, layout.definition) else {
+        return layout.stores.is_none() && layout.definition.is_none();
+    };
+    stores.iter().all(|name| {
+        let Some(symbol) = root_symbol(scoping, name) else {
+            return false;
+        };
+        let mut inside = Counted {
+            scoping,
+            symbol,
+            count: 0,
+        };
+        match definition_head(&top[at]) {
+            Some(head) => inside.visit_expression(head),
+            None => inside.visit_statement(&top[at]),
+        }
+        scoping.symbol_redeclarations(symbol).is_empty()
+            && empty_declarator(top, symbol)
+            && inside.count == scoping.get_resolved_reference_ids(symbol).len()
+    })
+}
+
+fn object_sound(scoping: &Scoping, top: &[Statement<'_>], layout: &Hoisted<'_, '_>) -> bool {
+    let Some(object) = layout.object.as_deref() else {
+        return GLOBAL_NAMES
+            .iter()
+            .all(|name| root_symbol(scoping, name).is_none());
+    };
+    match root_symbol(scoping, object) {
+        Some(symbol) => unwritten(scoping, symbol) && global_declarator(top, symbol),
+        None => object == GLOBAL_NAMES[0],
+    }
+}
+
+fn runtime_sound(scoping: &Scoping, top: &[Statement<'_>], layout: &Hoisted<'_, '_>) -> bool {
+    stores_sound(scoping, top, layout) && object_sound(scoping, top, layout)
 }
 
 fn entry_sound(

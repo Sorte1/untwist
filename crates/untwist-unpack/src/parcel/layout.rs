@@ -7,6 +7,7 @@ use oxc_syntax::scope::ScopeId;
 use rustc_hash::FxHashSet;
 use untwist_core::ast_util::prop::{member_parts, prop_name};
 
+use super::callee::{self, is_global_name, Callee};
 use super::{runtime, ENTRY_ID};
 use crate::frame::{Frame, Shape};
 use crate::matcher::{
@@ -20,6 +21,7 @@ pub const REGISTRY_PARAMS: usize = 4;
 pub const HOISTED_PARAMS: usize = 2;
 const MAX_RUNTIME_ARGUMENTS: usize = 8;
 const REGISTER: &str = "register";
+const UNUSED: usize = usize::MAX;
 const PROTO_KEY: &str = "__proto__";
 
 #[derive(Clone, Copy)]
@@ -56,12 +58,20 @@ pub struct Registry<'k, 'a> {
 
 pub struct Hoisted<'k, 'a> {
     pub defs: Vec<Def<'k, 'a>>,
-    pub require: &'k BindingIdentifier<'a>,
-    pub register: &'k BindingIdentifier<'a>,
+    pub require: Option<&'k BindingIdentifier<'a>>,
+    pub register: Option<&'k BindingIdentifier<'a>>,
     pub prelude: [usize; 3],
     pub definition: Option<usize>,
     pub first: usize,
     pub global: String,
+    pub object: Option<String>,
+    pub stores: Option<[String; 2]>,
+}
+
+impl Hoisted<'_, '_> {
+    pub fn require_name(&self) -> &str {
+        self.require.map_or("", |id| id.name.as_str())
+    }
 }
 
 impl<'k, 'a> Hoisted<'k, 'a> {
@@ -79,10 +89,6 @@ impl<'k, 'a> Hoisted<'k, 'a> {
 pub enum Layout<'k, 'a> {
     Registry(Registry<'k, 'a>),
     Hoisted(Hoisted<'k, 'a>),
-}
-
-fn is_global_name(text: &str) -> bool {
-    text.len() > NAME_PREFIX.len() && text.starts_with(NAME_PREFIX)
 }
 
 fn registry_arguments<'k, 'a>(frame: &Frame<'k, 'a>) -> Option<&'k [Argument<'a>]> {
@@ -117,15 +123,25 @@ fn runtime_function<'k, 'a>(frame: &Frame<'k, 'a>) -> Option<&'k Function<'a>> {
     }
 }
 
-fn global_member(init: &Expression<'_>) -> Option<String> {
+fn global_member(init: &Expression<'_>) -> Option<(String, Option<String>)> {
+    if init
+        .as_member_expression()
+        .is_some_and(|member| member.optional())
+    {
+        return None;
+    }
     let (object, name) = member_parts(init)?;
-    (matches!(object, Expression::Identifier(_)) && is_global_name(&name))
-        .then(|| name.into_owned())
+    let object = match object.without_parentheses() {
+        Expression::Identifier(object) => Some(object.name.to_string()),
+        other if callee::global_chain(other) => None,
+        _ => return None,
+    };
+    is_global_name(&name).then(|| (name.into_owned(), object))
 }
 
 fn require_declarator<'k, 'a>(
     statement: &'k Statement<'a>,
-) -> Option<(&'k BindingIdentifier<'a>, String)> {
+) -> Option<(&'k BindingIdentifier<'a>, (String, Option<String>))> {
     let Statement::VariableDeclaration(declaration) = statement else {
         return None;
     };
@@ -140,8 +156,19 @@ fn require_declarator<'k, 'a>(
     })
 }
 
+fn global_register(statement: &Statement<'_>) -> bool {
+    let Some(Expression::CallExpression(call)) = expression_statement(statement) else {
+        return false;
+    };
+    callee::registers(&call.callee, Callee::Global).is_some()
+}
+
 pub fn probe(frame: &Frame<'_, '_>) -> bool {
-    registry_arguments(frame).is_some() || frame.top.iter().any(|s| require_declarator(s).is_some())
+    registry_arguments(frame).is_some()
+        || frame
+            .top
+            .iter()
+            .any(|s| require_declarator(s).is_some() || global_register(s))
 }
 
 fn string(expr: &Expression<'_>) -> Option<String> {
@@ -330,16 +357,30 @@ fn null_test(expr: &Expression<'_>, name: &str) -> bool {
             || (null(&test.left) && is_identifier(&test.right, name)))
 }
 
+fn guarded(expr: &Expression<'_>, name: &str) -> bool {
+    matches!(expr, Expression::LogicalExpression(logical)
+        if logical.operator == LogicalOperator::And && null_test(&logical.left, name))
+}
+
+pub fn definition_head<'k, 'a>(statement: &'k Statement<'a>) -> Option<&'k Expression<'a>> {
+    match expression_statement(statement)? {
+        Expression::SequenceExpression(sequence) => sequence.expressions.first(),
+        _ => None,
+    }
+}
+
 fn is_definition(statement: &Statement<'_>, name: &str) -> bool {
     match statement {
         Statement::IfStatement(branch) => {
             branch.alternate.is_none() && null_test(&branch.test, name)
         }
-        Statement::ExpressionStatement(statement) => matches!(
-            &statement.expression,
-            Expression::LogicalExpression(logical)
-                if logical.operator == LogicalOperator::And && null_test(&logical.left, name)
-        ),
+        Statement::ExpressionStatement(statement) => match &statement.expression {
+            Expression::SequenceExpression(sequence) => sequence
+                .expressions
+                .first()
+                .is_some_and(|head| guarded(head, name)),
+            other => guarded(other, name),
+        },
         _ => false,
     }
 }
@@ -367,16 +408,16 @@ fn register_declarator<'k, 'a>(
     fits.then_some(&**id)
 }
 
-fn register_call<'k, 'a>(
-    expr: &'k Expression<'a>,
-    register: &str,
-) -> Option<(String, DefFunction<'k, 'a>)> {
+type Registered<'k, 'a> = (String, DefFunction<'k, 'a>, Option<String>);
+
+fn register_call<'k, 'a>(expr: &'k Expression<'a>, how: Callee<'_>) -> Option<Registered<'k, 'a>> {
     let Expression::CallExpression(call) = expr else {
         return None;
     };
-    if call.optional || !is_identifier(&call.callee, register) {
+    if call.optional {
         return None;
     }
+    let key = callee::registers(&call.callee, how)?;
     let [id, factory] = call.arguments.as_slice() else {
         return None;
     };
@@ -384,6 +425,7 @@ fn register_call<'k, 'a>(
     Some((
         id,
         simple_factory(argument_expression(factory)?, HOISTED_PARAMS)?,
+        key,
     ))
 }
 
@@ -400,6 +442,7 @@ fn inert_init(init: Option<&Expression<'_>>) -> bool {
         | Expression::ArrowFunctionExpression(_)
         | Expression::Identifier(_) => true,
         Expression::ObjectExpression(object) => object.properties.is_empty(),
+        Expression::ConditionalExpression(_) => callee::global_chain(init),
         Expression::CallExpression(call) => {
             !call.optional
                 && is_identifier(&call.callee, "require")
@@ -423,26 +466,31 @@ fn inert_statement(statement: &Statement<'_>, prelude: &[usize; 3], index: usize
     }
 }
 
-struct Registers<'k, 'a> {
-    name: &'a str,
+struct Registers<'k, 'a, 'n> {
+    how: Callee<'n>,
     defs: Vec<Def<'k, 'a>>,
     effects: bool,
     first: Option<usize>,
+    key: Option<String>,
+    keys_agree: bool,
 }
 
-impl<'k, 'a> Registers<'k, 'a> {
+impl<'k, 'a> Registers<'k, 'a, '_> {
     fn element(
         &mut self,
         expr: &'k Expression<'a>,
         at: usize,
         element: Option<usize>,
     ) -> Option<()> {
-        let Some((id, function)) = register_call(expr, self.name) else {
+        let Some((id, function, key)) = register_call(expr, self.how) else {
             self.effects = true;
             return Some(());
         };
         if self.effects {
             return None;
+        }
+        if let Some(key) = key {
+            self.keys_agree &= self.key.get_or_insert_with(|| key.clone()) == &key;
         }
         self.first.get_or_insert(at);
         self.defs.push(Def {
@@ -455,13 +503,18 @@ impl<'k, 'a> Registers<'k, 'a> {
         Some(())
     }
 
-    fn statement(&mut self, statement: &'k Statement<'a>, at: usize, inert: bool) -> Option<()> {
-        if inert {
+    fn statement(
+        &mut self,
+        statement: &'k Statement<'a>,
+        at: usize,
+        skip: Option<usize>,
+    ) -> Option<()> {
+        let Some(skip) = skip else {
             return Some(());
-        }
+        };
         match expression_statement(statement) {
             Some(Expression::SequenceExpression(sequence)) => {
-                for (index, expr) in sequence.expressions.iter().enumerate() {
+                for (index, expr) in sequence.expressions.iter().enumerate().skip(skip) {
                     self.element(expr, at, Some(index))?;
                 }
                 Some(())
@@ -475,15 +528,15 @@ impl<'k, 'a> Registers<'k, 'a> {
     }
 }
 
-fn position<'k, 'a, T>(
+fn at_most_one<'k, 'a, T>(
     top: &'k [Statement<'a>],
     found: impl Fn(&'k Statement<'a>) -> Option<T>,
-) -> Option<(usize, T)> {
+) -> Option<Option<(usize, T)>> {
     let mut hits = top
         .iter()
         .enumerate()
         .filter_map(|(index, s)| found(s).map(|t| (index, t)));
-    let first = hits.next()?;
+    let first = hits.next();
     hits.next().is_none().then_some(first)
 }
 
@@ -499,43 +552,125 @@ fn definition(top: &[Statement<'_>], name: &str) -> Option<Option<usize>> {
     }
 }
 
-fn hoisted<'k, 'a>(top: &'k [Statement<'a>], source_text: &str) -> Option<Hoisted<'k, 'a>> {
-    let (at_require, (require, global)) = position(top, require_declarator)?;
-    let name = require.name.as_str();
-    let at_definition = definition(top, name)?;
-    if at_definition.is_some_and(|at| !runtime::defined(top, at, &global, source_text)) {
-        return None;
-    }
-    let (at_register, register) = position(top, |s| register_declarator(s, name))?;
-    let between = at_definition.unwrap_or(at_require);
-    if !(at_require <= between && between < at_register) || at_definition == Some(at_require) {
-        return None;
-    }
-    let prelude = [at_require, between, at_register];
+fn collect<'k, 'a>(
+    top: &'k [Statement<'a>],
+    how: Callee<'_>,
+    prelude: &[usize; 3],
+    merged: Option<usize>,
+) -> Option<(Vec<Def<'k, 'a>>, usize, Option<String>)> {
     let mut registers = Registers {
-        name: register.name.as_str(),
+        how,
         defs: Vec::new(),
         effects: false,
         first: None,
+        key: None,
+        keys_agree: true,
     };
     for (index, statement) in top.iter().enumerate() {
-        registers.statement(
-            statement,
-            index,
-            inert_statement(statement, &prelude, index),
-        )?;
+        let skip = if merged == Some(index) {
+            Some(1)
+        } else if inert_statement(statement, prelude, index) {
+            None
+        } else {
+            Some(0)
+        };
+        registers.statement(statement, index, skip)?;
     }
     let first = registers.first?;
-    let defs = registers.defs;
     let runtime = runtime_id(BundleKind::Parcel);
-    (first > at_register && unique(&defs, &[ENTRY_ID, runtime.as_str()])).then_some(Hoisted {
+    let sound = registers.keys_agree && unique(&registers.defs, &[ENTRY_ID, runtime.as_str()]);
+    sound.then_some((registers.defs, first, registers.key))
+}
+
+fn global_bound(top: &[Statement<'_>]) -> bool {
+    top.iter().any(|statement| match statement {
+        Statement::VariableDeclaration(declaration) => declaration
+            .declarations
+            .iter()
+            .flat_map(|declarator| declarator.id.get_binding_identifiers())
+            .any(|id| callee::GLOBAL_NAMES.contains(&id.name.as_str())),
+        Statement::FunctionDeclaration(function) => function
+            .id
+            .as_ref()
+            .is_some_and(|id| callee::GLOBAL_NAMES.contains(&id.name.as_str())),
+        Statement::ClassDeclaration(class) => class
+            .id
+            .as_ref()
+            .is_some_and(|id| callee::GLOBAL_NAMES.contains(&id.name.as_str())),
+        _ => false,
+    })
+}
+
+fn detached<'k, 'a>(top: &'k [Statement<'a>]) -> Option<Hoisted<'k, 'a>> {
+    if global_bound(top) {
+        return None;
+    }
+    let prelude = [UNUSED; 3];
+    let (defs, first, key) = collect(top, Callee::Global, &prelude, None)?;
+    Some(Hoisted {
         defs,
-        require,
-        register,
+        require: None,
+        register: None,
+        prelude,
+        definition: None,
+        first,
+        global: key?,
+        object: None,
+        stores: None,
+    })
+}
+
+fn hoisted<'k, 'a>(top: &'k [Statement<'a>], source_text: &str) -> Option<Hoisted<'k, 'a>> {
+    let Some(found) = at_most_one(top, require_declarator)? else {
+        return detached(top);
+    };
+    let (at_require, (require, (global, object))) = found;
+    let name = require.name.as_str();
+    let at_definition = definition(top, name)?;
+    let merged = at_definition.filter(|&at| definition_head(&top[at]).is_some());
+    let stores = match at_definition {
+        Some(at) => Some(runtime::defined(
+            &top[at],
+            definition_head(&top[at]),
+            [name, object.as_deref()?],
+            &global,
+            source_text,
+        )?),
+        None => None,
+    };
+    let between = at_definition.unwrap_or(at_require);
+    if at_require > between || at_definition == Some(at_require) {
+        return None;
+    }
+    let alias = at_most_one(top, |s| register_declarator(s, name))?;
+    let (prelude, how, after) = match alias {
+        Some((at_register, register)) => {
+            if between >= at_register || merged.is_some() {
+                return None;
+            }
+            (
+                [at_require, between, at_register],
+                Callee::Alias(register.name.as_str()),
+                at_register + 1,
+            )
+        }
+        None => (
+            [at_require, between, between],
+            Callee::Member(name),
+            between,
+        ),
+    };
+    let (defs, first, _) = collect(top, how, &prelude, merged)?;
+    (first >= after).then_some(Hoisted {
+        defs,
+        require: Some(require),
+        register: alias.map(|(_, register)| register),
         prelude,
         definition: at_definition,
         first,
         global,
+        object,
+        stores,
     })
 }
 

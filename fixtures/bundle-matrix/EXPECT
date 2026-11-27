@@ -72,8 +72,10 @@ mini/esbuild*-iife+terser	*	recognised	xfail	bm-minified-esbuild: the minifier i
 mini/esbuild*-iife+swc-min	*	recognised	xfail	bm-minified-esbuild: the minifier inlined the only __commonJS call into the program, so no helper is left to prove
 */esbuild*-iife+uglify	*	recognised	xfail	bm-minified-esbuild: uglify reuses the helper and require bindings for later values (var l = f(I())), so they are not proven unchanged
 */rollup*-iife+uglify	*	recognised	xfail	bm-minified-rollup: uglify output of a rollup IIFE is not split by --split-hoisted
-*/parcel2.9-hoist*	*	recognised	xfail	bm-parcel-legacy-hoist: parcel 2.9 hoisted output finds the global with a typeof chain and calls parcelRequire.register without the parcelRegister alias; not proven
-*/parcel2.12-hoist-min	*	recognised	xfail	bm-parcel-legacy-hoist: parcel 2.12 minified hoisted output mangles the $parcel$ stores and calls (0, l.register)(...); not proven
+*/parcel2.9-hoist*	default	recognised	xfail	bm-sloppy-frame: the bundle is not strict code, so a function its modules call could read its caller (the bundle's own function in the bundle, node's module wrapper in a written file); the safe lane keeps it whole (--unsafe assumes no such read)
+*/parcel2.9-hoist*	split	recognised	xfail	bm-sloppy-frame: the bundle is not strict code, so a function its modules call could read its caller (the bundle's own function in the bundle, node's module wrapper in a written file); the safe lane keeps it whole (--unsafe assumes no such read)
+*/parcel2.12-hoist-min	default	recognised	xfail	bm-sloppy-frame: the bundle is not strict code, so a function its modules call could read its caller (the bundle's own function in the bundle, node's module wrapper in a written file); the safe lane keeps it whole (--unsafe assumes no such read)
+*/parcel2.12-hoist-min	split	recognised	xfail	bm-sloppy-frame: the bundle is not strict code, so a function its modules call could read its caller (the bundle's own function in the bundle, node's module wrapper in a written file); the safe lane keeps it whole (--unsafe assumes no such read)
 */parcel*-hoist*	*	modules	allow	parcel-scope-hoist: parcel scope hoisting merges modules
 base/parcel*-nohoist*	*	recognised	xfail	bm-parcel-node-modules: lodash reaches the global object (Function("return this")), so a module may read the parcelRequire slot; refused
 base/webpack*	*	modules	allow	unpack writes webpack's runtime as a module of its own

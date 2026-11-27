@@ -7,7 +7,7 @@ use untwist_core::print::{print, PrintStyle};
 
 use crate::model::{Bundle, BundleKind, Helper, Module};
 use crate::runtime::{declared_names, runtime_id};
-use crate::share::fold_runtime;
+use crate::share::{fold_runtime, unify_helpers};
 
 const PASS_NAME: &str = "unpack";
 
@@ -55,6 +55,13 @@ fn same_helpers(kept: &Module<'_>, later: &Module<'_>) -> bool {
         .all(|(name, text)| kept.get(name).is_some_and(|known| known == text))
 }
 
+fn compatible_helpers(kept: &Module<'_>, later: &Module<'_>) -> bool {
+    let kept = helper_texts(kept);
+    helper_texts(later)
+        .iter()
+        .all(|(name, text)| kept.get(name).is_none_or(|known| known == text))
+}
+
 fn same_runtime(merged: &Bundle<'_>, bundle: &Bundle<'_>) -> bool {
     match (&merged.runtime, &bundle.runtime) {
         (Some(kept), Some(later)) => {
@@ -74,6 +81,12 @@ fn linked_merge<'a>(alloc: &'a Allocator, merged: &mut Bundle<'a>, mut bundle: B
             fold_runtime(alloc, merged, &mut bundle, &key)
         } else if same_helpers(later, kept) {
             fold_runtime(alloc, &mut bundle, merged, &key)
+        } else if merged.kind == BundleKind::Parcel {
+            unify_helpers(alloc, merged, &mut bundle, &key).and_then(|()| {
+                let (kept, later) = (merged.modules.get(&key)?, bundle.modules.get(&key)?);
+                compatible_helpers(kept, later).then_some(())?;
+                fold_runtime(alloc, merged, &mut bundle, &key)
+            })
         } else {
             None
         };

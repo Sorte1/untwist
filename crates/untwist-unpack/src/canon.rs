@@ -15,6 +15,8 @@ struct Canon<'a, 's> {
     alloc: &'a Allocator,
     scoping: &'s Scoping,
     names: FxHashMap<SymbolId, Ident<'a>>,
+    renames: &'s [(&'s str, &'s str)],
+    free: Vec<String>,
 }
 
 impl<'a> Canon<'a, '_> {
@@ -41,6 +43,14 @@ impl<'a> VisitMut<'a> for Canon<'a, '_> {
             .and_then(|id| self.scoping.get_reference(id).symbol_id());
         if let Some(symbol) = symbol {
             it.name = self.name(symbol);
+            return;
+        }
+        let name = it.name.as_str();
+        if !self.free.iter().any(|seen| seen == name) {
+            self.free.push(name.to_string());
+        }
+        if let Some((_, to)) = self.renames.iter().find(|(from, _)| *from == name) {
+            it.name = Ident::from_str_in(to, &self.alloc);
         }
     }
 
@@ -52,6 +62,15 @@ impl<'a> VisitMut<'a> for Canon<'a, '_> {
 }
 
 fn alone<'a>(alloc: &'a Allocator, statement: Statement<'a>, source_text: &'a str) -> Program<'a> {
+    alone_renamed(alloc, statement, source_text, &[]).0
+}
+
+fn alone_renamed<'a>(
+    alloc: &'a Allocator,
+    statement: Statement<'a>,
+    source_text: &'a str,
+    renames: &[(&str, &str)],
+) -> (Program<'a>, Vec<String>) {
     let builder = AstBuilder::new(alloc);
     let mut program = Program::new(
         SPAN,
@@ -68,9 +87,12 @@ fn alone<'a>(alloc: &'a Allocator, statement: Statement<'a>, source_text: &'a st
         alloc,
         scoping: &scoping,
         names: FxHashMap::default(),
+        renames,
+        free: Vec::new(),
     };
     canon.visit_program(&mut program);
-    program
+    let free = canon.free;
+    (program, free)
 }
 
 pub fn function_shape(function: &Function<'_>, source_text: &str) -> Option<String> {
@@ -95,6 +117,29 @@ pub fn statement_shape(statement: &Statement<'_>, source_text: &str) -> String {
     print(&program, PrintStyle::Compact)
 }
 
+pub fn expression_shape(
+    expression: &Expression<'_>,
+    source_text: &str,
+    renames: &[(&str, &str)],
+) -> (String, Vec<String>) {
+    let alloc = Allocator::default();
+    let builder = AstBuilder::new(&alloc);
+    let statement =
+        Statement::new_expression_statement(SPAN, expression.clone_in(&alloc), &builder);
+    let (program, free) = alone_renamed(&alloc, statement, source_text, renames);
+    (print(&program, PrintStyle::Compact), free)
+}
+
+pub fn statement_shape_renamed(
+    statement: &Statement<'_>,
+    source_text: &str,
+    renames: &[(&str, &str)],
+) -> (String, Vec<String>) {
+    let alloc = Allocator::default();
+    let (program, free) = alone_renamed(&alloc, statement.clone_in(&alloc), source_text, renames);
+    (print(&program, PrintStyle::Compact), free)
+}
+
 pub fn program_shape<'a>(alloc: &'a Allocator, program: &mut Program<'a>) -> String {
     program.comments.clear();
     let scoping = build_scoping(program).scoping;
@@ -102,6 +147,8 @@ pub fn program_shape<'a>(alloc: &'a Allocator, program: &mut Program<'a>) -> Str
         alloc,
         scoping: &scoping,
         names: FxHashMap::default(),
+        renames: &[],
+        free: Vec::new(),
     };
     canon.visit_program(program);
     print(program, PrintStyle::Compact)

@@ -1,0 +1,1 @@
+function e(e,l,a,o){Object.defineProperty(e,l,{get:a,set:o,enumerable:!0,configurable:!0})}var l=("u">typeof globalThis?globalThis:"u">typeof self?self:"u">typeof window?window:"u">typeof global?global:{}).parcelRequirecfe7;l.register("cNEMd",function(a,o){e(a.exports,"value",()=>t),e(a.exports,"default",()=>f),(0,l("5C1nx").say)("eval lazy");let t=42;var f="lazy-default"});

@@ -1,0 +1,1 @@
+function e(e,a,l,r){Object.defineProperty(e,a,{get:l,set:r,enumerable:!0,configurable:!0})}var a=globalThis.parcelRequirecfe7;(0,a.register)("cNEMd",function(l,r){e(l.exports,"value",()=>t),e(l.exports,"default",()=>n),(0,a("5C1nx").say)("eval lazy");let t=42;var n="lazy-default"});

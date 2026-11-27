@@ -22,6 +22,7 @@ const REQUIRE: &str = "require";
 struct Rewrite<'a, 'r> {
     builder: AstBuilder<'a>,
     scoping: Option<&'r Scoping>,
+    rooted: bool,
     callee: &'r str,
     hoisted: bool,
     deps: &'r [(String, String)],
@@ -32,6 +33,17 @@ struct Rewrite<'a, 'r> {
 impl<'a> Rewrite<'a, '_> {
     fn free(&self, id: &IdentifierReference<'_>) -> bool {
         crate::scan::is_free(self.scoping, id)
+    }
+
+    fn callee_free(&self, id: &IdentifierReference<'_>) -> bool {
+        let (Some(scoping), true) = (self.scoping, self.rooted) else {
+            return self.free(id);
+        };
+        let symbol = id
+            .reference_id
+            .get()
+            .and_then(|reference| scoping.get_reference(reference).symbol_id());
+        symbol.is_none_or(|symbol| scoping.symbol_scope_id(symbol) == scoping.root_scope_id())
     }
 
     fn specifier(&self, target: &str) -> Option<String> {
@@ -45,7 +57,7 @@ impl<'a> Rewrite<'a, '_> {
         let Expression::Identifier(callee) = &call.callee else {
             return None;
         };
-        if call.optional || callee.name != self.callee || !self.free(callee) {
+        if call.optional || callee.name != self.callee || !self.callee_free(callee) {
             return None;
         }
         let spec = single_string(call)?;
@@ -192,7 +204,17 @@ struct Helpers {
 
 fn used(program: &Program<'_>, runtime: &Helpers, is_entry: bool) -> Vec<String> {
     if is_entry {
-        return runtime.names.clone();
+        let scoping = build_scoping(program).scoping;
+        return runtime
+            .names
+            .iter()
+            .filter(|name| {
+                scoping
+                    .get_root_binding(Ident::from(name.as_str()))
+                    .is_none()
+            })
+            .cloned()
+            .collect();
     }
     let mut found: Vec<usize> = mentioned(&runtime.index, program.body.iter())
         .into_iter()
@@ -217,12 +239,14 @@ fn link_module<'a>(
     let program = module.program_mut();
     let builder = AstBuilder::new(alloc);
     rewrite_loader(builder, program, hoisted.then_some(callee), paths, &from);
-    let scoping = (!hoisted && binds_any(program, [callee, "module"].into_iter()))
+    let rooted = hoisted && is_entry;
+    let scoping = ((rooted || !hoisted) && binds_any(program, [callee, "module"].into_iter()))
         .then(|| build_scoping(program).scoping);
     if !callee.is_empty() {
         let mut rewrite = Rewrite {
             builder: AstBuilder::new(alloc),
             scoping: scoping.as_ref(),
+            rooted,
             callee,
             hoisted,
             deps: &deps,
@@ -263,7 +287,7 @@ pub fn link<'a>(alloc: &'a Allocator, bundle: &mut Bundle<'a>) {
             continue;
         }
         let callee = match &hoisted {
-            Some(name) => (name.as_str(), true),
+            Some(name) => (requires.get(id).map_or(name.as_str(), String::as_str), true),
             None => (requires.get(id).map_or("", String::as_str), false),
         };
         let _ = link_module(alloc, module, callee, &paths, &runtime);

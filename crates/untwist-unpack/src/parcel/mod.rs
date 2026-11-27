@@ -1,4 +1,5 @@
 mod build;
+mod callee;
 mod layout;
 mod link;
 pub mod links;
@@ -130,7 +131,7 @@ fn helper_init(init: &Expression<'_>) -> bool {
     match init {
         Expression::FunctionExpression(_) | Expression::ArrowFunctionExpression(_) => true,
         Expression::Identifier(id) => id.name == "globalThis",
-        _ => false,
+        other => callee::global_chain(other),
     }
 }
 
