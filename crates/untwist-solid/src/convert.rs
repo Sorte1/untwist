@@ -53,6 +53,7 @@ pub struct Cx<'a, 's> {
     pub deleted: RefCell<Vec<Span>>,
     pub library: RefCell<rustc_hash::FxHashSet<SymbolId>>,
     pub candidates: Vec<(Span, oxc_syntax::node::NodeId)>,
+    pub delegated: Option<Vec<String>>,
 }
 
 pub fn unwrap_parens(text: String) -> String {

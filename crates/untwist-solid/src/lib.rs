@@ -75,6 +75,35 @@ fn templates(
     out
 }
 
+fn delegated(
+    runtime: &Runtime,
+    scoping: &oxc_semantic::Scoping,
+    nodes: &oxc_semantic::AstNodes<'_>,
+) -> Option<Vec<String>> {
+    let known = runtime.esm || runtime.symbols.values().any(|rt| *rt == Rt::DelegateEvents);
+    if !known {
+        return None;
+    }
+    let mut names = Vec::new();
+    for node in nodes.iter() {
+        let AstKind::CallExpression(call) = node.kind() else {
+            continue;
+        };
+        if !runtime.is(&call.callee, scoping, Rt::DelegateEvents) {
+            continue;
+        }
+        let Some(Expression::ArrayExpression(array)) =
+            ast::arg(call, 0).map(Expression::without_parentheses)
+        else {
+            return None;
+        };
+        for element in &array.elements {
+            names.push(element.as_expression().and_then(ast::string)?.to_string());
+        }
+    }
+    Some(names)
+}
+
 fn references(
     nodes: &oxc_semantic::AstNodes<'_>,
     scoping: &oxc_semantic::Scoping,
@@ -276,6 +305,7 @@ pub fn restore(code: &str) -> Restore {
         deleted: Default::default(),
         library: Default::default(),
         candidates: convert::candidates(nodes),
+        delegated: delegated(&runtime, scoping, nodes),
     };
     let found = module::components(&cx, home);
     let mut restored = module::restore_all(&cx, home, &found);

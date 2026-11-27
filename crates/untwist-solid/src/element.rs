@@ -683,6 +683,14 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
         if !DELEGATED.contains(&event) {
             return fail(format!("the event `{event}` is not delegated"));
         }
+        if self
+            .cx
+            .delegated
+            .as_ref()
+            .is_some_and(|names| !names.iter().any(|name| name == event))
+        {
+            return fail(format!("the event `{event}` is never delegated"));
+        }
         self.push_event(path, event_attr(event), text);
         Ok(())
     }
