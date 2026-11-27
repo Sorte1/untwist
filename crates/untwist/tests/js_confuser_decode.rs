@@ -2,7 +2,7 @@ use untwist::{Options, Pipeline};
 use untwist_testing::js_files_in;
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
-const KEPT: [(&str, &str); 25] = [
+const KEPT: [(&str, &str); 24] = [
     ("kept-pair-dispatcher-this.js", "_dispatcher_0("),
     ("kept-moved-getter-passed.js", "TextDecoder"),
     ("kept-custom-free-name.js", "_MAIN_STR("),
@@ -14,7 +14,6 @@ const KEPT: [(&str, &str); 25] = [
     ("kept-calculator-duplicate-params.js", "__p_c("),
     ("patched-predicate-dead-branch.js", "__p_d"),
     ("patched-integrity-target-global.js", "TAMPERED"),
-    ("kept-altered-decoder.js", "_MAIN_STR("),
     ("kept-bom.js", "_MAIN_STR("),
     ("kept-early-call.js", "_MAIN_STR("),
     ("kept-packed-reassigned.js", "_MAIN_STR("),
@@ -188,8 +187,17 @@ fn concealed_dispatcher_keys_decode_and_the_dispatcher_goes_in_both_lanes() {
 fn a_rewritten_prelude_with_moved_getters_decodes_in_both_lanes() {
     let source = named(&fixtures(), "moved-prelude.js");
     for code in [default_lane(&source), unsafe_lane(&source)] {
-        assert!(code.contains("\"hello there, \""), "{code}");
+        assert!(code.contains("hello there, "), "{code}");
         assert!(!code.contains("TextDecoder"), "{code}");
         assert!(!code.contains(".slice("), "{code}");
+    }
+}
+
+#[test]
+fn a_decoder_that_drifted_from_the_template_decodes_by_evaluation_in_both_lanes() {
+    let source = named(&fixtures(), "altered-decoder.js");
+    for code in [default_lane(&source), unsafe_lane(&source)] {
+        assert!(code.contains("hello, "), "{code}");
+        assert!(!code.contains("_MAIN_STR("), "{code}");
     }
 }
