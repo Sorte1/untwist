@@ -42,6 +42,11 @@ All notable changes to this project are documented in this file. The format is b
   takes one plain parameter and reads no name declared outside itself. In the default lane the
   built-ins it can reach through its values (`String`, `Array`, `Number`, `Boolean`, `Function`,
   `Symbol`, `Object`, `Math`, `JSON`) must be unpatched, as for the base91 decoder.
+- js-confuser string concealing with the `dispatcher` on: when a dispatcher's keys are concealed
+  strings, the string decoder is judged on the program with those strings in place and the
+  dispatcher undone (under the dispatcher's own checks), so its `fns[name].apply(this)` and
+  `fnLengths[name]` reads no longer keep the strings; the dispatcher pass then restores the
+  functions from the decoded keys.
 - `dead-code` folds int32 opaque predicates by tracking which bits of a `const` are known through
   `& | ^ ~ + - << >> >>>` and `Math.imul`, for example `(Math.imul(s | 1, (s | 1) + 1) & 1) === 0`
   when only some bits of `s` are known; a test that the low unknown bits decide is tried for every

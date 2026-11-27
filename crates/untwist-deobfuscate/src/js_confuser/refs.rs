@@ -271,7 +271,11 @@ pub(super) fn judge_replaced<'a>(
         stripped.remove(*span);
     }
     stripped.apply(&mut clone, alloc, &mut scoping);
-    let scoping = SemanticBuilder::new().build(&clone).semantic.into_scoping();
+    let mut scoping = SemanticBuilder::new().build(&clone).semantic.into_scoping();
+    if let Some((inlined, restored)) = super::dispatcher::undone(&clone, &scoping, cx) {
+        clone = inlined;
+        scoping = restored;
+    }
     let names: Vec<&str> = symbols
         .iter()
         .map(|symbol| original.symbol_name(*symbol))

@@ -441,6 +441,76 @@ fn apply<'a>(
     complete.then_some(expected)
 }
 
+fn judged_names(index: usize, planned: &Planned, taken: &FxHashSet<&str>) -> Option<Vec<String>> {
+    planned
+        .candidate
+        .machine
+        .entries
+        .iter()
+        .enumerate()
+        .map(|(at, entry)| match planned.non_call.contains(&entry.key) {
+            true => Some(NON_CALL_NAME.to_string()),
+            false => {
+                let name = format!("__jsc_judged_{index}_{at}");
+                (!taken.contains(name.as_str())).then_some(name)
+            }
+        })
+        .collect()
+}
+
+fn removed_and_fresh(
+    scoping: &Scoping,
+    accepted: &[(&Planned, Vec<String>)],
+) -> (Vec<String>, Vec<String>) {
+    accepted
+        .iter()
+        .filter(|(planned, _)| planned.candidate.top)
+        .fold(
+            (Vec::new(), Vec::new()),
+            |(mut removed, mut fresh), (planned, names)| {
+                removed.extend(removed_names(scoping, planned));
+                fresh.extend(names.iter().cloned());
+                (removed, fresh)
+            },
+        )
+}
+
+pub(in crate::js_confuser) fn undone<'a>(
+    program: &Program<'a>,
+    scoping: &Scoping,
+    cx: &Cx<'a, '_>,
+) -> Option<(Program<'a>, Scoping)> {
+    let analysis = analyse(program, scoping);
+    if analysis.planned.is_empty() {
+        return None;
+    }
+    let unresolved = scoping.root_unresolved_references();
+    let taken: FxHashSet<&str> = scoping
+        .symbol_names()
+        .chain(unresolved.keys().map(|k| k.as_str()))
+        .collect();
+    let mut accepted = Vec::new();
+    for (index, planned) in analysis.planned.iter().enumerate() {
+        let names = judged_names(index, planned, &taken)?;
+        if planned.candidate.top && shared(program, scoping, cx.opts.nested_root, (planned, &names))
+        {
+            return None;
+        }
+        accepted.push((planned, names));
+    }
+    let mut trial = program.clone_in(cx.allocator());
+    apply(&mut trial, cx, &accepted)?;
+    let restored = build_scoping(&trial).scoping;
+    if !cx.opts.unsafe_transforms && !unpatched_outside(&trial, &restored, &RELIED_ON, &[]) {
+        return None;
+    }
+    let (removed, fresh) = removed_and_fresh(scoping, &accepted);
+    if !removed.is_empty() && reached(&trial, &restored, &removed, &fresh) {
+        return None;
+    }
+    Some((trial, restored))
+}
+
 impl<'a> Pass<'a> for InlineDispatcher {
     fn name(&self) -> &'static str {
         PASS
@@ -501,17 +571,7 @@ impl<'a> Pass<'a> for InlineDispatcher {
             cx.note("js-confuser dispatcher kept: the program may replace a standard built-in the dispatcher uses (Object, Array, Function, Symbol)", None);
             return;
         }
-        let (removed, fresh): (Vec<String>, Vec<String>) = accepted
-            .iter()
-            .filter(|(planned, _)| planned.candidate.top)
-            .fold(
-                (Vec::new(), Vec::new()),
-                |(mut removed, mut fresh), (planned, names)| {
-                    removed.extend(removed_names(cx.scoping(), planned));
-                    fresh.extend(names.iter().cloned());
-                    (removed, fresh)
-                },
-            );
+        let (removed, fresh) = removed_and_fresh(cx.scoping(), &accepted);
         if !removed.is_empty() && reached(&trial, &restored, &removed, &fresh) {
             cx.note("js-confuser dispatcher kept: code may reach or observe its names through the global object or code text", None);
             return;

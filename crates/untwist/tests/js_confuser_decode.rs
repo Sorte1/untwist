@@ -2,7 +2,8 @@ use untwist::{Options, Pipeline};
 use untwist_testing::js_files_in;
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
-const KEPT: [(&str, &str); 23] = [
+const KEPT: [(&str, &str); 24] = [
+    ("kept-pair-dispatcher-this.js", "_dispatcher_0("),
     ("kept-custom-free-name.js", "_MAIN_STR("),
     ("kept-integrity-key-read.js", "fnObject"),
     ("kept-integrity-key-prototype.js", "TAMPERED"),
@@ -48,7 +49,7 @@ fn unsafe_lane(source: &str) -> String {
 
 fn fixtures() -> Vec<(String, String)> {
     let fixtures = js_files_in("fixtures/js-confuser-decode");
-    assert_eq!(fixtures.len(), 30);
+    assert_eq!(fixtures.len(), 32);
     fixtures
 }
 
@@ -169,5 +170,15 @@ fn a_custom_string_encoding_decodes_by_evaluation_in_both_lanes() {
         assert!(code.contains("hello, "), "{code}");
         assert!(!code.contains("_STR("), "{code}");
         assert!(!code.contains("TextDecoder"), "{code}");
+    }
+}
+
+#[test]
+fn concealed_dispatcher_keys_decode_and_the_dispatcher_goes_in_both_lanes() {
+    let source = named(&fixtures(), "pair-dispatcher.js");
+    for code in [default_lane(&source), unsafe_lane(&source)] {
+        assert!(code.contains("\"hello, \""), "{code}");
+        assert!(!code.contains("_STR("), "{code}");
+        assert!(!code.contains("_dispatcher_0"), "{code}");
     }
 }
