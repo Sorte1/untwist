@@ -1,6 +1,6 @@
-mod address;
-mod fetch;
-mod url;
+pub(crate) mod address;
+pub(crate) mod fetch;
+pub(crate) mod url;
 
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};

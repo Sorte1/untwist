@@ -559,14 +559,14 @@ fn read_keys(work: &Path) -> Result<BTreeMap<String, BTreeSet<String>>> {
     Ok(keys)
 }
 
-fn write_content(dir: &Path, bytes: &[u8], extension: &str) -> Result<(String, String)> {
+pub(crate) fn write_content(dir: &Path, bytes: &[u8], extension: &str) -> Result<(String, String)> {
     let sha = sha256_hex(bytes);
     let file = format!("{SHARDS}/{sha}.{extension}");
     std::fs::write(dir.join(&file), bytes)?;
     Ok((file, sha))
 }
 
-fn versions_of(rows: &[Row]) -> Vec<String> {
+pub(crate) fn versions_of(rows: &[Row]) -> Vec<String> {
     let mut versions: Vec<String> = rows
         .iter()
         .flat_map(|row| untwist_rename::library::parse_ranges(&row.versions))
@@ -635,7 +635,7 @@ fn curated_tables(root: &Path, only: Option<&str>) -> Result<Vec<Curated>> {
     Ok(curated)
 }
 
-fn range_of(versions: &[String]) -> String {
+pub(crate) fn range_of(versions: &[String]) -> String {
     match (versions.first(), versions.last()) {
         (Some(low), Some(high)) if low != high => format!("{low}~{high}"),
         (Some(low), _) => low.clone(),
@@ -730,34 +730,19 @@ fn pack(
     let mut packages = Vec::new();
     let mut blooms = Vec::new();
     for (label, rows) in &by_label {
-        let text = Table::from_rows(rows).write(label);
-        let bytes = crate::library_gz::bytes(&text);
-        let (file, sha256) = write_content(out, &bytes, "utl")?;
-        let versions = versions_of(rows);
-        let range = range_of(&versions);
+        let (shards, package_blooms) = crate::library_shards::package_shards(out, label, rows)?;
+        blooms.extend(package_blooms);
         packages.push(Package {
             id: label.clone(),
             label: label.clone(),
-            versions,
-            shards: vec![Shard {
-                file,
-                bytes: bytes.len() as u64,
-                sha256,
-                versions: range,
-                rows: rows.len() as u64,
-            }],
+            versions: versions_of(rows),
+            shards,
             keys: keys
                 .get(label)
                 .map(|set| set.iter().cloned().collect())
                 .unwrap_or_default(),
             curated: false,
         });
-        let loose: Vec<u32> = rows
-            .iter()
-            .filter(|row| row.role != Role::Order)
-            .map(|row| row.loose)
-            .collect();
-        blooms.push((label.clone(), Bloom::with_keys(&loose)));
     }
     for table in curated {
         let (package, bloom) = curated_package(out, table)?;

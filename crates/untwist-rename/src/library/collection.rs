@@ -4,15 +4,16 @@ use sha2::{Digest, Sha256};
 
 use super::hash::mix;
 use super::table::{inflate_with_limit, Table, INFLATED_LIMIT};
-use super::SHAPE_EPOCH;
+use super::{CLUSTER_HITS, SHAPE_EPOCH};
 
 pub const SCHEMA: &str = "untwist.library-collection/1";
 pub const INDEX: &str = "collection.json";
 const BLOOM_MAGIC: &[u8; 8] = b"UTBLOOM1";
-pub const BLOOM_BITS_PER_KEY: u64 = 10;
-pub const BLOOM_HASHES: u8 = 7;
+pub const BLOOM_BITS_PER_KEY: u64 = 16;
+pub const BLOOM_HASHES: u8 = 11;
 const BLOOM_SEED: u64 = 0x5bd1_e995_9e37_79b9;
 const BLOOM_MIN_BITS: u64 = 64;
+pub const SHARD_BLOOM: char = '#';
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FileRef {
@@ -194,6 +195,19 @@ pub fn parse_bloom_file(bytes: &[u8]) -> Option<Vec<(String, Bloom)>> {
     reader.bytes.is_empty().then_some(out)
 }
 
+struct Hits {
+    all: usize,
+    strong: usize,
+    program: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ProgramKeys {
+    pub loose: FxHashSet<u32>,
+    pub strong: FxHashSet<u32>,
+    pub program: Option<u32>,
+}
+
 pub fn sha256_hex(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
         .iter()
@@ -205,6 +219,11 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
 pub struct Collection {
     pub index: Index,
     blooms: Vec<Option<Bloom>>,
+    shard_blooms: Vec<Vec<Option<Bloom>>>,
+}
+
+pub fn shard_bloom_id(package: &str, shard: usize) -> String {
+    format!("{package}{SHARD_BLOOM}{shard}")
 }
 
 fn safe_file(file: &str) -> bool {
@@ -250,7 +269,16 @@ impl Collection {
             check_file(&filters.file, &filters.sha256)?;
         }
         let blooms = vec![None; index.packages.len()];
-        Ok(Self { index, blooms })
+        let shard_blooms = index
+            .packages
+            .iter()
+            .map(|package| vec![None; package.shards.len()])
+            .collect();
+        Ok(Self {
+            index,
+            blooms,
+            shard_blooms,
+        })
     }
 
     pub fn filters(&self) -> Option<&FileRef> {
@@ -271,25 +299,108 @@ impl Collection {
         let entries = parse_bloom_file(bytes)
             .ok_or_else(|| CollectionError::Filters("the file does not parse".to_string()))?;
         for (id, bloom) in entries {
-            if let Some(index) = self
+            let (package_id, shard) = match id.rsplit_once(SHARD_BLOOM) {
+                Some((package, shard)) => match shard.parse::<usize>() {
+                    Ok(shard) => (package.to_string(), Some(shard)),
+                    Err(_) => (id, None),
+                },
+                None => (id, None),
+            };
+            let Some(index) = self
                 .index
                 .packages
                 .iter()
-                .position(|package| package.id == id)
-            {
-                self.blooms[index] = Some(bloom);
+                .position(|package| package.id == package_id)
+            else {
+                continue;
+            };
+            match shard {
+                Some(shard) => {
+                    if let Some(slot) = self.shard_blooms[index].get_mut(shard) {
+                        *slot = Some(bloom);
+                    }
+                }
+                None => self.blooms[index] = Some(bloom),
             }
         }
         Ok(())
     }
 
-    pub fn wanted_by_keys(&self, loose: &FxHashSet<u32>) -> Vec<usize> {
-        (0..self.index.packages.len())
-            .filter(|&index| match &self.blooms[index] {
+    fn bloom_of(&self, package: usize, shard: usize) -> Option<&Bloom> {
+        self.shard_blooms[package][shard]
+            .as_ref()
+            .or(self.blooms[package].as_ref())
+    }
+
+    pub fn shard_count(&self) -> usize {
+        self.index
+            .packages
+            .iter()
+            .map(|package| package.shards.len())
+            .sum()
+    }
+
+    pub fn shards_wanted_by_keys(&self, loose: &FxHashSet<u32>) -> Vec<(usize, usize)> {
+        self.index
+            .packages
+            .iter()
+            .enumerate()
+            .flat_map(|(package, entry)| (0..entry.shards.len()).map(move |shard| (package, shard)))
+            .filter(|&(package, shard)| match self.bloom_of(package, shard) {
                 Some(bloom) => loose.iter().any(|&key| bloom.contains(key)),
                 None => !loose.is_empty(),
             })
             .collect()
+    }
+
+    fn shard_hits(&self, package: usize, shard: usize, keys: &ProgramKeys) -> Hits {
+        let Some(bloom) = self.bloom_of(package, shard) else {
+            let any = usize::from(!keys.loose.is_empty());
+            return Hits {
+                all: any * CLUSTER_HITS,
+                strong: any,
+                program: false,
+            };
+        };
+        let count = |set: &FxHashSet<u32>| set.iter().filter(|&&key| bloom.contains(key)).count();
+        Hits {
+            all: count(&keys.loose),
+            strong: count(&keys.strong),
+            program: keys.program.is_some_and(|key| bloom.contains(key)),
+        }
+    }
+
+    pub fn shards_wanted(&self, keys: &ProgramKeys) -> Vec<(usize, usize)> {
+        let mut wanted = Vec::new();
+        for (package, entry) in self.index.packages.iter().enumerate() {
+            let hits: Vec<Hits> = (0..entry.shards.len())
+                .map(|shard| self.shard_hits(package, shard, keys))
+                .collect();
+            let total: usize = hits.iter().map(|hit| hit.all).sum();
+            let strong: usize = hits.iter().map(|hit| hit.strong).sum();
+            let whole = hits.iter().any(|hit| hit.program);
+            let enough = entry.curated || whole || (strong > 0 && total >= CLUSTER_HITS);
+            if !enough {
+                continue;
+            }
+            wanted.extend(
+                hits.iter()
+                    .enumerate()
+                    .filter(|(_, hit)| hit.all > 0 || hit.program)
+                    .map(|(shard, _)| (package, shard)),
+            );
+        }
+        wanted
+    }
+
+    pub fn wanted_by_keys(&self, loose: &FxHashSet<u32>) -> Vec<usize> {
+        let mut packages: Vec<usize> = self
+            .shards_wanted_by_keys(loose)
+            .into_iter()
+            .map(|(package, _)| package)
+            .collect();
+        packages.dedup();
+        packages
     }
 
     pub fn wanted_by_text(&self, text: &str) -> Vec<usize> {

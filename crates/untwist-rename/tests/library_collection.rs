@@ -169,3 +169,93 @@ fn every_fixture_shard_is_a_v2_table_named_by_its_hash() {
         assert!(Table::parse(&text).is_some());
     }
 }
+
+#[test]
+fn a_shard_bloom_selects_only_its_own_shard() {
+    use untwist_rename::library::collection::shard_bloom_id;
+    let shard = |hex: char| {
+        format!(
+            "{{\"file\": \"shards/{0}.utl\", \"bytes\": 1, \"sha256\": \"{0}\"}}",
+            hex.to_string().repeat(64)
+        )
+    };
+    let blooms = bloom_file(&[
+        (shard_bloom_id("three", 0), Bloom::with_keys(&[11])),
+        (shard_bloom_id("three", 1), Bloom::with_keys(&[22])),
+    ]);
+    let sha = sha256_hex(&blooms);
+    let index = format!(
+        "{{\"schema\": \"untwist.library-collection/1\", \"version\": \"t\", \"shape_epoch\": {SHAPE_EPOCH}, \"packages\": [{{\"id\": \"three\", \"label\": \"three\", \"shards\": [{}, {}]}}], \"filters\": {{\"file\": \"shards/{sha}.bloom\", \"sha256\": \"{sha}\"}}}}",
+        shard('a'),
+        shard('b')
+    );
+    let mut collection = Collection::parse(&index).expect("the index parses");
+    collection
+        .attach_filters(&blooms)
+        .expect("the filters load");
+    let keys = |key: u32| -> FxHashSet<u32> { [key].into_iter().collect() };
+    assert_eq!(collection.shards_wanted_by_keys(&keys(11)), [(0, 0)]);
+    assert_eq!(collection.shards_wanted_by_keys(&keys(22)), [(0, 1)]);
+    assert_eq!(collection.wanted_by_keys(&keys(22)), [0]);
+    assert_eq!(collection.shard_count(), 2);
+}
+
+#[test]
+fn a_generated_package_is_wanted_only_on_enough_evidence() {
+    use untwist_rename::library::collection::ProgramKeys;
+    use untwist_rename::library::CLUSTER_HITS;
+    let collection = parsed();
+    let keys: Vec<u32> = shard_keys(&collection, 0).into_iter().collect();
+    let some = |count: usize, program: Option<u32>| ProgramKeys {
+        loose: keys.iter().take(count).copied().collect(),
+        strong: keys.iter().take(count.min(1)).copied().collect(),
+        program,
+    };
+    let wanted = |found: ProgramKeys| -> Vec<usize> {
+        collection
+            .shards_wanted(&found)
+            .into_iter()
+            .map(|(package, _)| package)
+            .collect()
+    };
+    assert!(!wanted(some(CLUSTER_HITS - 1, None)).contains(&0));
+    assert!(wanted(some(CLUSTER_HITS, None)).contains(&0));
+    assert!(wanted(some(0, Some(keys[0]))).contains(&0));
+}
+
+#[test]
+fn an_unrelated_big_program_wants_almost_no_package() {
+    use untwist_rename::library::collection::ProgramKeys;
+    let collection = parsed();
+    let known: FxHashSet<u32> = (0..collection.packages().len())
+        .flat_map(|package| shard_keys(&collection, package))
+        .collect();
+    let loose: FxHashSet<u32> = (0u32..300)
+        .map(|seed| seed.wrapping_mul(2_654_435_761))
+        .filter(|key| !known.contains(key))
+        .collect();
+    let found = ProgramKeys {
+        strong: loose.clone(),
+        loose,
+        program: None,
+    };
+    let wanted = collection.shards_wanted(&found);
+    assert!(wanted.len() <= 1, "{wanted:?}");
+}
+
+#[test]
+fn the_fixture_filter_file_is_what_bloom_file_writes_for_its_shards() {
+    let collection = parsed();
+    let entries: Vec<(String, Bloom)> = (0..collection.packages().len())
+        .map(|package| {
+            let keys: Vec<u32> = shard_keys(&collection, package).into_iter().collect();
+            (
+                collection.packages()[package].id.clone(),
+                Bloom::with_keys(&keys),
+            )
+        })
+        .collect();
+    let filters = collection.filters().expect("a filter file");
+    let written = std::fs::read(fixture().join(&filters.file)).expect("the filter file");
+    assert_eq!(bloom_file(&entries), written);
+}

@@ -18,6 +18,7 @@ pub mod library_gz;
 pub mod library_order;
 pub mod library_owners;
 pub mod library_scan;
+pub mod library_shards;
 pub mod library_table;
 pub mod library_whole;
 pub mod modern_table;

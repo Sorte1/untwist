@@ -113,11 +113,138 @@ fn a_missing_shard_is_a_warning_not_a_failure() {
     assert!(!libraries(&json).contains(&"eventemitter3".to_string()));
 }
 
+struct Served {
+    origin: String,
+}
+
+fn serve(root: PathBuf) -> Served {
+    use std::io::{BufRead, BufReader, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("a local port");
+    let origin = format!("http://{}", listener.local_addr().expect("an address"));
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let mut line = String::new();
+            let _ = BufReader::new(&stream).read_line(&mut line);
+            let path = line
+                .split(' ')
+                .nth(1)
+                .unwrap_or("/")
+                .trim_start_matches('/');
+            let reply = match std::fs::read(root.join(path)) {
+                Ok(body) => [
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        body.len()
+                    )
+                    .into_bytes(),
+                    body,
+                ]
+                .concat(),
+                Err(_) => {
+                    b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                        .to_vec()
+                }
+            };
+            let _ = stream.write_all(&reply);
+        }
+    });
+    Served { origin }
+}
+
+fn with_cache(cache: &Path, args: &[&str]) -> std::process::Output {
+    common::bin()
+        .env("UNTWIST_LIBRARY_CACHE", cache)
+        .args(args)
+        .output()
+        .expect("untwist runs")
+}
+
 #[test]
-fn a_url_is_refused_since_the_cli_reads_only_local_collections() {
-    let out = stdin_output("a;", &["--libraries", "https://untwist.dev/libraries/"]);
-    assert_eq!(out.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&out.stderr).contains("local path"));
+fn update_fills_the_cache_that_a_plain_run_then_reads() {
+    let server = serve(fixture());
+    let cache = tempfile::tempdir().expect("a temp dir");
+    let url = format!("{}/", server.origin);
+    let updated = with_cache(cache.path(), &["libraries", "update", "--url", &url]);
+    assert!(
+        updated.status.success(),
+        "{}",
+        String::from_utf8_lossy(&updated.stderr)
+    );
+    let said = String::from_utf8_lossy(&updated.stdout);
+    assert!(said.contains("library collection 2026.11.0-test"), "{said}");
+    assert!(said.contains("3 packages"), "{said}");
+    let status = with_cache(cache.path(), &["libraries", "status"]);
+    assert!(String::from_utf8_lossy(&status.stdout).contains(&url));
+
+    let input = fixture().join("inputs/eventemitter3.rollup-cjs.terser.js");
+    let input = input.to_string_lossy();
+    let run = with_cache(cache.path(), &["--unsafe", &input]);
+    assert!(String::from_utf8_lossy(&run.stdout).contains("// eventemitter3 "));
+    let builtin = with_cache(
+        cache.path(),
+        &["--unsafe", "--libraries", "builtin", &input],
+    );
+    assert!(!String::from_utf8_lossy(&builtin.stdout).contains("// eventemitter3 "));
+
+    let again = with_cache(cache.path(), &["libraries", "update", "--url", &url]);
+    assert!(String::from_utf8_lossy(&again.stdout).contains("fetched 0 files"));
+    let cleared = with_cache(cache.path(), &["libraries", "clear"]);
+    assert!(cleared.status.success());
+    let run = with_cache(cache.path(), &["--unsafe", &input]);
+    assert!(!String::from_utf8_lossy(&run.stdout).contains("// eventemitter3 "));
+    let status = with_cache(cache.path(), &["libraries", "status"]);
+    assert!(String::from_utf8_lossy(&status.stdout).contains("no library collection"));
+}
+
+#[test]
+fn a_url_source_fetches_only_the_shards_the_program_wants() {
+    let server = serve(fixture());
+    let cache = tempfile::tempdir().expect("a temp dir");
+    let url = format!("{}/", server.origin);
+    let input = fixture().join("inputs/eventemitter3.rollup-cjs.terser.js");
+    let out = with_cache(
+        cache.path(),
+        &[
+            "--unsafe",
+            "--report",
+            "json",
+            "--libraries",
+            &url,
+            &input.to_string_lossy(),
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let json: serde_json::Value = serde_json::from_slice(&out.stdout).expect("a json report");
+    assert!(
+        libraries(&json).contains(&"eventemitter3".to_string()),
+        "{json}"
+    );
+    assert_eq!(
+        json["collection"]["shards_loaded"],
+        serde_json::json!(["eventemitter3"])
+    );
+    assert!(
+        std::fs::read_dir(cache.path().join("shards"))
+            .expect("cached shards")
+            .count()
+            >= 1
+    );
+}
+
+#[test]
+fn an_unreachable_collection_url_is_an_error() {
+    let cache = tempfile::tempdir().expect("a temp dir");
+    let out = with_cache(
+        cache.path(),
+        &["libraries", "update", "--url", "http://127.0.0.1:9/"],
+    );
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("error:"));
 }
 
 fn core_js_table() -> PathBuf {
@@ -235,4 +362,55 @@ fn library_imports_needs_an_output_directory() {
     );
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("--single-file"));
+}
+
+#[test]
+fn an_explicit_cache_without_a_collection_warns_and_uses_the_built_in_tables() {
+    let out = stdin_output("a;", &["--libraries", "cache"]);
+    assert!(out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("no cached library collection"));
+}
+
+#[test]
+fn a_path_that_is_not_a_collection_is_an_error_naming_it() {
+    let missing = fixture().join("doesnotexist");
+    let out = stdin_output("a;", &["--libraries", &missing.to_string_lossy()]);
+    assert!(!out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("doesnotexist"), "{stderr}");
+    let index = fixture().join("collection.json");
+    let out = stdin_output("a;", &["--libraries", &index.to_string_lossy()]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_shard_that_is_not_a_regular_file_is_skipped_without_reading_it() {
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let index = std::fs::read_to_string(fixture().join("collection.json")).expect("the index");
+    std::fs::write(dir.path().join("collection.json"), &index).expect("the index copy");
+    std::fs::create_dir(dir.path().join("shards")).expect("the shard dir");
+    let json: serde_json::Value = serde_json::from_str(&index).expect("json");
+    for package in json["packages"].as_array().expect("packages") {
+        let file = package["shards"][0]["file"].as_str().expect("a shard");
+        let target = dir.path().join(file);
+        match package["id"] == "eventemitter3" {
+            true => {
+                let made = std::process::Command::new("mkfifo").arg(&target).status();
+                assert!(made.is_ok_and(|status| status.success()));
+            }
+            false => {
+                std::fs::copy(fixture().join(file), &target).expect("a shard copy");
+            }
+        }
+    }
+    let filters = json["filters"]["file"].as_str().expect("a filter file");
+    std::fs::copy(fixture().join(filters), dir.path().join(filters)).expect("the filters");
+    let (json, stderr) = report(&["--libraries", &dir.path().to_string_lossy()]);
+    assert!(stderr.contains("not a regular file"), "{stderr}");
+    assert!(!libraries(&json).contains(&"eventemitter3".to_string()));
 }
