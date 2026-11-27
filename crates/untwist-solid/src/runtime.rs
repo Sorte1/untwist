@@ -207,7 +207,15 @@ impl Runtime {
         let Some([template]) = candidates.get("template").map(Vec::as_slice) else {
             return;
         };
-        let home = scoping.symbol_scope_id(*template);
+        let template = *template;
+        let home = scoping.symbol_scope_id(template);
+        let end = region_end(scoping, nodes, template, home);
+        for symbols in candidates.values_mut() {
+            symbols.retain(|symbol| {
+                untwist_restore::region::declared_before(scoping, nodes, *symbol, end)
+            });
+        }
+        candidates.retain(|_, symbols| !symbols.is_empty());
         if !candidates.contains_key("insert") && !candidates.contains_key("createComponent") {
             return;
         }
@@ -239,9 +247,17 @@ impl Runtime {
         let Some([template]) = found.get(&Rt::Template).map(Vec::as_slice) else {
             return;
         };
-        let home = scoping.symbol_scope_id(*template);
+        let template = *template;
+        let home = scoping.symbol_scope_id(template);
+        let end = region_end(scoping, nodes, template, home);
+        for symbols in found.values_mut() {
+            symbols.retain(|symbol| {
+                untwist_restore::region::declared_before(scoping, nodes, *symbol, end)
+            });
+        }
+        found.retain(|_, symbols| !symbols.is_empty());
         self.minified = true;
-        for (rt, symbol) in loops(&found, scoping, nodes, home) {
+        for (rt, symbol) in loops(&found, scoping, nodes, home, end) {
             found.insert(rt, vec![symbol]);
         }
         for (rt, symbols) in found {
@@ -255,11 +271,17 @@ impl Runtime {
     }
 }
 
+fn region_end(scoping: &Scoping, nodes: &AstNodes<'_>, template: SymbolId, home: ScopeId) -> u32 {
+    untwist_restore::region::first_top_level_call(scoping, nodes, template, home)
+        .unwrap_or(u32::MAX)
+}
+
 fn loops(
     found: &FxHashMap<Rt, Vec<SymbolId>>,
     scoping: &Scoping,
     nodes: &AstNodes<'_>,
     home: ScopeId,
+    end: u32,
 ) -> Vec<(Rt, SymbolId)> {
     let only = |name: &str| -> Option<SymbolId> {
         let rt = bundled(name)?;
@@ -275,7 +297,9 @@ fn loops(
     };
     let mut picks: Vec<(Rt, SymbolId)> = Vec::new();
     for symbol in scoping.get_bindings(home).values().copied() {
-        if found.values().any(|symbols| symbols.contains(&symbol)) {
+        if found.values().any(|symbols| symbols.contains(&symbol))
+            || !untwist_restore::region::declared_before(scoping, nodes, symbol, end)
+        {
             continue;
         }
         let AstKind::Function(function) = nodes.kind(scoping.symbol_declaration(symbol)) else {

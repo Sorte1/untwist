@@ -236,7 +236,19 @@ pub fn restore(code: &str) -> Restore {
         })
         .collect();
     idents.sort_by_key(|(span, _)| span.start);
-    let rw = Rewriter::new(code, "Solid", Vec::new(), refs, shorthands);
+    let mut rw = Rewriter::new(code, "Solid", Vec::new(), refs, shorthands);
+    rw.keep_lines(
+        nodes
+            .iter()
+            .filter_map(|node| match node.kind() {
+                AstKind::TemplateLiteral(template) => Some(template),
+                _ => None,
+            })
+            .flat_map(|template| template.quasis.iter())
+            .filter(|quasi| quasi.value.raw.contains('\n'))
+            .map(|quasi| quasi.span)
+            .collect(),
+    );
     for (symbol, rt) in &runtime.symbols {
         match (runtime.esm, rt.spelling()) {
             (false, Some((name, _))) => {
@@ -266,5 +278,9 @@ pub fn restore(code: &str) -> Restore {
         candidates: convert::candidates(nodes),
     };
     let found = module::components(&cx, home);
-    module::restore_all(&cx, home, &found)
+    let mut restored = module::restore_all(&cx, home, &found);
+    for component in &mut restored.components {
+        component.text = untwist_restore::text::restore_lines(&component.text);
+    }
+    restored
 }
