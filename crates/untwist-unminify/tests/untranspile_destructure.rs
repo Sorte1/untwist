@@ -56,7 +56,7 @@ fn babel_sliced_to_array_becomes_an_array_pattern_under_unsafe() {
     let code = helpers(&fixture("babel/destructure.7.29.js"), true);
     assert!(code.contains("var [m, n] = _Set;"), "{code}");
     assert!(
-        code.contains("var [key, value] = _Object$entries[_i];"),
+        code.contains("for (var [key, value] of Object.entries({"),
         "{code}"
     );
     assert!(code.contains("var [c1, c2] = str;"), "{code}");
