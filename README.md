@@ -313,6 +313,15 @@ input is not imported back by name; the safe lane keeps any bundle with a relati
 string) reaches `import()`, node's module objects or loader, and that the program does not read its
 own file name or the main module's path (`import.meta.url`, `__filename`, `require.main`,
 `process.argv`); the safe lane refuses those. Both lanes assume no code reads file names out of a stack trace (`new Error().stack`).
+An input that may read its own file is passed through unchanged in both lanes, since any rewrite
+changes the bytes it reads (a self-hash such as BLA's `selfSeal` would then throw): one where its
+own path (`__filename`, `import.meta`, `require.main`, `module.filename`, `process.argv[1]`, also
+through variables and properties that hold it) reaches a call that reads a file (`readFileSync`,
+`openSync`, `createReadStream`, `stat`, `exec`, `spawn`, `fetch` and the like, or a function that
+passes its parameter to one). Running its own text again
+(`vm.runInThisContext(fs.readFileSync(__filename))`) does not count. Both lanes assume no code
+reaches its own file another way (a path spelled out, `__dirname` with its own name, the CommonJS
+wrapper's `arguments`, a code text Untwist cannot read).
 An input is taken as an ES module, as node 22 takes it, when it is named `.mjs`, when its own text
 (before any pass runs) does not parse as a script but parses as a module (`import`/`export`,
 `import.meta` or a top-level `await x`, also in code a later pass removes), or when it declares

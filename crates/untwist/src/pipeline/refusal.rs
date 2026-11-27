@@ -63,6 +63,12 @@ pub const ANNEX_B_UNMODELLED: &str = "this input declares a function directly in
      a same-named lexical declaration, whose scope untwist's binder does not model; it is passed \
      through unchanged";
 
+pub const OWN_FILE_READ: &str = "this input may read its own file: its own path \
+     (`__filename`, `import.meta`, `require.main`, `module.filename`, `process.argv[1]`) reaches \
+     a call that reads a file (`readFileSync`, `openSync`, `createReadStream`, `stat`, `exec`, \
+     `fetch`, ... or a function that passes its parameter to one), so any rewrite changes what it \
+     reads; it is passed through unchanged";
+
 pub const WORKER_DIED: &str = "processing this input stopped the worker process, which ran out \
      of stack or memory; it is passed through unchanged";
 
@@ -84,7 +90,7 @@ const MIB: u64 = 1 << 20;
 
 const ADMIT_PANIC_HOOK: &str = "a test hook panicked in admit";
 
-const INPUT_REFUSALS: [&str; 12] = [
+const INPUT_REFUSALS: [&str; 13] = [
     NESTED_TOO_DEEP,
     PARENTHESES_TOO_DEEP,
     PRINT_TOO_LARGE,
@@ -92,6 +98,7 @@ const INPUT_REFUSALS: [&str; 12] = [
     SYNTAX_ERROR_REFUSED,
     PARSE_UNSUPPORTED,
     ANNEX_B_UNMODELLED,
+    OWN_FILE_READ,
     WORKER_DIED,
     OVER_MEMORY_REFUSED,
     OVER_TIME_REFUSED,
