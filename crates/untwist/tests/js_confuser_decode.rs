@@ -2,7 +2,7 @@ use untwist::{Options, Pipeline};
 use untwist_testing::js_files_in;
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
-const KEPT: [(&str, &str); 16] = [
+const KEPT: [(&str, &str); 22] = [
     ("kept-integrity-key-read.js", "fnObject"),
     ("kept-integrity-key-prototype.js", "TAMPERED"),
     ("kept-return-newline-integrity.js", "TAMPERED"),
@@ -19,6 +19,12 @@ const KEPT: [(&str, &str); 16] = [
     ("kept-literal-array-read.js", "_dlrArray"),
     ("kept-global-shadowed.js", "_getGlobal("),
     ("patched-predicate.js", "_dummyFunction"),
+    ("kept-dispatcher-this.js", "_dispatcher_0("),
+    ("kept-dispatcher-payload-read.js", "_dispatcher_0("),
+    ("kept-dispatcher-local.js", "_dispatcher_0("),
+    ("kept-flat-escape.js", "_flat_peek("),
+    ("kept-flat-shadowed.js", "_flat_name("),
+    ("patched-flat-iterator.js", "_flat_twice("),
 ];
 
 fn lane(source: &str, unsafe_transforms: bool) -> String {
@@ -41,7 +47,7 @@ fn unsafe_lane(source: &str) -> String {
 
 fn fixtures() -> Vec<(String, String)> {
     let fixtures = js_files_in("fixtures/js-confuser-decode");
-    assert_eq!(fixtures.len(), 20);
+    assert_eq!(fixtures.len(), 28);
     fixtures
 }
 
@@ -127,4 +133,30 @@ fn an_integrity_check_that_passes_on_the_input_goes_in_both_lanes() {
         assert!(!code.contains("fnObject"), "{code}");
         assert!(!code.contains("while (true)"), "{code}");
     }
+}
+
+#[test]
+fn a_dispatcher_becomes_functions_again_in_both_lanes() {
+    let source = named(&fixtures(), "dispatcher.js");
+    for code in [default_lane(&source), unsafe_lane(&source)] {
+        assert!(!code.contains("_dispatcher_0"), "{code}");
+        assert!(!code.contains("_payload"), "{code}");
+    }
+    assert!(default_lane(&source).contains("function fn(...[value])"));
+}
+
+#[test]
+fn flattened_functions_go_back_into_their_wrappers_in_both_lanes() {
+    let source = named(&fixtures(), "flatten.js");
+    for code in [default_lane(&source), unsafe_lane(&source)] {
+        assert!(!code.contains("_flat_"), "{code}");
+        assert!(code.contains("function bump(...[step])"), "{code}");
+    }
+}
+
+#[test]
+fn a_patched_iterator_keeps_flatten_in_the_default_lane_only() {
+    let source = named(&fixtures(), "patched-flat-iterator.js");
+    assert!(default_lane(&source).contains("_flat_twice("));
+    assert!(!unsafe_lane(&source).contains("_flat_twice("));
 }

@@ -25,6 +25,16 @@ All notable changes to this project are documented in this file. The format is b
   have (`prototype`, `bind`, ...), or when a calculator repeats a parameter name. In the default
   lane the built-ins scan for opaque predicates covers their dead branches too, and a checked
   function reached through the global object keeps its integrity check.
+- js-confuser `dispatcher` and `flatten` are undone. A dispatcher's function table becomes function
+  declarations again and its `(payload = [args], dispatcher("key"))` calls become plain calls; a
+  function the dispatcher hands out as a value keeps the name `fn` and `length` 0 it had there
+  (`function fn(...[a, b])`). A flattened function's body goes back into its
+  wrapper, its scope object's getters, setters, `typeof` getters and call proxies become the
+  variables again, and the parameters stay `...[a, b]` so `length` stays 0. Both are matched on the
+  AST; they refuse a body that reads `this`, `arguments`, `new.target` or a dispatcher local, a
+  payload or scope object used any other way, a name that would bind to another variable after the
+  move, machinery another input names, and in the default lane a patched `Object`, `Array`,
+  `Function` or `Symbol` the machinery relies on.
 - `dead-code` folds int32 opaque predicates by tracking which bits of a `const` are known through
   `& | ^ ~ + - << >> >>>` and `Math.imul`, for example `(Math.imul(s | 1, (s | 1) + 1) & 1) === 0`
   when only some bits of `s` are known; a test that the low unknown bits decide is tried for every

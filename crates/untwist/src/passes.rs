@@ -19,6 +19,8 @@ pub const PASSES: &[PassInfo] = &[
     pass("decode-js-confuser-strings", "prepare", false),
     pass("inline-js-confuser-globals", "prepare", false),
     pass("fold-js-confuser-helpers", "prepare", false),
+    pass("inline-js-confuser-dispatcher", "prepare", false),
+    pass("inline-js-confuser-flatten", "prepare", false),
     pass("block-statements", "prepare", false),
     pass("sequence", "prepare", false),
     pass("split-variable-declarations", "prepare", false),
