@@ -18,7 +18,8 @@ string-concealing--classes-1.js	safe	machinery	xfail	jsc-builtin-patched: safe l
 string-concealing--mixed-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
 string-concealing-05--classes-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
 string-concealing-05--mixed-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
-string-custom-encoding--*	*	machinery	xfail	jsc-string-concealing: stringConcealing's base91 decoders over one packed string (UTF-8 through TextDecoder, Buffer or a fallback picked from the global object) are not decoded
+string-custom-encoding--classes-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
+string-custom-encoding--mixed-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
 duplicate-literals--objects-1.js	*	machinery	xfail	jsc-duplicate-literals: duplicateLiteralsRemoval's literal array read by constant index is not inlined
 duplicate-literals--classes-1.js	*	machinery	xfail	jsc-duplicate-literals: duplicateLiteralsRemoval's literal array read by constant index is not inlined
 duplicate-literals--control-1.js	*	machinery	xfail	jsc-duplicate-literals: duplicateLiteralsRemoval's literal array read by constant index is not inlined

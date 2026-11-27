@@ -28,6 +28,8 @@ const PRELUDE_MARK: &str = "globalThis";
 const PROGRAM_MARKS: [&str; 2] = ["return globalThis", "TextDecoder"];
 const DECODER_MARKS: [&str; 3] = ["91", "0x5b", "0X5B"];
 const MAX_DECODER_TEXT: usize = 4096;
+const EVAL_FUEL: u64 = 1_000_000;
+const EVAL_HEAP: u64 = 1 << 22;
 
 static RELIED_ON: Reliance = Reliance {
     roots: &[
@@ -37,6 +39,24 @@ static RELIED_ON: Reliance = Reliance {
         "Array",
         "TextDecoder",
         "Uint8Array",
+    ],
+    members: &[],
+};
+
+static EVALUATED_RELIED_ON: Reliance = Reliance {
+    roots: &[
+        "globalThis",
+        "Object",
+        "String",
+        "Array",
+        "TextDecoder",
+        "Uint8Array",
+        "Number",
+        "Boolean",
+        "Function",
+        "Symbol",
+        "Math",
+        "JSON",
     ],
     members: &[],
 };
@@ -59,7 +79,12 @@ struct Pair {
     statements: [Span; 2],
     block: Span,
     top_level: bool,
-    table: Vec<u16>,
+    decoding: Decoding,
+}
+
+enum Decoding {
+    Base91(Vec<u16>),
+    Evaluated(String),
 }
 
 struct PairScan<'s> {
@@ -142,17 +167,23 @@ impl PairScan<'_> {
                 continue;
             };
             let decoder_text = text_of(self.source, window[0].span());
-            if decoder_text.len() > MAX_DECODER_TEXT
-                || !DECODER_MARKS.iter().any(|m| decoder_text.contains(m))
-            {
+            if decoder_text.len() > MAX_DECODER_TEXT {
                 continue;
             }
-            let Some(table) = matches_decoder(self.source, window[0].span(), self.names) else {
-                continue;
+            let table = DECODER_MARKS
+                .iter()
+                .any(|m| decoder_text.contains(m))
+                .then(|| matches_decoder(self.source, window[0].span(), self.names))
+                .flatten()
+                .filter(|table| table.len() == TABLE_LEN);
+            let decoding = match table {
+                Some(table) => Decoding::Base91(table),
+                None if one_plain_param(decoder_fn) => {
+                    Decoding::Evaluated(decoder_text.to_string())
+                }
+                None => continue,
             };
-            if table.len() != TABLE_LEN
-                || !matches_getter(self.source, window[1].span(), self.names)
-            {
+            if !matches_getter(self.source, window[1].span(), self.names) {
                 continue;
             }
             let (calls_decoder, slices) = getter_links(getter_fn, self.scoping);
@@ -165,7 +196,7 @@ impl PairScan<'_> {
                 statements: [window[0].span(), window[1].span()],
                 block: self.block,
                 top_level: self.depth == 0,
-                table,
+                decoding,
             });
         }
     }
@@ -271,6 +302,16 @@ fn packed_string(program: &Program<'_>, symbol: SymbolId) -> Option<Packed> {
     None
 }
 
+fn self_contained(refs: &Refs<'_>, scoping: &Scoping, region: Span) -> bool {
+    refs.all
+        .iter()
+        .filter(|(r, _)| inside(region, r.span))
+        .all(|(r, _)| {
+            r.symbol
+                .is_some_and(|symbol| inside(region, scoping.symbol_span(symbol)))
+        })
+}
+
 fn stable(symbol: SymbolId, refs: &Refs<'_>, scoping: &Scoping) -> bool {
     refs.stable(symbol, scoping)
 }
@@ -337,13 +378,63 @@ struct Plan {
     checked: Vec<Span>,
     symbols: Vec<SymbolId>,
     kept: Option<&'static str>,
+    evaluated: bool,
 }
 
 fn refusal(reason: &'static str) -> Result<Plan, &'static str> {
     Err(reason)
 }
 
-fn decode_calls(pair: &Pair, packed: &Packed, refs: &Refs<'_>) -> (Vec<(Span, String)>, bool) {
+fn one_plain_param(function: &Function<'_>) -> bool {
+    matches!(
+        function.params.items.as_slice(),
+        [param] if matches!(param.pattern, BindingPattern::BindingIdentifier(_)) && param.initializer.is_none()
+    ) && function.params.rest.is_none()
+        && function
+            .body
+            .as_ref()
+            .is_some_and(|body| body.directives.is_empty())
+}
+
+fn js_string_literal(units: &[u16]) -> String {
+    let mut out = String::from("\"");
+    for unit in units {
+        match char::from_u32(u32::from(*unit)) {
+            Some(c) if c.is_ascii_alphanumeric() || c == ' ' => out.push(c),
+            _ => out.push_str(&format!("\\u{unit:04x}")),
+        }
+    }
+    out.push('"');
+    out
+}
+
+fn evaluated(decoder: &str, name: &str, raw: &[u16], strict: bool) -> Option<String> {
+    let prologue = if strict { "\"use strict\";\n" } else { "" };
+    let text = format!("{prologue}{decoder}\n{name}({});", js_string_literal(raw));
+    let alloc = oxc_allocator::Allocator::default();
+    let parsed = untwist_core::parse::parse_program(&alloc, &text);
+    if !parsed.diagnostics.is_empty() {
+        return None;
+    }
+    match untwist_eval::closed_script_value(&parsed.program, EVAL_FUEL, EVAL_HEAP)? {
+        Const::Str(decoded) => Some(decoded),
+        _ => None,
+    }
+}
+
+fn decode_one(pair: &Pair, raw: &[u16], (name, strict): (&str, bool)) -> Option<String> {
+    match &pair.decoding {
+        Decoding::Base91(table) => base91::utf8(&base91::bytes(table, raw)),
+        Decoding::Evaluated(decoder) => evaluated(decoder, name, raw, strict),
+    }
+}
+
+fn decode_calls(
+    pair: &Pair,
+    packed: &Packed,
+    refs: &Refs<'_>,
+    decoder: (&str, bool),
+) -> (Vec<(Span, String)>, bool) {
     let calls = refs.calls_of(pair.getter);
     let mut folds = Vec::new();
     let mut every = true;
@@ -356,7 +447,7 @@ fn decode_calls(pair: &Pair, packed: &Packed, refs: &Refs<'_>) -> (Vec<(Span, St
         };
         let decoded = args.and_then(|(start, length)| {
             let raw = base91::slice(&packed.units, start, length)?;
-            base91::utf8(&base91::bytes(&pair.table, &raw))
+            decode_one(pair, &raw, decoder)
         });
         match decoded {
             Some(text) if inside(pair.block, call.span) => folds.push((call.span, text)),
@@ -397,6 +488,7 @@ fn analyse(
         return refusal("the input is a module");
     }
     let refs = scan(program, scoping);
+    let strict = program.has_use_strict_directive();
     if refs.has_with || may_call_eval(scoping) {
         return refusal("the program has a with statement or may call eval, which can rebind the machinery's names");
     }
@@ -425,6 +517,7 @@ fn analyse(
     let mut removals = Vec::new();
     let mut machinery: Vec<Span> = prelude.statements.clone();
     let mut kept_pairs = false;
+    let mut any_evaluated = false;
     let mut top_symbols = prelude_symbols.clone();
     for pair in &pairs {
         if !stable(pair.decoder, &refs, scoping) || !stable(pair.getter, &refs, scoping) {
@@ -441,8 +534,15 @@ fn analyse(
         {
             return refusal("a decoder function is used outside its getter");
         }
-        let linked = pair.returns_through == Some(prelude.buffer_to_string)
-            && count_refs(&refs, pair.statements[0], prelude.buffer_to_string) == 1
+        let evaluated = matches!(pair.decoding, Decoding::Evaluated(_));
+        let returns = match evaluated {
+            true => count_refs(&refs, pair.statements[0], prelude.buffer_to_string) == 0,
+            false => {
+                pair.returns_through == Some(prelude.buffer_to_string)
+                    && count_refs(&refs, pair.statements[0], prelude.buffer_to_string) == 1
+            }
+        };
+        let linked = returns
             && pair.calls_decoder == Some(pair.decoder)
             && count_refs(&refs, pair.statements[1], pair.decoder) == 1;
         let Some(array) = pair.slices.filter(|_| linked) else {
@@ -464,15 +564,18 @@ fn analyse(
                 packed.as_ref().unwrap_or_else(|| unreachable!())
             }
         };
-        let decoder_closed = closed(
-            &refs,
-            scoping,
-            &Closure {
-                region: pair.statements[0],
-                allowed: &[prelude.buffer_to_string],
-                helpers: &helpers,
-            },
-        );
+        let decoder_closed = match evaluated {
+            true => self_contained(&refs, scoping, pair.statements[0]),
+            false => closed(
+                &refs,
+                scoping,
+                &Closure {
+                    region: pair.statements[0],
+                    allowed: &[prelude.buffer_to_string],
+                    helpers: &helpers,
+                },
+            ),
+        };
         let getter_closed = closed(
             &refs,
             scoping,
@@ -495,7 +598,9 @@ fn analyse(
         if !getter_refs.iter().all(|r| inside(pair.block, r.span)) {
             return refusal("a getter is used outside the block that declares it");
         }
-        let (decoded, every) = decode_calls(pair, this_packed, &refs);
+        let decoder = (scoping.symbol_name(pair.decoder), strict);
+        let (decoded, every) = decode_calls(pair, this_packed, &refs, decoder);
+        any_evaluated |= evaluated;
         folds.extend(decoded);
         machinery.extend(pair.statements);
         if pair.top_level {
@@ -563,6 +668,7 @@ fn analyse(
         checked: machinery,
         symbols: top_symbols,
         kept,
+        evaluated: any_evaluated,
     })
 }
 
@@ -646,7 +752,13 @@ impl<'a> Pass<'a> for DecodeStrings {
             program,
             cx,
             replacements,
-            (&RELIED_ON, &plan.checked),
+            (
+                match plan.evaluated {
+                    true => &EVALUATED_RELIED_ON,
+                    false => &RELIED_ON,
+                },
+                &plan.checked,
+            ),
             &plan.symbols,
         ) else {
             return;

@@ -37,6 +37,11 @@ All notable changes to this project are documented in this file. The format is b
   payload or scope object used any other way, a name that would bind to another variable after the
   move, machinery another input names, and in the default lane a patched `Object`, `Array`,
   `Function` or `Symbol` the machinery relies on.
+- js-confuser `customStringEncodings`: a string decoder that is not the base91 template is decoded
+  by running it in the sandboxed evaluator on each getter call's slice of the packed string, when it
+  takes one plain parameter and reads no name declared outside itself. In the default lane the
+  built-ins it can reach through its values (`String`, `Array`, `Number`, `Boolean`, `Function`,
+  `Symbol`, `Object`, `Math`, `JSON`) must be unpatched, as for the base91 decoder.
 - `dead-code` folds int32 opaque predicates by tracking which bits of a `const` are known through
   `& | ^ ~ + - << >> >>>` and `Math.imul`, for example `(Math.imul(s | 1, (s | 1) + 1) & 1) === 0`
   when only some bits of `s` are known; a test that the low unknown bits decide is tried for every
