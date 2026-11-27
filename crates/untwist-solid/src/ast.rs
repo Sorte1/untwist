@@ -147,3 +147,59 @@ pub fn once(expr: &Expression<'_>, text: String) -> String {
         false => text,
     }
 }
+
+pub fn surely_dynamic(expr: &Expression<'_>) -> bool {
+    use oxc_ast::ast::{ArrayExpressionElement, BinaryOperator, ObjectPropertyKind};
+    match expr.without_parentheses() {
+        Expression::CallExpression(_)
+        | Expression::ChainExpression(_)
+        | Expression::StaticMemberExpression(_)
+        | Expression::ComputedMemberExpression(_)
+        | Expression::PrivateFieldExpression(_)
+        | Expression::TaggedTemplateExpression(_)
+        | Expression::JSXElement(_) => true,
+        Expression::BinaryExpression(binary) => {
+            binary.operator == BinaryOperator::In
+                || surely_dynamic(&binary.left)
+                || surely_dynamic(&binary.right)
+        }
+        Expression::LogicalExpression(logical) => {
+            surely_dynamic(&logical.left) || surely_dynamic(&logical.right)
+        }
+        Expression::ConditionalExpression(conditional) => {
+            surely_dynamic(&conditional.test)
+                || surely_dynamic(&conditional.consequent)
+                || surely_dynamic(&conditional.alternate)
+        }
+        Expression::SequenceExpression(sequence) => sequence.expressions.iter().any(surely_dynamic),
+        Expression::TemplateLiteral(template) => template.expressions.iter().any(surely_dynamic),
+        Expression::UnaryExpression(unary) => surely_dynamic(&unary.argument),
+        Expression::AwaitExpression(wait) => surely_dynamic(&wait.argument),
+        Expression::UpdateExpression(update) => update.argument.as_member_expression().is_some(),
+        Expression::AssignmentExpression(assign) => {
+            assign.left.as_member_expression().is_some() || surely_dynamic(&assign.right)
+        }
+        Expression::NewExpression(new) => {
+            surely_dynamic(&new.callee)
+                || new
+                    .arguments
+                    .iter()
+                    .any(|argument| argument.as_expression().is_none_or(surely_dynamic))
+        }
+        Expression::ArrayExpression(array) => array.elements.iter().any(|element| match element {
+            ArrayExpressionElement::SpreadElement(_) => true,
+            ArrayExpressionElement::Elision(_) => false,
+            other => other.as_expression().is_some_and(surely_dynamic),
+        }),
+        Expression::ObjectExpression(object) => {
+            object.properties.iter().any(|property| match property {
+                ObjectPropertyKind::SpreadProperty(_) => true,
+                ObjectPropertyKind::ObjectProperty(property) => {
+                    (property.computed && property.key.as_expression().is_some_and(surely_dynamic))
+                        || (!property.method && surely_dynamic(&property.value))
+                }
+            })
+        }
+        _ => false,
+    }
+}

@@ -53,7 +53,7 @@ pub struct Cx<'a, 's> {
     pub deleted: RefCell<Vec<Span>>,
     pub library: RefCell<rustc_hash::FxHashSet<SymbolId>>,
     pub candidates: Vec<(Span, oxc_syntax::node::NodeId)>,
-    pub delegated: Option<Vec<String>>,
+    pub delegated: Vec<String>,
 }
 
 pub fn unwrap_parens(text: String) -> String {
@@ -405,6 +405,7 @@ impl<'a, 's> Cx<'a, 's> {
             AstKind::ConditionalExpression(branch) => {
                 branch.test.without_parentheses().span() == at
             }
+            AstKind::IfStatement(branch) => branch.test.without_parentheses().span() == at,
             AstKind::UnaryExpression(unary) => unary.operator == UnaryOperator::LogicalNot,
             AstKind::LogicalExpression(logical) => {
                 counted
