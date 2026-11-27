@@ -4,8 +4,9 @@ use untwist::{MapLink, Options, Output, RenameMode, TypesMode, WasmCheck};
 
 pub const DEFAULT_MAX_MEMORY: u64 = 1 << 30;
 
-const VALUE_FLAGS: [&str; 12] = [
+const VALUE_FLAGS: [&str; 13] = [
     "--modern",
+    "--source-type",
     "--restore",
     "--types",
     "--rename",
@@ -137,6 +138,21 @@ fn switched(mut options: Options, flag: &str) -> Option<Options> {
 fn valued(mut options: Options, flag: &str, word: &str) -> Result<Options, String> {
     match flag {
         "--rename" => options.rename = rename_mode(word)?,
+        "--source-type" => {
+            let (module_goal, script_goal, commonjs_goal) = match word {
+                "script" => (false, true, false),
+                "module" => (true, false, false),
+                "commonjs" => (false, false, true),
+                other => {
+                    return Err(format!(
+                        "unknown source type {other} (script, module or commonjs)"
+                    ))
+                }
+            };
+            options.module_goal = module_goal;
+            options.script_goal = script_goal;
+            options.commonjs_goal = commonjs_goal;
+        }
         "--modern" => {
             options.modern = Some(
                 untwist::parse_modern_baseline(word).map_err(|error| format!("{flag}: {error}"))?,
@@ -246,6 +262,23 @@ mod tests {
         assert!(options.unsafe_transforms);
         assert!(!options.unpack && !options.jsx);
         assert_eq!(options.rename, RenameMode::Unique);
+    }
+
+    #[test]
+    fn source_type_picks_one_goal_like_the_cli() {
+        let goals = |flags: &str| {
+            let options = options_from(flags).unwrap();
+            (
+                options.module_goal,
+                options.script_goal,
+                options.commonjs_goal,
+            )
+        };
+        assert_eq!(goals(""), (false, false, false));
+        assert_eq!(goals("--source-type commonjs"), (false, false, true));
+        assert_eq!(goals("--source-type script"), (false, true, false));
+        assert_eq!(goals("--source-type module"), (true, false, false));
+        assert!(options_from("--source-type cjs").is_err());
     }
 
     #[test]

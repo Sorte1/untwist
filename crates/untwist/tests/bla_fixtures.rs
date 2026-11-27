@@ -13,6 +13,7 @@ fn dir() -> PathBuf {
 fn lane(source: &str, unsafe_transforms: bool) -> String {
     Pipeline::new(Options {
         unsafe_transforms,
+        commonjs_goal: true,
         ..Options::default()
     })
     .run(source)

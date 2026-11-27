@@ -146,6 +146,7 @@ struct Collect<'s> {
     fixed: Option<&'s NumericBindings>,
     current: NumericBindings,
     module: bool,
+    local_top: bool,
     bindings: FxHashMap<SymbolId, usize>,
     plain_bindings: FxHashMap<SymbolId, usize>,
     plain_values: FxHashSet<SymbolId>,
@@ -268,7 +269,7 @@ impl Collect<'_> {
     }
 
     fn shared(&self, symbol: SymbolId) -> bool {
-        if self.module || self.scoping.symbol_scope_id(symbol) != self.scoping.root_scope_id() {
+        if self.local_top || self.scoping.symbol_scope_id(symbol) != self.scoping.root_scope_id() {
             return false;
         }
         let name = self.scoping.symbol_name(symbol);
@@ -441,6 +442,7 @@ struct Sources<'s, 'a> {
     aliases: &'s GlobalAliases,
     annex_b: &'s AnnexBWrites,
     module: bool,
+    local_top: bool,
 }
 
 fn narrowed(
@@ -454,6 +456,7 @@ fn narrowed(
         aliases,
         annex_b,
         module,
+        local_top,
     } = *sources;
     let mut collect = Collect {
         scoping,
@@ -462,6 +465,7 @@ fn narrowed(
         fixed,
         current,
         module,
+        local_top,
         bindings: FxHashMap::default(),
         plain_bindings: FxHashMap::default(),
         plain_values: FxHashSet::default(),
@@ -500,7 +504,7 @@ fn fixpoint(sources: &Sources<'_, '_>, fixed: Option<&NumericBindings>) -> Numer
 pub(super) fn key_bindings(
     program: &Program<'_>,
     scoping: &Scoping,
-    module: bool,
+    (module, local_top): (bool, bool),
     aliases: &GlobalAliases,
 ) -> KeyBindings {
     let annex_b = AnnexBWrites::of(program, scoping);
@@ -510,6 +514,7 @@ pub(super) fn key_bindings(
         aliases,
         annex_b: &annex_b,
         module,
+        local_top,
     };
     let numeric = fixpoint(&sources, None);
     let led = fixpoint(&sources, Some(&numeric));

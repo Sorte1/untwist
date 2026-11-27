@@ -62,7 +62,7 @@ fn unreadable() -> Seen {
     }
 }
 
-fn seen(source: &str, unsafe_transforms: bool) -> Seen {
+fn seen(source: &str, commonjs: bool, unsafe_transforms: bool) -> Seen {
     if !fits_this_stack(source) {
         return unreadable();
     }
@@ -73,7 +73,7 @@ fn seen(source: &str, unsafe_transforms: bool) -> Seen {
     let builtins =
         builtins::scan_with_unknown_keys_plain(&parsed.program, &scoping, module, &EVERY_ROOT);
     Seen {
-        script: !parsed.program.source_type.is_module(),
+        script: !commonjs && !parsed.program.source_type.is_module(),
         bound: scoping
             .get_bindings(scoping.root_scope_id())
             .keys()
@@ -144,7 +144,11 @@ pub(super) struct Shared {
     pub causes: Vec<Option<String>>,
 }
 
-pub(super) fn shared_globals(sources: &[&str], unsafe_transforms: bool) -> Shared {
+pub(super) fn shared_globals(
+    sources: &[&str],
+    commonjs: &[bool],
+    unsafe_transforms: bool,
+) -> Shared {
     if sources.len() < 2 {
         return Shared {
             globals: vec![None; sources.len()],
@@ -153,7 +157,11 @@ pub(super) fn shared_globals(sources: &[&str], unsafe_transforms: bool) -> Share
     }
     let all: Vec<Seen> = sources
         .iter()
-        .map(|source| seen(source, unsafe_transforms))
+        .enumerate()
+        .map(|(index, source)| {
+            let commonjs = commonjs.get(index).copied().unwrap_or(false);
+            seen(source, commonjs, unsafe_transforms)
+        })
         .collect();
     let reached: Vec<NamesReached> = sources
         .iter()

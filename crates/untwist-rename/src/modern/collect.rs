@@ -65,7 +65,7 @@ impl Facts {
 pub fn collect(program: &Program<'_>, scoping: &Scoping) -> Facts {
     let mut collector = Collector {
         scoping,
-        script: !program.source_type.is_module(),
+        script: !program.source_type.is_module() && !untwist_core::semantic::is_commonjs(program),
         facts: Facts::default(),
         factories: rustc_hash::FxHashSet::default(),
     };

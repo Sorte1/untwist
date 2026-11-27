@@ -53,6 +53,18 @@ All notable changes to this project are documented in this file. The format is b
   dispatcher undone (under the dispatcher's own checks), so its `fns[name].apply(this)` and
   `fnLengths[name]` reads no longer keep the strings; the dispatcher pass then restores the
   functions from the decoded keys.
+- CommonJS input: a `.cjs` file (or any input with `--source-type commonjs`, also a flag of the
+  wasm API) runs inside node's module wrapper, so its top-level `var`, `function`, `let`, `const`
+  and `class` names are local to it: not global-object properties and not shared with other
+  inputs. Top-level `this` is not the global object there. An input whose own level reads
+  `arguments`, `new.target` or `eval` keeps today's script-or-CommonJS treatment.
+  `--source-type script|module|commonjs` overrides the extension.
+- `unread-decoys` removes, in CommonJS input only, top-level functions and literal data
+  declarations (literals, arrays and objects of literals, `Object.freeze` of them when it is
+  unpatched) that nothing outside the removed set reads, in a program without direct `eval` or
+  `with`; a `void f;` statement goes with `f`.
+- With `--rename smart`, a binding exported as `module.exports = { key: f }`, `exports.key = f` or
+  `module.exports.key = f` takes the key as its name.
 - `dead-code` folds int32 opaque predicates by tracking which bits of a `const` are known through
   `& | ^ ~ + - << >> >>>` and `Math.imul`, for example `(Math.imul(s | 1, (s | 1) + 1) & 1) === 0`
   when only some bits of `s` are known; a test that the low unknown bits decide is tried for every

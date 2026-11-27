@@ -44,7 +44,37 @@ pub fn printed(node: &Path, dir: &Path, text: &str) -> Result<String, String> {
     Ok(seen)
 }
 
+pub fn printed_as_commonjs(node: &Path, dir: &Path, text: &str) -> Result<String, String> {
+    let path = dir.join("program.cjs");
+    std::fs::write(&path, text).unwrap();
+    match run(node, &path).unwrap() {
+        Some(out) => Ok(observed(&out)),
+        None => Err("did not finish".to_string()),
+    }
+}
+
 pub type Mode<'m> = (&'static str, &'m dyn Fn(&str) -> String);
+
+pub fn commonjs_mismatches(
+    node: &Path,
+    programs: &[(String, String)],
+    modes: &[Mode<'_>],
+) -> Vec<String> {
+    let dir = tempfile::tempdir().unwrap();
+    let mut wrong = Vec::new();
+    for (label, source) in programs {
+        let before = printed_as_commonjs(node, dir.path(), source);
+        for (mode, transform) in modes {
+            let after = printed_as_commonjs(node, dir.path(), &transform(source));
+            if before.is_err() || after != before {
+                wrong.push(format!(
+                    "{label} ({mode}, as .cjs): node printed {before:?}, untwist's output printed {after:?}"
+                ));
+            }
+        }
+    }
+    wrong
+}
 
 pub fn mismatches(node: &Path, programs: &[(String, String)], modes: &[Mode<'_>]) -> Vec<String> {
     let dir = tempfile::tempdir().unwrap();

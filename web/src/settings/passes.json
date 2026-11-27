@@ -295,6 +295,11 @@
     "unsafe": false
   },
   {
+    "name": "unread-decoys",
+    "stage": "cleanup",
+    "unsafe": false
+  },
+  {
     "name": "fold-literal-chains",
     "stage": "cleanup",
     "unsafe": false

@@ -142,6 +142,7 @@ struct Reservation<'r> {
     shared_cause: Option<&'r str>,
     module_named: bool,
     script_named: bool,
+    commonjs_named: bool,
 }
 
 struct Batch<'s> {
@@ -155,7 +156,12 @@ struct Batch<'s> {
 }
 
 impl<'s> Batch<'s> {
-    fn new(sources: &'s [&'s str], limits: Limits, unsafe_transforms: bool) -> Self {
+    fn new(
+        sources: &'s [&'s str],
+        commonjs: &[bool],
+        limits: Limits,
+        unsafe_transforms: bool,
+    ) -> Self {
         let rename_state = shared_state();
         let slots = (0..sources.len())
             .map(|index| reserve(&rename_state, index))
@@ -167,7 +173,7 @@ impl<'s> Batch<'s> {
             stack: StackReserve::default(),
             stats: std::sync::Mutex::default(),
             limits,
-            shared: shared_scan::shared_globals(sources, unsafe_transforms),
+            shared: shared_scan::shared_globals(sources, commonjs, unsafe_transforms),
         }
     }
 
@@ -182,6 +188,7 @@ impl<'s> Batch<'s> {
             shared_cause: self.shared.causes.get(index).and_then(Option::as_deref),
             module_named: false,
             script_named: false,
+            commonjs_named: false,
         }
     }
 }
@@ -367,7 +374,15 @@ impl Pipeline {
 
     fn run_batch(&self, sources: &[&str], trust_the_reflow: bool) -> Output {
         let ladder = Ladder::new(self.options.hooks());
-        let batch = Batch::new(sources, self.limits(), self.options.unsafe_transforms);
+        let commonjs: Vec<bool> = (0..sources.len())
+            .map(|index| self.commonjs_named(index))
+            .collect();
+        let batch = Batch::new(
+            sources,
+            &commonjs,
+            self.limits(),
+            self.options.unsafe_transforms,
+        );
         let pooled = self.run_pooled(&batch, &ladder);
         ladder::on_a_worker_stack(&ladder, |_| {
             let mut results = pooled.unwrap_or_else(|| self.run_sequentially(&batch));

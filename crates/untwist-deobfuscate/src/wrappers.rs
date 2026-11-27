@@ -1015,7 +1015,10 @@ fn variable_alias_plan<'a>(
 }
 
 fn roots_shared(program: &Program<'_>, cx: &Cx<'_, '_>) -> bool {
-    cx.opts.nested_root && other_inputs_given() && !program.source_type.is_module()
+    cx.opts.nested_root
+        && other_inputs_given()
+        && !program.source_type.is_module()
+        && !untwist_core::semantic::is_commonjs(program)
 }
 
 fn defer_speculated_lazy_decoders(plan: &VariablePlan<'_>, speculated: &[Ident<'_>]) {

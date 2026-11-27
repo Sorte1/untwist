@@ -21,7 +21,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use args::{Args, ReportFormat};
+use args::{Args, ReportFormat, SourceTypeArg};
 use clap::Parser;
 use hooks::Role;
 use untwist::{
@@ -135,7 +135,7 @@ fn is_unsafe_lane_hint(note: &untwist::Note) -> bool {
 
 const STDERR: &str = "write to stderr";
 const MODULE_EXTENSION: &str = "mjs";
-const SCRIPT_EXTENSION: &str = "cjs";
+const COMMONJS_EXTENSION: &str = "cjs";
 
 fn report_wasm(err: &mut dyn Write, result: &Output) -> io::Result<()> {
     for note in result.notes.iter().filter(|note| note.pass == "wasm") {
@@ -400,13 +400,22 @@ fn only_extension(args: &Args, wanted: &str) -> bool {
         .is_some_and(|extension| extension == wanted))
 }
 
+fn extension_goal(args: &Args) -> Option<SourceTypeArg> {
+    if only_extension(args, MODULE_EXTENSION) {
+        return Some(SourceTypeArg::Module);
+    }
+    only_extension(args, COMMONJS_EXTENSION).then_some(SourceTypeArg::Commonjs)
+}
+
 fn run_on(args: &Args, session: &mut Session<'_>, sources: &[String]) -> Result<u8> {
     let borrowed: Vec<&str> = sources.iter().map(String::as_str).collect();
     let mut options = std::mem::take(&mut session.options);
     options.input_source_maps = input_source_maps(args, sources)?;
     options.input_names = untwist::input_names(&args.files);
-    options.module_goal = only_extension(args, MODULE_EXTENSION);
-    options.script_goal = only_extension(args, SCRIPT_EXTENSION);
+    let goal = args.source_type.or_else(|| extension_goal(args));
+    options.module_goal = goal == Some(SourceTypeArg::Module);
+    options.script_goal = goal == Some(SourceTypeArg::Script);
+    options.commonjs_goal = goal == Some(SourceTypeArg::Commonjs);
     let mut result = Pipeline::new(options).run_many(&borrowed);
     result.source_map_link = args.source_map;
     if args.source_map.is_some() && args.output.is_none() {

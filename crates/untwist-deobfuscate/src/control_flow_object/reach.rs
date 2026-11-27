@@ -5,9 +5,7 @@ use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashSet;
 use untwist_core::pass::Cx;
-use untwist_core::semantic::{
-    has_module_syntax, may_call_eval, observing_open, open_eval_sites, with_observes,
-};
+use untwist_core::semantic::{may_call_eval, observing_open, open_eval_sites, with_observes};
 
 use crate::bindings::reaches_a_script_global;
 use crate::calls::agnostic::names_reachable_from;
@@ -38,7 +36,7 @@ fn with_scopes(scoping: &Scoping) -> Vec<ScopeId> {
 fn is_script_global(program: &Program<'_>, scoping: &Scoping, symbol: SymbolId) -> bool {
     scoping.symbol_scope_id(symbol) == scoping.root_scope_id()
         && !program.source_type.is_module()
-        && !has_module_syntax(program)
+        && !untwist_core::semantic::top_level_is_local(program)
 }
 
 fn globals_reached(

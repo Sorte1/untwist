@@ -105,6 +105,7 @@ fn the_cleanup_order_is_the_one_the_spec_fixes() {
             "fold-pure-calls",
             "var-transformation",
             "dead-assignment-elimination",
+            "unread-decoys",
             "fold-literal-chains",
         ]
     );
@@ -140,7 +141,7 @@ fn the_cleanup_group_keeps_the_superset_passes_by_default_and_drops_them_under_c
             ..PassOptions::default()
         },
     );
-    assert_eq!(default_group.per_pass_changes().len(), 7);
+    assert_eq!(default_group.per_pass_changes().len(), 8);
     assert_eq!(conservative_group.per_pass_changes().len(), 2);
 }
 

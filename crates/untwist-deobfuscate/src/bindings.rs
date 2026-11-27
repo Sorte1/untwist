@@ -152,7 +152,7 @@ fn script_global_names<'s>(
     program: &Program<'_>,
     scoping: &'s Scoping,
 ) -> Option<(Vec<&'s str>, Vec<&'s str>)> {
-    if program.source_type.is_module() || untwist_core::semantic::has_module_syntax(program) {
+    if program.source_type.is_module() || untwist_core::semantic::top_level_is_local(program) {
         return None;
     }
     let root = scoping.root_scope_id();

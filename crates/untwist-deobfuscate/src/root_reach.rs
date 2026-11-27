@@ -129,7 +129,10 @@ pub(crate) fn root_alias_names<'p>(
     scoping: &Scoping,
     targets: &FxHashSet<SymbolId>,
 ) -> Vec<&'p str> {
-    if targets.is_empty() || root_alias_reach_trusted() || has_module_syntax(program) {
+    if targets.is_empty()
+        || root_alias_reach_trusted()
+        || untwist_core::semantic::top_level_is_local(program)
+    {
         return Vec::new();
     }
     let holds_a_target = |value: &IdentifierReference<'_>| {

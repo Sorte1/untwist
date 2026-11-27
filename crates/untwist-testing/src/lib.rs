@@ -167,11 +167,19 @@ pub fn generated_bundle_present() -> bool {
 }
 
 pub fn js_files_in(dir: &str) -> Vec<(String, String)> {
+    files_in(dir, "js")
+}
+
+pub fn cjs_files_in(dir: &str) -> Vec<(String, String)> {
+    files_in(dir, "cjs")
+}
+
+fn files_in(dir: &str, extension: &str) -> Vec<(String, String)> {
     let dir = workspace_path(dir, "");
     let mut files: Vec<std::path::PathBuf> = std::fs::read_dir(&dir)
         .unwrap_or_else(|err| panic!("read {}: {err}", dir.display()))
         .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-        .filter(|path| path.extension().is_some_and(|ext| ext == "js"))
+        .filter(|path| path.extension().is_some_and(|ext| ext == extension))
         .collect();
     files.sort();
     files
