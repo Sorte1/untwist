@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { Page } from '@playwright/test';
-import { expect, openApp, readRepo, repoPath, sha256, test, skipWithoutGame, CORE_JS_TABLE } from './fixtures';
+import { expect, openApp, readRepo, repoPath, sha256, test, skipWithoutGame, LIBRARY_ARGS } from './fixtures';
 
 const GAME = 'fixtures/real-world/game.js';
 const DIST = resolve(repoPath('web'), 'dist');
@@ -10,7 +10,7 @@ const manifest = JSON.parse(readRepo('web/src/examples/manifest.json')) as Reado
 
 function cli(fixture: string): string {
   const bin = process.env['UNTWIST_BIN'] ?? repoPath('target/release/untwist');
-  return execFileSync(bin, [...CORE_JS_TABLE, '--disable', 'library-names,library-rename', repoPath(fixture)], {
+  return execFileSync(bin, [...LIBRARY_ARGS, '--disable', 'library-names,library-rename', repoPath(fixture)], {
     encoding: 'utf8',
     maxBuffer: 1 << 28,
     env: { ...process.env, UNTWIST_TEST_SUPERVISOR: 'off' },

@@ -11,7 +11,7 @@ export function repoPath(relative: string): string {
   return resolve(REPO, relative);
 }
 
-export const CORE_JS_TABLE = ['--libraries', repoPath('crates/untwist-libraries-corejs/data/core-js.table.gz')];
+export const LIBRARY_ARGS: readonly string[] = ['--libraries', repoPath('web/dist/libraries')];
 
 export const GAME_JS = 'fixtures/real-world/game.js';
 

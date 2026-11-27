@@ -44,12 +44,17 @@ Every asset name except `index.html`, `_headers` and the font licences carries a
 
 - `sw.js` is `no-cache`, so a deploy reaches the browsers on their next visit.
 
-- `/libraries/` holds the library tables the wasm build does not compile in (`<id>.table`, the
-  gzip bytes of `<id>.table.gz` under a name hosts do not serve with `Content-Encoding: gzip`;
-  `<id>.keys.json`; `index.json`), copied by the build from `crates/untwist-libraries-*/data`
-  except `untwist-libraries-core`. They are `no-cache`; the page checks each table against the
-  size and SHA-256 in `index.json` and keeps it in its own `library-tables` cache. The service
-  worker does not precache them.
+- `/libraries/` holds the library collection (schema `untwist.library-collection/1`):
+  `collection.json` plus content-addressed `shards/<sha256>.utl` tables and one
+  `shards/<sha256>.bloom` filter file. The build makes it from the hand-written tables in
+  `crates/untwist-libraries-*/data` except `untwist-libraries-core`, which the wasm build compiles
+  in; with `UNTWIST_LIBRARY_COLLECTION=<dir>` it copies a generated collection directory instead
+  (`cargo xtask library-collection pack`), so a deploy pins its collection. `collection.json` is
+  `no-cache` and precached by the service worker; the shards are immutable. The page computes
+  which shards a run wants in the run worker (the bloom filters and string keys are tested
+  locally, nothing about the code is sent), fetches only those by their SHA-256 names, checks each
+  against the size and SHA-256 in `collection.json` and keeps it in its own `library-shards`
+  cache.
 
 - `Content-Security-Policy` is sent with every file, so it binds the workers and the service
   worker as well as the page. It forbids framing (`frame-ancestors 'none'`, with

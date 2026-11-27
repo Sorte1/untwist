@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { Page } from '@playwright/test';
 import { strFromU8, unzipSync } from 'fflate';
-import { expect, openApp, paste, readRepo, repoPath, runAndWait, saved, test, CORE_JS_TABLE } from './fixtures';
+import { expect, openApp, paste, readRepo, repoPath, runAndWait, saved, test, LIBRARY_ARGS } from './fixtures';
 
 const FIXTURE = 'fixtures/webpack-strict/w5-dev.js';
 
@@ -13,7 +13,7 @@ interface BundleJson {
 
 function cliTree(dir: string): Map<string, string> {
   const bin = process.env['UNTWIST_BIN'] ?? repoPath('target/release/untwist');
-  execFileSync(bin, [...CORE_JS_TABLE, '-f', '-o', dir, repoPath(FIXTURE)], { env: { ...process.env, UNTWIST_TEST_SUPERVISOR: 'off' } });
+  execFileSync(bin, [...LIBRARY_ARGS, '-f', '-o', dir, repoPath(FIXTURE)], { env: { ...process.env, UNTWIST_TEST_SUPERVISOR: 'off' } });
   const walk = (at: string): string[] =>
     readdirSync(at).flatMap((name) => (statSync(join(at, name)).isDirectory() ? walk(join(at, name)) : [join(at, name)]));
   return new Map(walk(dir).map((file) => [relative(dir, file), readFileSync(file, 'utf8')]));

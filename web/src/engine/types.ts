@@ -1,4 +1,6 @@
-import type { TableTiming } from '../libraries/tables';
+import type { CollectionFiles, FetchedShard } from '../libraries/collection';
+import type { CollectionShard } from '../libraries/collection-format';
+import type { ContentSource } from '../libraries/content';
 import type { SuppliedWasm } from '../wasm/wasm';
 
 export type TrapKind = 'stack' | 'other';
@@ -28,7 +30,16 @@ export interface RunResult extends RunFields {
   readonly libraryTables?: LibraryTablesUsed;
 }
 
+export interface TableTiming {
+  readonly id: string;
+  readonly bytes: number;
+  readonly ms: number;
+  readonly source: ContentSource | null;
+}
+
 export interface LibraryTablesUsed {
+  readonly collection: string;
+  readonly error: string;
   readonly fetched: readonly string[];
   readonly failed: readonly string[];
   readonly reran: boolean;
@@ -39,11 +50,13 @@ export interface LibraryTablesUsed {
 
 export type WorkerRequest =
   | { readonly kind: 'init'; readonly module: WebAssembly.Module }
-  | { readonly kind: 'run'; readonly source: string; readonly flags: string; readonly refused: boolean; readonly extras: string; readonly wasm: readonly SuppliedWasm[]; readonly tables?: readonly Uint8Array<ArrayBuffer>[] };
+  | { readonly kind: 'run'; readonly source: string; readonly flags: string; readonly refused: boolean; readonly extras: string; readonly wasm: readonly SuppliedWasm[]; readonly libraries: CollectionFiles | null }
+  | { readonly kind: 'shards'; readonly request: number; readonly results: readonly (FetchedShard | null)[] };
 
 export type WorkerReply =
   | { readonly kind: 'ready' }
   | { readonly kind: 'stage'; readonly name: string; readonly at: number }
+  | { readonly kind: 'fetch-shards'; readonly request: number; readonly shards: readonly CollectionShard[] }
   | { readonly kind: 'failed'; readonly message: string }
   | { readonly kind: 'trap'; readonly trap: TrapKind; readonly message: string }
-  | { readonly kind: 'done'; readonly result: Omit<RunResult, 'trap' | 'workerMs' | 'libraryTables'> };
+  | { readonly kind: 'done'; readonly result: Omit<RunResult, 'trap' | 'workerMs'> };

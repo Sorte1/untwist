@@ -1,13 +1,13 @@
 import { execFileSync } from 'node:child_process';
 import type { Page } from '@playwright/test';
-import { expect, openApp, openSettings, paste, readRepo, repoPath, runAndWait, sha256, test, skipWithoutGame, CORE_JS_TABLE } from './fixtures';
+import { expect, openApp, openSettings, paste, readRepo, repoPath, runAndWait, sha256, test, skipWithoutGame, LIBRARY_ARGS } from './fixtures';
 
 const FIXTURE = 'fixtures/reference/deobfuscate/obfuscator.io-control-flow.js';
 const FLAGS = '--no-unpack --no-jsx --unsafe --rename unique --fuel 1000 --no-unminify --keep-human-names --max-iterations 3 --single-file';
 
 function cli(flags: string, fixture: string): string {
   const bin = process.env['UNTWIST_BIN'] ?? repoPath('target/release/untwist');
-  return execFileSync(bin, [...CORE_JS_TABLE, ...flags.split(' ').filter((word) => word !== ''), repoPath(fixture)], {
+  return execFileSync(bin, [...LIBRARY_ARGS, ...flags.split(' ').filter((word) => word !== ''), repoPath(fixture)], {
     encoding: 'utf8',
     maxBuffer: 1 << 28,
     env: { ...process.env, UNTWIST_TEST_SUPERVISOR: 'off' },

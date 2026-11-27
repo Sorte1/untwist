@@ -1,9 +1,16 @@
-import { initSync, library_tables, load_library_table, run_report_with_wasm, WasmFiles } from './pkg/untwist_wasm.js';
+import { initSync, library_tables, library_wanted, load_library_collection, load_library_shard, run_report_with_wasm, WasmFiles } from './pkg/untwist_wasm.js';
+import type { CollectionFiles, FetchedShard } from '../libraries/collection';
+import type { CollectionShard } from '../libraries/collection-format';
+import { LibraryStage, type LibraryApi } from './library-stage';
 import type { SuppliedWasm } from '../wasm/wasm';
 import { MARK } from '../progress';
 import type { TrapKind, WorkerReply, WorkerRequest } from './types';
 
+const LIBRARY_API: LibraryApi = { attach: load_library_collection, wanted: library_wanted, load: load_library_shard };
+
 let memory: WebAssembly.Memory | null = null;
+let requests = 0;
+const pending = new Map<number, (results: readonly (FetchedShard | null)[]) => void>();
 
 function reply(message: WorkerReply): void {
   self.postMessage(message);
@@ -14,6 +21,15 @@ function stage(name: string): void {
 }
 
 (globalThis as { untwistStage?: (name: string) => void }).untwistStage = stage;
+
+function fetchShards(shards: readonly CollectionShard[]): Promise<readonly (FetchedShard | null)[]> {
+  requests += 1;
+  const request = requests;
+  return new Promise((resolve) => {
+    pending.set(request, resolve);
+    reply({ kind: 'fetch-shards', request, shards });
+  });
+}
 
 function trapKind(error: unknown): TrapKind | null {
   if (error instanceof RangeError && /Maximum call stack size exceeded/.test(error.message)) {
@@ -68,21 +84,36 @@ function wasmCount(json: string): number {
   }
 }
 
-function run(source: string, flags: string, refused: boolean, extras: string, wasm: readonly SuppliedWasm[], tables: readonly Uint8Array[]): void {
+type Output = ReturnType<typeof run_report_with_wasm>;
+
+function engineRun(source: string, flags: string, refused: boolean, extras: string, wasm: readonly SuppliedWasm[]): Output {
+  const files = new WasmFiles();
+  for (const file of wasm) {
+    files.add(file.name, file.bytes, file.url ?? undefined);
+  }
+  const output = run_report_with_wasm(source, flags, refused, extras, files);
+  files.free();
+  return output;
+}
+
+async function withLibraries(libraryStage: LibraryStage, source: string, once: () => Output): Promise<{ readonly output: Output; readonly reran: boolean }> {
+  await libraryStage.take([source], MARK.scan);
+  const output = once();
+  const found = await libraryStage.take([output.stdout, ...modulesOf(output)], MARK.scanOutput);
+  if (found === 0) {
+    return { output, reran: false };
+  }
+  output.free();
+  stage(MARK.rerun);
+  return { output: once(), reran: true };
+}
+
+async function run(source: string, flags: string, refused: boolean, extras: string, wasm: readonly SuppliedWasm[], libraries: CollectionFiles | null): Promise<void> {
   const started = performance.now();
   try {
-    if (tables.length > 0) {
-      stage(MARK.loadTables);
-    }
-    for (const table of tables) {
-      load_library_table(table);
-    }
-    const files = new WasmFiles();
-    for (const file of wasm) {
-      files.add(file.name, file.bytes, file.url ?? undefined);
-    }
-    const output = run_report_with_wasm(source, flags, refused, extras, files);
-    files.free();
+    const once = () => engineRun(source, flags, refused, extras, wasm);
+    const libraryStage = libraries === null ? null : new LibraryStage(LIBRARY_API, libraries, stage, fetchShards);
+    const { output, reran } = libraryStage === null ? { output: once(), reran: false } : await withLibraries(libraryStage, source, once);
     stage(MARK.transfer);
     const wasmJson = output.wasm_json();
     const result = {
@@ -102,6 +133,7 @@ function run(source: string, flags: string, refused: boolean, extras: string, wa
       engineMs: performance.now() - started,
       memoryBytes: memory?.buffer.byteLength ?? 0,
       tablesLoaded: library_tables(),
+      ...(libraryStage === null ? {} : { libraryTables: libraryStage.used(reran) }),
     };
     output.free();
     reply({ kind: 'done', result });
@@ -119,7 +151,10 @@ self.onmessage = (event: MessageEvent<WorkerRequest>) => {
   const request = event.data;
   if (request.kind === 'init') {
     init(request.module);
+  } else if (request.kind === 'shards') {
+    pending.get(request.request)?.(request.results);
+    pending.delete(request.request);
   } else {
-    run(request.source, request.flags, request.refused, request.extras, request.wasm ?? [], request.tables ?? []);
+    void run(request.source, request.flags, request.refused, request.extras, request.wasm ?? [], request.libraries ?? null);
   }
 };

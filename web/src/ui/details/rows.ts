@@ -48,12 +48,13 @@ export function libraryPairs(rows: readonly LibraryRow[]): Pair[] {
 }
 
 export function tablePairs(used: LibraryTablesUsed | undefined): Pair[] {
-  if (used === undefined || (used.fetched.length === 0 && used.failed.length === 0)) {
+  if (used === undefined || (used.fetched.length === 0 && used.failed.length === 0 && used.error === '')) {
     return [];
   }
   const fetched = used.fetched.length === 0 ? [] : [{ label: 'Tables loaded', value: `${used.fetched.join(', ')}${used.reran ? ' (found in the output, run again)' : ''}` }];
+  const error = used.error === '' ? [] : [{ label: 'Library collection', value: used.error }];
   const failed = used.failed.length === 0 ? [] : [{ label: 'Tables not loaded', value: used.failed.join(', ') }];
-  return [...fetched, ...failed, { label: 'Table scan / load', value: `${ms(used.scanMs)} / ${ms(used.loadMs)}` }];
+  return [...fetched, ...failed, ...error, { label: 'Table scan / load', value: `${ms(used.scanMs)} / ${ms(used.loadMs)}` }];
 }
 
 export function limitPairs(report: Report): Pair[] {

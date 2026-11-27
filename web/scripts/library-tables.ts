@@ -1,62 +1,96 @@
 import { createHash } from 'node:crypto';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gunzipSync } from 'node:zlib';
 import type { Plugin } from 'vite';
-import { distinctKeys, type KeyedTable } from '../src/libraries/scan.ts';
-import { INDEX_FILE, INDEX_SCHEMA, TABLES_DIR, type TableIndex } from '../src/libraries/index-format.ts';
+import { bloomFile, bloomWithKeys, type Bloom } from '../src/libraries/bloom.ts';
+import {
+  COLLECTION_FILE,
+  COLLECTION_SCHEMA,
+  LIBRARIES_DIR,
+  SHARDS_DIR,
+  parseCollection,
+  safeFile,
+  type CollectionIndex,
+  type CollectionPackage,
+} from '../src/libraries/collection-format.ts';
+import { distinctKeys } from '../src/libraries/keys.ts';
+import { summariseTable, type TableSummary } from '../src/libraries/table-text.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const CRATES = resolve(HERE, '../../crates');
-const CRATE_PREFIX = 'untwist-libraries-';
-const COMPILED_IN = new Set(['untwist-libraries-core']);
+const REPO = resolve(HERE, '../..');
+const CURATED_DIRS = ['crates/untwist-libraries-core/data', 'crates/untwist-libraries-corejs/data'];
+const COMPILED_IN = new Set(['crates/untwist-libraries-core/data']);
+const EPOCH_SOURCE = 'crates/untwist-rename/src/library/mod.rs';
 const TABLE_SUFFIX = '.table.gz';
 const KEYS_SUFFIX = '.keys.json';
-const SERVED_SUFFIX = '.table';
+const COLLECTION_ENV = 'UNTWIST_LIBRARY_COLLECTION';
+const VERSION_CHARS = 12;
+const PHRASE_CHARS = 16;
+const STRONG_MARKS = ['core-js', 'zloirock'];
 const GLOBAL_DEPTH = 2;
 const KEYWORDS =
   'arguments async await break case catch class const continue debugger default delete do else enum eval export extends false finally for function if implements import in instanceof interface let new null package private protected public return static super switch this throw true try typeof undefined var void while with yield object string number boolean symbol bigint use strict';
 
-interface TableFile {
-  readonly id: string;
-  readonly label: string;
+interface Curated {
+  readonly summary: TableSummary;
+  readonly bytes: Buffer;
   readonly keys: readonly string[];
-  readonly table: Buffer;
-  readonly keysJson: Buffer;
   readonly compiledIn: boolean;
 }
 
 export interface LibraryFiles {
-  readonly index: TableIndex;
+  readonly index: CollectionIndex;
   readonly files: ReadonlyMap<string, Buffer>;
 }
 
-function keysFile(raw: Buffer, path: string): { id: string; label: string; keys: string[] } {
-  const parsed = JSON.parse(raw.toString('utf8')) as { id?: unknown; label?: unknown; keys?: unknown };
-  if (typeof parsed.id !== 'string' || !Array.isArray(parsed.keys) || !parsed.keys.every((key) => typeof key === 'string')) {
-    throw new Error(`library-tables: ${path} is not an <id>.keys.json file`);
+const sha256 = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+
+export function shapeEpoch(source: string = readFileSync(join(REPO, EPOCH_SOURCE), 'utf8')): number {
+  const found = /pub const SHAPE_EPOCH: u32 = (\d+);/.exec(source)?.[1];
+  if (found === undefined) {
+    throw new Error(`library-tables: ${EPOCH_SOURCE} has no SHAPE_EPOCH`);
   }
-  return { id: parsed.id, label: typeof parsed.label === 'string' ? parsed.label : parsed.id, keys: parsed.keys as string[] };
+  return Number(found);
 }
 
-function tablesOf(crate: string): TableFile[] {
-  const data = join(CRATES, crate, 'data');
-  if (!existsSync(data)) {
+function untwistVersion(): string {
+  const found = /\[workspace\.package\][^[]*?\nversion = "([^"]+)"/.exec(readFileSync(join(REPO, 'Cargo.toml'), 'utf8'))?.[1];
+  if (found === undefined) {
+    throw new Error('library-tables: the workspace Cargo.toml has no version');
+  }
+  return found;
+}
+
+function keysOf(path: string): string[] {
+  if (!existsSync(path)) {
     return [];
   }
-  return readdirSync(data)
-    .filter((name) => name.endsWith(TABLE_SUFFIX))
-    .sort()
-    .map((name) => {
-      const id = name.slice(0, -TABLE_SUFFIX.length);
-      const keysPath = join(data, `${id}${KEYS_SUFFIX}`);
-      if (!existsSync(keysPath)) {
-        throw new Error(`library-tables: ${crate}/data/${name} has no ${id}${KEYS_SUFFIX}`);
-      }
-      const keysJson = readFileSync(keysPath);
-      const parsed = keysFile(keysJson, keysPath);
-      return { id, label: parsed.label, keys: parsed.keys, table: readFileSync(join(data, name)), keysJson, compiledIn: COMPILED_IN.has(crate) };
-    });
+  const parsed = JSON.parse(readFileSync(path, 'utf8')) as { keys?: unknown };
+  if (!Array.isArray(parsed.keys) || !parsed.keys.every((key) => typeof key === 'string')) {
+    throw new Error(`library-tables: ${path} is not an <id>.keys.json file`);
+  }
+  return parsed.keys as string[];
+}
+
+function curatedTables(): Curated[] {
+  return CURATED_DIRS.flatMap((dir) => {
+    const data = join(REPO, dir);
+    if (!existsSync(data)) {
+      return [];
+    }
+    return readdirSync(data)
+      .filter((name) => name.endsWith(TABLE_SUFFIX))
+      .map((name) => join(data, name))
+      .map((path) => {
+        const bytes = readFileSync(path);
+        const summary = summariseTable(gunzipSync(bytes).toString('utf8'));
+        return { summary, bytes, keys: keysOf(join(data, `${summary.id}${KEYS_SUFFIX}`)), compiledIn: COMPILED_IN.has(dir), path };
+      });
+  })
+    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+    .map(({ summary, bytes, keys, compiledIn }) => ({ summary, bytes, keys, compiledIn }));
 }
 
 function genericNames(): Set<string> {
@@ -84,30 +118,95 @@ function genericNames(): Set<string> {
   return names;
 }
 
-export function libraryFiles(): LibraryFiles {
-  const crates = existsSync(CRATES) ? readdirSync(CRATES).filter((name) => name.startsWith(CRATE_PREFIX)).sort() : [];
-  const all = crates.flatMap(tablesOf);
-  const distinct = new Map(distinctKeys(all as readonly KeyedTable[], genericNames()).map((table) => [table.id, table.keys]));
-  const served = all.filter((table) => !table.compiledIn);
+export function strongKey(key: string): boolean {
+  if (key !== key.trim() || key === '') {
+    return false;
+  }
+  const phrase = key.length >= PHRASE_CHARS && /[^A-Za-z]/.test(key);
+  return phrase || key.startsWith('__') || STRONG_MARKS.some((mark) => key.includes(mark));
+}
+
+function rangeOf(versions: readonly string[]): string {
+  const low = versions[0];
+  const high = versions.at(-1);
+  if (low === undefined || high === undefined) {
+    return '';
+  }
+  return low === high ? low : `${low}~${high}`;
+}
+
+function curatedPackage(table: Curated, keys: readonly string[], files: Map<string, Buffer>): { readonly pkg: CollectionPackage; readonly bloom: Bloom } {
+  const sha = sha256(table.bytes);
+  const file = `${SHARDS_DIR}/${sha}.utl`;
+  files.set(file, table.bytes);
+  const { summary } = table;
+  const pkg: CollectionPackage = {
+    id: summary.id,
+    label: summary.label,
+    versions: summary.versions,
+    shards: [{ file, bytes: table.bytes.length, sha256: sha, versions: rangeOf(summary.versions), rows: summary.rows }],
+    keys,
+    curated: true,
+  };
+  return { pkg, bloom: bloomWithKeys(summary.loose) };
+}
+
+export function builtCollection(): LibraryFiles {
+  const tables = curatedTables();
+  const distinct = new Map(distinctKeys(tables.map((table) => ({ id: table.summary.id, keys: table.keys })), genericNames()).map((table) => [table.id, table.keys]));
   const files = new Map<string, Buffer>();
-  const tables = served.map((table) => {
-    files.set(`${table.id}${SERVED_SUFFIX}`, table.table);
-    files.set(`${table.id}${KEYS_SUFFIX}`, table.keysJson);
-    return {
-      id: table.id,
-      label: table.label,
-      file: `${table.id}${SERVED_SUFFIX}`,
-      bytes: table.table.length,
-      sha256: createHash('sha256').update(table.table).digest('hex'),
-      keys: distinct.get(table.id) ?? [],
-    };
-  });
-  const index: TableIndex = { schema: INDEX_SCHEMA, compiledIn: all.filter((table) => table.compiledIn).map((table) => table.id), tables };
-  files.set(INDEX_FILE, Buffer.from(JSON.stringify(index)));
+  const built = tables.filter((table) => !table.compiledIn).map((table) => curatedPackage(table, (distinct.get(table.summary.id) ?? []).filter(strongKey), files));
+  const packages = built.map(({ pkg }) => pkg);
+  const bloom = Buffer.from(bloomFile(built.map(({ pkg, bloom }) => [pkg.id, bloom] as const)));
+  const bloomSha = sha256(bloom);
+  const bloomPath = `${SHARDS_DIR}/${bloomSha}.bloom`;
+  files.set(bloomPath, bloom);
+  const version = `${untwistVersion()}+tables.${sha256(Buffer.from(JSON.stringify(packages))).slice(0, VERSION_CHARS)}`;
+  const index: CollectionIndex = {
+    schema: COLLECTION_SCHEMA,
+    version,
+    shape_epoch: shapeEpoch(),
+    untwist: `>=${untwistVersion()}`,
+    packages,
+    filters: { file: bloomPath, sha256: bloomSha, bytes: bloom.length },
+  };
+  files.set(COLLECTION_FILE, Buffer.from(`${JSON.stringify(index, null, 1)}\n`));
   return { index, files };
 }
 
-const TYPES: Readonly<Record<string, string>> = { [SERVED_SUFFIX]: 'application/octet-stream', '.json': 'application/json' };
+function checkedFile(root: string, file: string, sha: string, bytes: number): Buffer {
+  const path = join(root, file);
+  if (!safeFile(file) || !existsSync(path) || !statSync(path).isFile()) {
+    throw new Error(`library-tables: ${COLLECTION_ENV}: ${file} is missing or leaves the collection`);
+  }
+  const content = readFileSync(path);
+  if (sha256(content) !== sha || (bytes > 0 && content.length !== bytes)) {
+    throw new Error(`library-tables: ${COLLECTION_ENV}: ${file} does not match its SHA-256 or size`);
+  }
+  return content;
+}
+
+export function pinnedCollection(root: string, epoch: number = shapeEpoch()): LibraryFiles {
+  const text = readFileSync(join(root, COLLECTION_FILE), 'utf8');
+  const index = parseCollection(text);
+  if (index === null) {
+    throw new Error(`library-tables: ${COLLECTION_ENV}: ${COLLECTION_FILE} is not an ${COLLECTION_SCHEMA} index`);
+  }
+  if (index.shape_epoch !== epoch) {
+    throw new Error(`library-tables: ${COLLECTION_ENV}: the collection is for shape epoch ${index.shape_epoch}, this untwist computes ${epoch}`);
+  }
+  const files = new Map<string, Buffer>([[COLLECTION_FILE, Buffer.from(text)]]);
+  const refs = [...(index.filters === undefined ? [] : [index.filters]), ...index.packages.flatMap((pkg) => pkg.shards)];
+  for (const ref of refs) {
+    files.set(ref.file, checkedFile(root, ref.file, ref.sha256, ref.bytes));
+  }
+  return { index, files };
+}
+
+export function libraryFiles(): LibraryFiles {
+  const pinned = process.env[COLLECTION_ENV];
+  return pinned === undefined || pinned === '' ? builtCollection() : pinnedCollection(resolve(pinned));
+}
 
 export function libraryTables(): Plugin {
   let built: LibraryFiles | null = null;
@@ -117,19 +216,22 @@ export function libraryTables(): Plugin {
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
         const path = new URL(request.url ?? '/', 'http://localhost').pathname;
-        const prefix = `/${TABLES_DIR}/`;
-        const file = path.startsWith(prefix) ? current().files.get(path.slice(prefix.length)) : undefined;
+        const prefix = `/${LIBRARIES_DIR}/`;
+        const name = path.startsWith(prefix) ? path.slice(prefix.length) : '';
+        const file = current().files.get(name);
         if (file === undefined) {
           next();
           return;
         }
-        const type = Object.entries(TYPES).find(([suffix]) => path.endsWith(suffix))?.[1] ?? 'application/octet-stream';
-        response.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-cache' }).end(file);
+        const json = name === COLLECTION_FILE;
+        response
+          .writeHead(200, { 'Content-Type': json ? 'application/json' : 'application/octet-stream', 'Cache-Control': json ? 'no-cache' : 'public, max-age=31536000, immutable' })
+          .end(file);
       });
     },
     generateBundle() {
       for (const [name, source] of current().files) {
-        this.emitFile({ type: 'asset', fileName: `${TABLES_DIR}/${name}`, source });
+        this.emitFile({ type: 'asset', fileName: `${LIBRARIES_DIR}/${name}`, source });
       }
     },
   };

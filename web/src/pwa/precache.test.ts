@@ -17,9 +17,9 @@ const FILES = [
   'sitemap.xml',
   'favicon.svg',
   'site.webmanifest',
-  'libraries/index.json',
-  'libraries/core-js.table',
-  'libraries/core-js.keys.json',
+  'libraries/collection.json',
+  'libraries/shards/0123.utl',
+  'libraries/shards/4567.bloom',
 ];
 
 describe('precacheEntries', () => {
@@ -31,7 +31,7 @@ describe('precacheEntries', () => {
       'assets/run.worker-DDDD.js',
       'assets/wasm/untwist_wasm_bg-CCCC.wasm',
       'favicon.svg',
-      'libraries/index.json',
+      'libraries/collection.json',
       'site.webmanifest',
     ]);
   });
