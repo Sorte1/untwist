@@ -1,4 +1,4 @@
-use oxc_ast::ast::{Expression, Statement};
+use oxc_ast::ast::Statement;
 use oxc_ast::AstKind;
 use oxc_semantic::{AstNodes, Scoping};
 use oxc_span::GetSpan;
@@ -35,33 +35,64 @@ fn runs_in(scoping: &Scoping, from: ScopeId, home: ScopeId) -> bool {
     false
 }
 
-pub fn first_top_level_call(
+pub fn template_zones(
     scoping: &Scoping,
     nodes: &AstNodes<'_>,
     callee: SymbolId,
     home: ScopeId,
-) -> Option<u32> {
-    scoping
-        .get_resolved_references(callee)
-        .filter(|reference| {
-            let node = reference.node_id();
-            let called = match nodes.parent_kind(node) {
-                AstKind::CallExpression(call) => {
-                    matches!(call.callee.without_parentheses(), Expression::Identifier(ident) if ident.span == nodes.kind(node).span())
-                }
-                _ => false,
-            };
-            called && runs_in(scoping, nodes.get_node(node).scope_id(), home)
-        })
-        .map(|reference| nodes.kind(reference.node_id()).span().start)
-        .min()
+) -> Vec<(u32, u32)> {
+    let statements = statements(scoping, nodes, home);
+    let owner = |at: u32| {
+        statements
+            .iter()
+            .map(GetSpan::span)
+            .find(|span| span.start <= at && at < span.end)
+    };
+    let mut zones = Vec::new();
+    for reference in scoping.get_resolved_references(callee) {
+        let node = reference.node_id();
+        if !runs_in(scoping, nodes.get_node(node).scope_id(), home) {
+            continue;
+        }
+        let call = nodes.parent_id(node);
+        let AstKind::CallExpression(_) = nodes.kind(call) else {
+            continue;
+        };
+        let AstKind::VariableDeclarator(declarator) = nodes.parent_kind(call) else {
+            continue;
+        };
+        let Some(template) = declarator
+            .id
+            .get_binding_identifier()
+            .and_then(|ident| ident.symbol_id.get())
+        else {
+            continue;
+        };
+        let Some(start) = owner(nodes.kind(node).span().start) else {
+            continue;
+        };
+        let end = scoping
+            .get_resolved_references(template)
+            .filter_map(|used| owner(nodes.kind(used.node_id()).span().start))
+            .map(|span| span.end)
+            .fold(start.end, u32::max);
+        zones.push((start.start, end));
+    }
+    zones
 }
 
-pub fn declared_before(
+pub fn in_zones(zones: &[(u32, u32)], at: u32) -> bool {
+    zones.iter().any(|(start, end)| *start <= at && at < *end)
+}
+
+pub fn declared_in(
     scoping: &Scoping,
     nodes: &AstNodes<'_>,
     symbol: SymbolId,
-    end: u32,
+    zones: &[(u32, u32)],
 ) -> bool {
-    nodes.kind(scoping.symbol_declaration(symbol)).span().start < end
+    in_zones(
+        zones,
+        nodes.kind(scoping.symbol_declaration(symbol)).span().start,
+    )
 }

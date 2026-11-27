@@ -707,6 +707,37 @@ fn library(cx: &Cx<'_, '_>, home: ScopeId) -> FxHashSet<SymbolId> {
     reached
 }
 
+struct Done {
+    name: String,
+    text: String,
+    children: Vec<String>,
+    reads: FxHashSet<SymbolId>,
+}
+
+fn cascade(done: &mut Vec<Done>, kept: &mut Vec<(String, String)>) {
+    loop {
+        let names: Vec<String> = kept.iter().map(|(name, _)| name.clone()).collect();
+        let Some(at) = done
+            .iter()
+            .position(|entry| entry.children.iter().any(|child| names.contains(child)))
+        else {
+            return;
+        };
+        let entry = done.remove(at);
+        let child = entry
+            .children
+            .into_iter()
+            .find(|child| names.contains(child))
+            .unwrap_or_default();
+        if entry.name != SHARED {
+            kept.push((
+                entry.name,
+                format!("its child component {child} is kept as JS"),
+            ));
+        }
+    }
+}
+
 pub fn restore_all(cx: &Cx<'_, '_>, home: ScopeId, found: &[Found]) -> Restore {
     if !cx.runtime.esm {
         *cx.library.borrow_mut() = library(cx, home);
@@ -746,11 +777,7 @@ pub fn restore_all(cx: &Cx<'_, '_>, home: ScopeId, found: &[Found]) -> Restore {
     );
     let effects = module_effects(cx, home, found);
     let mut out = Restore::default();
-    let mut done: Vec<(String, String, Vec<String>)> = Vec::new();
-    let shared_file = match shared.is_empty() {
-        true => None,
-        false => Some(shared_unit(cx, home, &shared, found)),
-    };
+    let mut done: Vec<Done> = Vec::new();
     for component in found {
         let built = unit(
             cx,
@@ -760,13 +787,12 @@ pub fn restore_all(cx: &Cx<'_, '_>, home: ScopeId, found: &[Found]) -> Restore {
             &shared,
             false,
         )
-        .and_then(|built| match (&shared_file, built.shares) {
-            (Some(Err(reason)), true) => Err(reason.clone()),
-            _ if !built.outside.is_empty() => fail(format!(
+        .and_then(|built| match built.outside.first() {
+            Some(symbol) => fail(format!(
                 "it shares the module binding `{}` with code outside it",
-                cx.scoping.symbol_name(built.outside[0])
+                cx.scoping.symbol_name(*symbol)
             )),
-            _ => match effects.iter().find(|effect| effect.touches(&built)) {
+            None => match effects.iter().find(|effect| effect.touches(&built)) {
                 Some(effect) => fail(format!(
                     "the module statement `{}` changes what it reads",
                     effect.line
@@ -786,44 +812,49 @@ pub fn restore_all(cx: &Cx<'_, '_>, home: ScopeId, found: &[Found]) -> Restore {
                     .map(|body| main_text(component, body))
                     .into_iter()
                     .collect();
-                done.push((
-                    component.name.clone(),
-                    assemble(&built.head, built.helpers, main),
+                let reads = built.reads.intersection(&shared).copied().collect();
+                done.push(Done {
+                    name: component.name.clone(),
+                    text: assemble(&built.head, built.helpers, main),
                     children,
-                ));
+                    reads,
+                });
             }
             Err(reason) => out.kept.push((component.name.clone(), reason)),
         }
     }
-    if let Some(Ok((text, children))) = shared_file {
-        if done
-            .iter()
-            .any(|(_, _, children)| children.iter().any(|child| child == SHARED))
-        {
-            done.push((SHARED.to_string(), text, children));
-        }
-    }
-    loop {
-        let kept: Vec<String> = out.kept.iter().map(|(name, _)| name.clone()).collect();
-        let Some(at) = done
-            .iter()
-            .position(|(_, _, children)| children.iter().any(|child| kept.contains(child)))
-        else {
-            break;
-        };
-        let (name, _, children) = done.remove(at);
-        let child = children
-            .into_iter()
-            .find(|child| kept.contains(child))
-            .unwrap_or_default();
-        if name != SHARED {
-            out.kept
-                .push((name, format!("its child component {child} is kept as JS")));
+    cascade(&mut done, &mut out.kept);
+    let used: FxHashSet<SymbolId> = done
+        .iter()
+        .flat_map(|entry| entry.reads.iter().copied())
+        .collect();
+    if !used.is_empty() {
+        match shared_unit(cx, home, &used, found) {
+            Ok((text, children)) => done.push(Done {
+                name: SHARED.to_string(),
+                text,
+                children,
+                reads: FxHashSet::default(),
+            }),
+            Err(reason) => {
+                let (sharing, rest): (Vec<Done>, Vec<Done>) =
+                    done.into_iter().partition(|entry| !entry.reads.is_empty());
+                done = rest;
+                out.kept.extend(
+                    sharing
+                        .into_iter()
+                        .map(|entry| (entry.name, reason.clone())),
+                );
+                cascade(&mut done, &mut out.kept);
+            }
         }
     }
     out.components = done
         .into_iter()
-        .map(|(name, text, _)| Component { name, text })
+        .map(|entry| Component {
+            name: entry.name,
+            text: entry.text,
+        })
         .collect();
     out
 }
