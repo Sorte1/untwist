@@ -5,6 +5,21 @@ impl<'a, 's> Cx<'a, 's> {
         body.dom[node].attrs.push(attr);
     }
 
+    fn ordered_attr(
+        &self,
+        body: &mut Body,
+        node: usize,
+        name: &str,
+        value: &Expression<'_>,
+    ) -> R<String> {
+        let text = match body.dom[node].late && string(value).is_some() {
+            true => attr(name, &self.code(value)?),
+            false => self.attr_value(name, value)?,
+        };
+        body.dom[node].late |= !is_template_attr(&text, name);
+        Ok(text)
+    }
+
     pub(super) fn update(&self, body: &mut Body, expr: &'a Expression<'a>) -> R<()> {
         match expr.without_parentheses() {
             Expression::SequenceExpression(sequence) => {
@@ -113,8 +128,8 @@ impl<'a, 's> Cx<'a, 's> {
                 if call.arguments.len() > 3 {
                     return fail("set_attribute() with extra arguments");
                 }
-                let text =
-                    self.attr_value(name, arg(call, 2).ok_or("set_attribute() without a value")?)?;
+                let value = arg(call, 2).ok_or("set_attribute() without a value")?;
+                let text = self.ordered_attr(body, node, name, value)?;
                 self.push_attr(body, node, text);
                 Ok(())
             }
@@ -164,8 +179,15 @@ impl<'a, 's> Cx<'a, 's> {
         let old = call.arguments.len() == 2;
         let value = arg(call, if old { 1 } else { 2 }).ok_or("set_class() without a value")?;
         if let Some(text) = string(value) {
-            if let Some(attr) = self.static_attr("class", Some(text)) {
-                self.push_attr(body, node, attr);
+            if body.dom[node].late && self.hash.as_deref().is_some_and(|hash| text.contains(hash)) {
+                return fail("a scoped class set after a dynamic attribute");
+            }
+            let printed = match body.dom[node].late {
+                true => Some(attr("class", &self.code(value)?)),
+                false => self.static_attr("class", Some(text)),
+            };
+            if let Some(printed) = printed {
+                self.push_attr(body, node, printed);
             }
         } else if !is_nullish(Some(value)) {
             let inner = match value.without_parentheses() {
@@ -177,6 +199,7 @@ impl<'a, 's> Cx<'a, 's> {
                 _ => value,
             };
             let text = self.attr_value("class", inner)?;
+            body.dom[node].late |= !is_template_attr(&text, "class");
             self.push_attr(body, node, text);
         }
         let directives = match arg(call, 5).map(Expression::without_parentheses) {
@@ -220,10 +243,15 @@ impl<'a, 's> Cx<'a, 's> {
         let value = arg(call, 1).ok_or("set_style() without a value")?;
         match string(value) {
             Some("") => {}
-            Some(text) => self.push_attr(body, node, format!("style=\"{}\"", braces(text))),
+            Some(_) => {
+                body.dom[node].late = true;
+                let text = attr("style", &self.code(value)?);
+                self.push_attr(body, node, text);
+            }
             None if is_nullish(Some(value)) => {}
             None => {
                 let text = self.attr_value("style", value)?;
+                body.dom[node].late = true;
                 self.push_attr(body, node, text);
             }
         }
@@ -494,7 +522,7 @@ impl<'a, 's> Cx<'a, 's> {
     }
 
     pub(super) fn attr_value(&self, name: &str, expr: &Expression<'_>) -> R<String> {
-        if let Some(value) = string(expr) {
+        if let Some(value) = string(expr).filter(|value| !value.contains('\r')) {
             return Ok(format!(
                 "{name}=\"{}\"",
                 braces(&value.replace('&', "&amp;").replace('"', "&quot;"))
@@ -503,7 +531,7 @@ impl<'a, 's> Cx<'a, 's> {
         let Expression::TemplateLiteral(template) = expr.without_parentheses() else {
             return Ok(attr(name, &self.code(expr)?));
         };
-        if template.expressions.is_empty() {
+        if template.expressions.is_empty() || holds_carriage_return(template) {
             return Ok(attr(name, &self.code(expr)?));
         }
         let mut out = String::new();
@@ -589,4 +617,20 @@ impl<'a, 's> Cx<'a, 's> {
         self.push_attr(body, node, text);
         Ok(())
     }
+}
+
+fn holds_carriage_return(template: &oxc_ast::ast::TemplateLiteral<'_>) -> bool {
+    template.quasis.iter().any(|quasi| {
+        quasi
+            .value
+            .cooked
+            .and_then(|cooked| cooked.as_str())
+            .is_some_and(|cooked| cooked.contains('\r'))
+    })
+}
+
+fn is_template_attr(text: &str, name: &str) -> bool {
+    text.strip_prefix(name)
+        .and_then(|rest| rest.strip_prefix("=\""))
+        .is_some_and(|rest| !rest.contains('{'))
 }
