@@ -26,6 +26,10 @@ fn crc32(data: &[u8]) -> u32 {
 }
 
 pub fn write(path: &Path, text: &str) -> Result<()> {
+    std::fs::write(path, bytes(text)).with_context(|| format!("writing {}", path.display()))
+}
+
+pub fn bytes(text: &str) -> Vec<u8> {
     let mut data = GZIP_HEADER.to_vec();
     data.extend(miniz_oxide::deflate::compress_to_vec(
         text.as_bytes(),
@@ -33,7 +37,7 @@ pub fn write(path: &Path, text: &str) -> Result<()> {
     ));
     data.extend(crc32(text.as_bytes()).to_le_bytes());
     data.extend((text.len() as u32).to_le_bytes());
-    std::fs::write(path, data).with_context(|| format!("writing {}", path.display()))
+    data
 }
 
 pub fn read(path: &Path) -> Result<String> {

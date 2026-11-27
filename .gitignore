@@ -26,6 +26,7 @@ web/src/engine/pkg
 /tools/js-confuser/node_modules
 /tools/encoders/node_modules/
 /tools/library-fingerprints/node_modules/
+/tools/library-collection/node_modules/
 /tools/webcrack/node_modules/
 /tools/webpack-eval/node_modules/
 
