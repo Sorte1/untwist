@@ -58,6 +58,14 @@ core-js/webpack4.prod.js	635:5538e97decd1721c28d8c6a6	613:efdf8d82b6d61154313313
 core-js/webpack5.none.js	630:a4d4ccbaf48c2124d69b518e	618:b93a1bc879482b630179357f
 core-js/webpack5.prod.js	625:0d52ea58a8094d4b63b1134c	625:37c205ba2e5682fb8802f5f9
 core-js/webpack5.prod.obf.js	629:21127234e561a775f0e86289	625:5021c08c4473165295541cb1
+library-collection/canary/eventsource@5.1.5.vite8.oxc.js	50:bbd5994e2e6abb37f83123b1	50:bbd5994e2e6abb37f83123b1
+library-collection/canary/lru-cache@6.0.0.esbuild.none.js	72:53e22d96e54e746c56ee98ba	71:cb1a923b98b8ad114dc8a011
+library-collection/canary/p-limit@7.3.3.esbuild.none.js	31:25bc5b10a4bf7e07aef5d4dc	31:25bc5b10a4bf7e07aef5d4dc
+library-collection/canary/p-queue@6.6.2.esbuild.none.js	78:0195515c8a9da7da0cda51c9	77:d8a1fc4ea1c9f8ca33f218f5
+library-collection/canary/p-queue@6.6.2.rollup-cjs.terser.js	79:04122701240ac8edb23b8985	79:04122701240ac8edb23b8985
+library-collection/canary/p-queue@6.6.2.vite8.oxc.js	77:da2af867e1a96bd5b4caf341	77:4c691a917999ca5b3504a2f5
+library-collection/canary/p-queue@6.6.2.webpack5-prod.terser.js	84:ee21736ba31a1d12a69219e0	84:ee21736ba31a1d12a69219e0
+library-collection/inputs/eventemitter3.rollup-cjs.terser.js	16:1a7bc5e7e95c73a62e904401	16:1a7bc5e7e95c73a62e904401
 regenerator-runtime/esbuild.js	50:1773305a1a893f4777cff2de	49:c1eced48e2b972914424efd3
 regenerator-runtime/esbuild.min.js	50:b6614a0c8de4b665b1b293ee	49:c15618612eea83ec09e67c57
 regenerator-runtime/esbuild.min.obf.js	54:d2afe4f7d9578a9242ad09d1	49:00fa7bc62bae94e7480ec1d3

@@ -3,7 +3,7 @@ use oxc_ast::AstKind;
 use oxc_ast::AstType;
 use oxc_ast_visit::{walk, walk_js, Visit, VisitJs};
 use oxc_semantic::Scoping;
-use oxc_span::Span;
+use oxc_span::{GetSpan, Span};
 use oxc_syntax::operator::{AssignmentOperator, BinaryOperator, UnaryOperator};
 use oxc_syntax::scope::{ScopeFlags, ScopeId};
 use oxc_syntax::symbol::SymbolId;
@@ -144,6 +144,68 @@ pub fn shape_program<'n, 'a>(program: &'n Program<'a>, scoping: &'n Scoping) -> 
         bindings,
         inlined,
     }
+}
+
+fn wrapped_function<'n, 'a>(expr: &'n Expression<'a>) -> Option<&'n [Statement<'a>]> {
+    let call = match expr.without_parentheses() {
+        Expression::CallExpression(call) => call,
+        Expression::UnaryExpression(unary) => match unary.argument.without_parentheses() {
+            Expression::CallExpression(call) => call,
+            _ => return None,
+        },
+        _ => return None,
+    };
+    match call.callee.without_parentheses() {
+        Expression::FunctionExpression(function) => function
+            .body
+            .as_ref()
+            .map(|body| body.statements.as_slice()),
+        Expression::ArrowFunctionExpression(arrow) => match &arrow.body {
+            ArrowFunctionBody::FunctionBody(body) => Some(body.statements.as_slice()),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+fn hoisted_body<'n, 'a>(program: &'n Program<'a>) -> &'n [Statement<'a>] {
+    let [only] = program.body.as_slice() else {
+        return &program.body;
+    };
+    let wrapped = match only {
+        Statement::ExpressionStatement(statement) => wrapped_function(&statement.expression),
+        Statement::VariableDeclaration(declaration) => match declaration.declarations.as_slice() {
+            [declarator] => declarator.init.as_ref().and_then(wrapped_function),
+            _ => None,
+        },
+        _ => None,
+    };
+    wrapped.unwrap_or(&program.body)
+}
+
+pub fn statement_shapes(program: &Program<'_>, scoping: &Scoping) -> Vec<(Span, (u32, u64))> {
+    let mut scan = DefScan::new(scoping);
+    scan.visit_program(program);
+    let mut emitter = Emitter::new(
+        scoping,
+        Sink::Prefix(PolyHash::new()),
+        scan.single_definitions(),
+    );
+    let body = hoisted_body(program);
+    let mut ranges = Vec::with_capacity(body.len());
+    for statement in body {
+        let start = emitter.count;
+        emitter.emit_statement(statement);
+        ranges.push((statement.span(), start, emitter.count - start));
+    }
+    let Sink::Prefix(prefix) = emitter.sink else {
+        unreachable!("the statements were shaped into a prefix hash")
+    };
+    ranges
+        .into_iter()
+        .filter(|(_, _, len)| *len > 0)
+        .map(|(span, start, len)| (span, (len, prefix.range(start, len))))
+        .collect()
 }
 
 #[derive(Clone, Debug)]

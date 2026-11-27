@@ -93,7 +93,7 @@ function declarations(code) {
   }
   const visit = (node) => {
     if (!node || typeof node.type !== "string") return;
-    if ((node.type === "FunctionDeclaration" || node.type === "ClassDeclaration") && node.id) found.push([node.id.name, node.start]);
+    if (/^(Function|Class)(Declaration|Expression)$/.test(node.type) && node.id) found.push([node.id.name, node.start]);
     if (node.type === "VariableDeclarator" && node.id?.type === "Identifier" && node.init && /Function|Class/.test(node.init.type)) found.push([node.id.name, node.start]);
     for (const value of Object.values(node)) {
       if (Array.isArray(value)) value.forEach(visit);
@@ -102,6 +102,14 @@ function declarations(code) {
   };
   visit(ast);
   return found;
+}
+
+function installedScript(path) {
+  const found = owner(path);
+  if (!found || !/\.(c|m)?js$/.test(found.file)) return false;
+  const normal = path.replace(/\\/g, "/").replace(/^\0/, "").replace(/\?.*$/, "");
+  const local = normal.slice(normal.indexOf("node_modules/"));
+  return existsSync(join(INSTALL, local)) || existsSync(join(INSTALL, found.key));
 }
 
 function lineStarts(code) {
@@ -125,16 +133,16 @@ function namesFromMap(code, map) {
     }
     return low;
   };
-  const names = {};
+  const names = new Map();
   for (const [binding, offset] of declarations(code)) {
     const line = lineOf(offset);
     const position = originalPositionFor(traced, { line: line + 1, column: offset - starts[line] });
-    const source = position.source && ownerOf(position.source.replace(/^webpack:\/\/[^/]*\//, ""));
-    if (!source) continue;
-    if (binding in names && names[binding] !== source) names[binding] = null;
-    else names[binding] = source;
+    const path = position.source?.replace(/^webpack:\/\/[^/]*\//, "") ?? "";
+    const source = installedScript(path) ? ownerOf(path) : null;
+    if (names.has(binding) && names.get(binding) !== source) names.set(binding, null);
+    else names.set(binding, source);
   }
-  return Object.fromEntries(Object.entries(names).filter(([, value]) => value));
+  return Object.fromEntries([...names].filter(([, value]) => value));
 }
 
 async function bundleRollup(entry) {

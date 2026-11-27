@@ -12,8 +12,13 @@ use oxc_span::{GetSpan, Span};
 use serde_json::Value;
 use untwist_core::parse::{has_error, parse_program};
 use untwist_core::semantic::build_scoping;
+use untwist_rename::library::shape::statement_shapes;
 use untwist_rename::library::shape::UnitKind;
-use untwist_rename::library::table::{exact_key, loose_key, Role, RowData as Row, Table};
+use untwist_rename::library::table::{
+    exact_key, loose_key, order_key, Role, RowData as Row, Table,
+};
+
+use crate::library_order::{first_lane_per_file, order_family, order_rows};
 use untwist_rename::library::{unit_records, version_key, UnitRecord};
 
 #[derive(clap::Args, Debug)]
@@ -49,6 +54,7 @@ pub(crate) struct Build {
     version: String,
     dir: String,
     bundler: String,
+    minifier: String,
     obfuscated: bool,
     minified: bool,
     names: BTreeMap<String, String>,
@@ -148,6 +154,7 @@ pub(crate) fn read_manifest(path: &Path) -> Result<Manifest> {
             version: text(&build["version"]),
             dir: text(&build["dir"]),
             bundler: text(&build["bundler"]),
+            minifier: text(&build["minifier"]),
             obfuscated: text(&build["obfuscator"]) != "none",
             minified: text(&build["minifier"]) != "none",
             names: string_map(&build["names"]),
@@ -269,6 +276,7 @@ struct Origin {
     span: Span,
     module: String,
     root: Option<Span>,
+    nested: bool,
 }
 
 struct Attributor<'m> {
@@ -326,6 +334,7 @@ impl Attributor<'_> {
                     span: statement.span(),
                     module: module.clone(),
                     root,
+                    nested: false,
                 });
                 return;
             }
@@ -334,32 +343,43 @@ impl Attributor<'_> {
 }
 
 impl Attributor<'_> {
-    fn nested(&mut self, name: &str, span: Span, root: Option<Span>) {
+    fn nested(&mut self, name: &str, span: Span) {
         if self.owners.is_none() {
             return;
         }
-        if let Some(module) = self.names.get(name) {
-            self.contexts.push(Origin {
-                span,
-                module: module.clone(),
-                root,
-            });
+        let Some(module) = self.names.get(name) else {
+            return;
+        };
+        let enclosing = self
+            .contexts
+            .iter()
+            .filter(|context| context.span.start <= span.start && span.end <= context.span.end)
+            .min_by_key(|context| context.span.size());
+        let package = |key: &str| parse_npm_key(key).map(|owner| owner.label);
+        if enclosing.is_some_and(|context| package(&context.module) != package(module)) {
+            return;
         }
+        self.contexts.push(Origin {
+            span,
+            module: module.clone(),
+            root: None,
+            nested: true,
+        });
     }
 }
 
 impl<'a> Visit<'a> for Attributor<'_> {
     fn visit_function(&mut self, it: &Function<'a>, flags: oxc_syntax::scope::ScopeFlags) {
         if let Some(id) = &it.id {
-            self.nested(&id.name, it.span, Some(it.span));
+            self.nested(&id.name, it.span);
         }
         walk::walk_function(self, it, flags);
     }
 
     fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
         if let (BindingPattern::BindingIdentifier(id), Some(init)) = (&it.id, &it.init) {
-            if let Some(root) = function_root(init) {
-                self.nested(&id.name, it.span, Some(root));
+            if function_root(init).is_some() {
+                self.nested(&id.name, it.span);
             }
         }
         walk::walk_variable_declarator(self, it);
@@ -384,6 +404,7 @@ impl<'a> Visit<'a> for Attributor<'_> {
                 span: it.span,
                 module,
                 root: function_root(&it.value),
+                nested: false,
             });
         }
         walk::walk_object_property(self, it);
@@ -427,7 +448,9 @@ fn literal_modules(
             text.chars().count() >= KEY_MIN_LENGTH && !text.chars().all(|ch| ch.is_ascii_digit())
         })
         .filter(|(_, text)| {
-            !text.contains(dir) && !text.contains("node_modules") && !is_module_path(text)
+            (dir.is_empty() || !text.contains(dir))
+                && !text.contains("node_modules")
+                && !is_module_path(text)
         })
         .filter_map(|(span, text)| {
             let module = match file_module {
@@ -478,6 +501,7 @@ fn attribute(
                 })
                 .min_by_key(|context| context.span.size())?;
             let role = match context.root {
+                _ if context.nested => Role::Function,
                 Some(root) if root == record.span => Role::Wrapper,
                 None if context.span == record.span => Role::Wrapper,
                 _ => Role::Function,
@@ -511,11 +535,61 @@ fn names(
         .collect()
 }
 
+fn owner_of(
+    manifest: &Manifest,
+    build: &Build,
+    module: String,
+) -> Option<(String, String, String)> {
+    match manifest.npm {
+        true => {
+            let owner = parse_npm_key(&module)?;
+            Some((owner.label, owner.version, owner.module))
+        }
+        false => Some((manifest.label.clone(), build.version.clone(), module)),
+    }
+}
+
+fn observe_order(
+    program: &Program<'_>,
+    scoping: &oxc_semantic::Scoping,
+    contexts: &[Origin],
+    (build, manifest): (&Build, &Manifest),
+) -> Vec<Observed> {
+    let Some(family) = order_family(&build.bundler, &build.minifier, build.obfuscated) else {
+        return Vec::new();
+    };
+    let shapes = statement_shapes(program, scoping);
+    let contexts: Vec<(Span, String)> = contexts
+        .iter()
+        .map(|context| (context.span, context.module.clone()))
+        .collect();
+    order_rows(&shapes, &contexts)
+        .into_iter()
+        .filter_map(|row| {
+            let (label, versions, module) = owner_of(manifest, build, row.module)?;
+            Some(Observed {
+                known: true,
+                row: Row {
+                    loose: loose_key(row.loose),
+                    exact: order_key(row.loose),
+                    label,
+                    versions,
+                    module,
+                    role: Role::Order,
+                    own: Some(family.to_string()),
+                    inner: Vec::new(),
+                    outer: Vec::new(),
+                    specific: row.position,
+                },
+            })
+        })
+        .collect()
+}
+
 fn observe_file(
     text: &str,
     file_module: Option<&str>,
-    build: &Build,
-    manifest: &Manifest,
+    (build, manifest): (&Build, &Manifest),
     words: &std::collections::HashSet<String>,
 ) -> (Vec<Observed>, Vec<(String, String)>) {
     let alloc = Allocator::default();
@@ -542,18 +616,12 @@ fn observe_file(
         (&attributor.contexts, file_module),
         &build.dir,
     );
-    let observed = attribute(records, &attributor.contexts, file_module)
+    let mut observed: Vec<Observed> = attribute(records, &attributor.contexts, file_module)
         .into_iter()
         .filter(|(record, _, _)| record.loose.0 >= MIN_UNIT_TOKENS)
         .filter(|(record, _, _)| is_strong(record) || record.binding.is_some())
         .filter_map(|(record, module, role)| {
-            let (label, versions, module) = match manifest.npm {
-                true => {
-                    let owner = parse_npm_key(&module)?;
-                    (owner.label, owner.version, owner.module)
-                }
-                false => (manifest.label.clone(), build.version.clone(), module),
-            };
+            let (label, versions, module) = owner_of(manifest, build, module)?;
             let known = !build.obfuscated;
             let own_known = known || role == Role::Wrapper;
             let real =
@@ -585,6 +653,14 @@ fn observe_file(
             })
         })
         .collect();
+    if file_module.is_none() {
+        observed.extend(observe_order(
+            &parsed.program,
+            &sem.scoping,
+            &attributor.contexts,
+            (build, manifest),
+        ));
+    }
     (observed, keys)
 }
 
@@ -629,7 +705,9 @@ pub(crate) fn process_build(
     let empty = BTreeMap::new();
     let files = manifest.packages.get(&build.dir).unwrap_or(&empty);
     let words = source_words(&std::fs::read_to_string(work.join(&build.file))?);
+    let mut order_lanes = Vec::new();
     for (lane, flags) in LANES {
+        let mut order = Vec::new();
         let out = work.join("out").join(format!("{}.{lane}", build.file));
         let status = Command::new(untwist)
             .args(flags)
@@ -653,12 +731,20 @@ pub(crate) fn process_build(
             }
             let text = std::fs::read_to_string(&path)?;
             let module = modules.get(&path).map(String::as_str);
-            let (rows, found) = observe_file(&text, module, build, manifest, &words);
-            observed.extend(rows);
+            let (rows, found) = observe_file(&text, module, (build, manifest), &words);
+            let (in_order, rest): (Vec<Observed>, Vec<Observed>) = rows
+                .into_iter()
+                .partition(|item| item.row.role == Role::Order);
+            observed.extend(rest);
+            order.extend(in_order);
             keys.extend(found);
         }
+        order_lanes.push(order);
         let _ = std::fs::remove_dir_all(&out);
     }
+    observed.extend(first_lane_per_file(order_lanes, |item: &Observed| {
+        (item.row.label.clone(), item.row.module.clone())
+    }));
     Ok((observed, keys))
 }
 
@@ -735,8 +821,14 @@ fn version_ranges(present: &BTreeSet<String>, order: &[String]) -> String {
         .join(",")
 }
 
+type OrderedKey = (u64, String, String, Role, Option<(u32, Option<String>)>);
+
+fn order_slot(row: &Row) -> Option<(u32, Option<String>)> {
+    (row.role == Role::Order).then(|| (row.specific, row.own.clone()))
+}
+
 pub(crate) fn aggregate(observed: Vec<Observed>, manifest: &Manifest) -> Vec<Row> {
-    let mut groups: BTreeMap<(u64, String, String, Role), Aggregate> = BTreeMap::new();
+    let mut groups: BTreeMap<OrderedKey, Aggregate> = BTreeMap::new();
     let mut orders: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut sorted = observed;
     sorted.sort_by_key(|item| !item.known);
@@ -746,7 +838,13 @@ pub(crate) fn aggregate(observed: Vec<Observed>, manifest: &Manifest) -> Vec<Row
             .or_default()
             .insert(row.versions.clone());
         let group = groups
-            .entry((row.exact, row.label.clone(), row.module.clone(), row.role))
+            .entry((
+                row.exact,
+                row.label.clone(),
+                row.module.clone(),
+                row.role,
+                order_slot(&row),
+            ))
             .or_default();
         group.loose = row.loose;
         group.specific = row.specific;
@@ -759,7 +857,7 @@ pub(crate) fn aggregate(observed: Vec<Observed>, manifest: &Manifest) -> Vec<Row
     }
     groups
         .into_iter()
-        .map(|((exact, label, module, role), group)| Row {
+        .map(|((exact, label, module, role, _), group)| Row {
             loose: group.loose,
             exact,
             versions: match manifest.npm {
