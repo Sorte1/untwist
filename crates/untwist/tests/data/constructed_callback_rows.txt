@@ -9,3 +9,6 @@ arguments|(function () { function q() { return new arguments[0](); } console.log
 is-constructor|(function () { function c(a) { try { Reflect.construct(String, [], a); return true; } catch (e) { return false; } } console.log(c(function () {})); })();
 stored|(function () { const box = {}; function q(a) { box.f = a; } q(function () {}); console.log(typeof new box.f()); })();
 only-called|(function () { function q(a) { return a.length + a(); } console.log(q(function () { return 1; })); })();
+after-spread|(function () { function q(a, b, c) { b(); return new c(); } console.log(typeof q(...[1, function () {}], function () {})); })();
+reassigned-callee|(function () { let q = function (a) { return a(); }; q = function (a) { return new a(); }; console.log(typeof q(function () {})); })();
+declared-twice|(function () { var q = function (a) { return a(); }; var q = function (a) { return new a(); }; console.log(typeof q(function () {})); })();

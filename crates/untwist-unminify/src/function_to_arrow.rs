@@ -11,7 +11,7 @@ use untwist_core::pass::{
 };
 use untwist_core::semantic::{is_constant_binding, scope_hazard};
 
-use crate::callee_params::{callee_of, parameter_at, Callee, CalleeParams};
+use crate::callee_params::{callee_of, first_spread, parameter_at, Callee, CalleeParams};
 use crate::var_to_let::{is_text_read, Frozen};
 
 pub const PASS: &str = "function-to-arrow";
@@ -379,15 +379,17 @@ impl<'a> FunctionToArrow<'a> {
             Callee::Local(symbol, shift) => Some((symbol, shift)),
             Callee::Unknown | Callee::Constructs => None,
         };
+        let spread = first_spread(&call.arguments);
         for (position, argument) in call.arguments.iter_mut().enumerate().skip(skipped) {
             if !is_convertible_callback(argument, cx.scoping()) {
                 continue;
             }
             let may_construct = callee.is_some_and(|(symbol, shift)| {
-                parameter_at(position, shift).is_none_or(|parameter| {
-                    self.callee_params
-                        .may_construct(cx.scoping(), symbol, parameter)
-                })
+                position > spread
+                    || parameter_at(position, shift).is_none_or(|parameter| {
+                        self.callee_params
+                            .may_construct(cx.scoping(), symbol, parameter)
+                    })
             });
             if may_construct {
                 continue;

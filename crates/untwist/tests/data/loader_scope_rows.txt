@@ -1,0 +1,18 @@
+f1-loop|var d = [99,112,107,102,113,108,106,107,37,118,45,44,37,126,37,119,96,113,112,119,107,37,39,106,110,39,62,37,120,37,102,106,107,118,106,105,96,43,105,106,98,45,118,45,44,44,62]; var s = ""; for (var i = 0; i < d.length; i++) s += String.fromCharCode(d[i] ^ 5); eval(s);
+f1-key|var key = 3, parts = [102, 117, 110, 99, 116, 105, 111, 110, 32, 107, 101, 121, 40, 41, 32, 123, 32, 114, 101, 116, 117, 114, 110, 32, 34, 111, 107, 34, 59, 32, 125, 32, 99, 111, 110, 115, 111, 108, 101, 46, 108, 111, 103, 40, 107, 101, 121, 40, 41, 41]; eval(String.fromCharCode.apply(null, parts));
+f1-builtin|var d = [99,112,107,102,113,108,106,107,37,86,113,119,108,107,98,45,44,37,126,37,119,96,113,112,119,107,37,39,104,108,107,96,39,62,37,120,37,102,106,107,118,106,105,96,43,105,106,98,45,86,113,119,108,107,98,45,44,44,62]; var s = ""; for (var i = 0; i < d.length; i++) s += String.fromCharCode(d[i] ^ 5); eval(s);
+f1-indirect|var d = [99,112,107,102,113,108,106,107,37,108,45,44,37,126,37,119,96,113,112,119,107,37,39,106,110,39,62,37,120,37,102,106,107,118,106,105,96,43,105,106,98,45,108,45,44,44,62]; var s = ""; for (var i = 0; i < d.length; i++) s += String.fromCharCode(d[i] ^ 5); (0, eval)(s);
+f1-var-builtin|var d = [115,100,119,37,86,113,119,108,107,98,37,56,37,99,112,107,102,113,108,106,107,37,45,44,37,126,37,119,96,113,112,119,107,37,39,104,108,107,96,39,62,37,120,62,37,102,106,107,118,106,105,96,43,105,106,98,45,86,113,119,108,107,98,45,44,44,62]; var s = ""; for (var i = 0; i < d.length; i++) s += String.fromCharCode(d[i] ^ 5); eval(s);
+f1-joined|var t = ["console.log(typeof t)", "function t() {}"]; eval(t.join(";"));
+f2-pool-scope|var k = "A"; var s = [].constructor.constructor("return typeof k")(); eval("console.log('" + s + "')");
+f2-indirect-this|var E = [].constructor.constructor("return eval")(); E("(function (root) { console.log(root === globalThis, typeof root.setTimeout); })(this)");
+f2-function-scope|var parts = ["console.log(typeof require, typeof module, ", "typeof exports, typeof __dirname, typeof parts)"]; Function(parts.map(function (p) { return p; }).join(""))();
+f2-indirect-var|var E = [].constructor.constructor("return eval")(); E("var leaked = 5; console.log(typeof globalThis.leaked, typeof require, typeof module, typeof exports)");
+p1-whole-function|Function("console.log(typeof require, typeof module, this === globalThis)")();
+p1-whole-eval|(0, eval)("console.log(this === globalThis, typeof module)");
+n1-constructor-text|zzz = 5; var yyy = 6; eval([99,111,110,115,111,108,101,46,108,111,103,40,91,93,46,99,111,110,115,116,114,117,99,116,111,114,46,99,111,110,115,116,114,117,99,116,111,114,40,34,114,101,116,117,114,110,32,116,121,112,101,111,102,32,122,122,122,32,43,32,116,121,112,101,111,102,32,121,121,121,34,41,40,41,41].map(function (c) { return String.fromCharCode(c); }).join(""));
+f1-lexical|var s = "x"; eval(["let s", " = 1; console.log(s, typeof globalThis.s)"].join(""));
+f2-function-reads-prefix|var k = "A"; Function(["console.log(typeof ", "k)"].join(""))();
+f2-direct-eval-module|var k = "A"; eval(["console.log(typeof k, ", "typeof module)"].join(""));
+strict-indirect-eval|var E = [].constructor.constructor("return eval")(); E(["'use strict'; var a = 1; let b = 2;", " console.log(typeof globalThis.a, a + b)"].join(""));
+function-argument-require|Function("m", "console.log(typeof m.r, typeof require)")({ r: typeof require === "function" ? require : null });

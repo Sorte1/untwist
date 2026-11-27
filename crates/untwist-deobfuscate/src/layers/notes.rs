@@ -29,6 +29,9 @@ pub const LAYER_NEEDS_UNSAFE: &str =
 pub const LAYER_SHAPE: &str = "a layer was kept: its call or its site is not a shape the layer \
      rules cover";
 
+pub const LAYER_SCOPE: &str = "a layer was kept: in place, its text would see bindings or \
+     declare names in a scope other than the one Function or eval gives it";
+
 pub const LAYER_CAP: &str = "a layer was kept: this input already peeled the most whole-program \
      layers one input may peel";
 
@@ -49,6 +52,7 @@ catalogue!(
     LAYER_TOO_LARGE,
     LAYER_NEEDS_UNSAFE,
     LAYER_SHAPE,
+    LAYER_SCOPE,
     LAYER_CAP,
     LAYER_CYCLE,
     LAYER_FUEL
@@ -65,6 +69,7 @@ impl Refusal {
             Refusal::TooLarge => LAYER_TOO_LARGE,
             Refusal::NeedsUnsafe => LAYER_NEEDS_UNSAFE,
             Refusal::Shape => LAYER_SHAPE,
+            Refusal::Scope => LAYER_SCOPE,
             Refusal::Cap => LAYER_CAP,
             Refusal::Cycle => LAYER_CYCLE,
             Refusal::Fuel => LAYER_FUEL,

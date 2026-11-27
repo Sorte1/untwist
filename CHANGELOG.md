@@ -65,6 +65,17 @@ All notable changes to this project are documented in this file. The format is b
   them. Generated fixtures for each encoder are in `fixtures/encoders/`
   (`tools/encoders/matrix.mjs`), with an EXPECT ratchet for `cargo xtask obf-options`.
 
+### Fixed
+
+- Loader layers keep an `eval` text that declares a name the prefix or the hand-off names (its
+  declaration would be hoisted above the prefix), and keep a `Function` text or indirect `eval`
+  text that would see CommonJS module bindings (`require`, `module`, a prefix `var`, `this`) in
+  place; the same rule now holds for whole-program `Function` and indirect `eval` layers and for
+  the `Function` texts the evaluator runs on the way. `--unsafe` keeps the prefix when the text
+  reaches it through a `constructor` chain or spells its names in a string.
+- `--unsafe` function-to-arrow keeps a callback passed after a spread argument, or to a local
+  function that is reassigned or declared twice.
+
 ## [0.6.0] - 2026-11-24
 
 There is no 0.5.1: the readability work planned for it ships in this release, together with

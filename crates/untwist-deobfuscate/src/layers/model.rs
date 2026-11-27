@@ -35,6 +35,7 @@ pub enum Refusal {
     TooLarge,
     NeedsUnsafe,
     Shape,
+    Scope,
     Cap,
     Cycle,
     Fuel,

@@ -9,6 +9,7 @@ pub mod notes;
 mod observe;
 pub mod packer;
 pub mod probe;
+mod scope;
 
 use oxc_ast::ast::Program;
 use oxc_semantic::Scoping;
@@ -48,7 +49,24 @@ pub fn decode(
             reason: Refusal::Shape,
         }));
     }
-    Some(decoded)
+    Some(decoded.and_then(|layer| in_scope(layer, probe)))
+}
+
+fn in_scope(layer: Layer, probe: Probe<'_, '_>) -> Result<Layer, Refused> {
+    let reaches = match (probe.form, decode::outer_call(&probe)) {
+        (LayerForm::Function, _) => scope::called_function(&layer.text).is_none_or(|function| {
+            scope::reaches_module_scope(&function, &[], scope::Runs::InFunction)
+        }),
+        (_, Some(call)) if scope::is_direct_eval(&call.callee) => false,
+        _ => scope::reaches_module_scope(&layer.text, &[], scope::Runs::IndirectEval),
+    };
+    match reaches {
+        true => Err(Refused {
+            form: probe.form,
+            reason: Refusal::Scope,
+        }),
+        false => Ok(layer),
+    }
 }
 
 pub fn verdict(
