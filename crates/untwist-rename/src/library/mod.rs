@@ -18,6 +18,7 @@ use std::sync::Arc;
 use shape::{exact_shape, shape_program, ExactShape, Unit, UnitKind};
 use table::{Role, Table};
 
+pub const SHAPE_EPOCH: u32 = 1;
 pub const STRONG_LENGTH: u32 = 60;
 pub const STRONG_SPECIFIC: u32 = 2;
 
@@ -143,7 +144,7 @@ impl Slot {
     }
 }
 
-pub(crate) fn version_key(version: &str) -> Vec<u64> {
+pub fn version_key(version: &str) -> Vec<u64> {
     version
         .split(['.', '-', '+'])
         .map(|part| part.parse().unwrap_or(0))
