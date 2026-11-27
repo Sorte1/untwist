@@ -848,10 +848,10 @@ pub(crate) fn aggregate(observed: Vec<Observed>, manifest: &Manifest) -> Vec<Row
     }
     let complete: BTreeSet<(u64, String, String)> = groups
         .keys()
-        .filter(|(_, _, _, role)| *role == Role::Complete)
-        .map(|(exact, label, module, _)| (*exact, label.clone(), module.clone()))
+        .filter(|(_, _, _, role, _)| *role == Role::Complete)
+        .map(|(exact, label, module, _, _)| (*exact, label.clone(), module.clone()))
         .collect();
-    groups.retain(|(exact, label, module, role), _| {
+    groups.retain(|(exact, label, module, role, _), _| {
         *role != Role::Module || !complete.contains(&(*exact, label.clone(), module.clone()))
     });
     groups
