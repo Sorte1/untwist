@@ -10,10 +10,13 @@ use rustc_hash::FxHashSet;
 use untwist_core::ast_util::edit::{ExprEdits, StmtEdits};
 use untwist_core::pass::{Cx, Interest, Pass};
 use untwist_core::semantic::builtins::Reliance;
-use untwist_core::semantic::{has_module_syntax, is_foreign_global, may_call_eval};
+use untwist_core::semantic::{has_module_syntax, may_call_eval};
 use untwist_eval::fold::{const_to_expression, fold_binary, Const};
 
-use super::refs::{inside, literal_value, names_observed, scan, unpatched_outside, Refs};
+use super::refs::{
+    inside, literal_value, names_observed, scan, shared_elsewhere, unpatched_outside, Refs,
+    FUNCTION_KEYS,
+};
 use crate::calls::agnostic::{global_reach, ReachWatch};
 use crate::pure_calls::literal_data;
 
@@ -29,29 +32,6 @@ const CALCULATOR_OPERATORS: [BinaryOperator; 4] = [
     BinaryOperator::Subtraction,
     BinaryOperator::Multiplication,
     BinaryOperator::Division,
-];
-
-const FUNCTION_KEYS: [&str; 20] = [
-    "length",
-    "name",
-    "prototype",
-    "arguments",
-    "caller",
-    "constructor",
-    "apply",
-    "bind",
-    "call",
-    "toString",
-    "__defineGetter__",
-    "__defineSetter__",
-    "hasOwnProperty",
-    "__lookupGetter__",
-    "__lookupSetter__",
-    "isPrototypeOf",
-    "propertyIsEnumerable",
-    "valueOf",
-    "__proto__",
-    "toLocaleString",
 ];
 
 static FUNCTION_PROTOTYPES: Reliance = Reliance {
@@ -142,6 +122,12 @@ fn calculator_cases(
     let [operator, left, right] = params.as_slice() else {
         return None;
     };
+    let distinct = [(operator, left), (operator, right), (left, right)]
+        .iter()
+        .all(|(a, b)| a != b && scoping.symbol_name(**a) != scoping.symbol_name(**b));
+    if !distinct {
+        return None;
+    }
     let body = function.body.as_ref()?;
     let [Statement::SwitchStatement(switch)] = body.statements.as_slice() else {
         return None;
@@ -319,14 +305,22 @@ impl<'a> VisitJs<'a> for DeadBranches<'_> {
     }
 }
 
-fn dead_regions(program: &Program<'_>, refs: &Refs<'_>, found: &[Helper]) -> Vec<Span> {
+struct Dead {
+    regions: Vec<Span>,
+    functions: Vec<SymbolId>,
+}
+
+fn dead_regions(program: &Program<'_>, refs: &Refs<'_>, found: &[Helper]) -> Dead {
     let falsy: FxHashSet<Span> = found
         .iter()
         .filter(|h| h.predicate)
         .flat_map(|h| h.folds.iter().map(|(span, _)| *span))
         .collect();
     if falsy.is_empty() {
-        return Vec::new();
+        return Dead {
+            regions: Vec::new(),
+            functions: Vec::new(),
+        };
     }
     let mut branches = DeadBranches {
         falsy: &falsy,
@@ -336,6 +330,7 @@ fn dead_regions(program: &Program<'_>, refs: &Refs<'_>, found: &[Helper]) -> Vec
     branches.visit_program(program);
     let mut dead = branches.dead;
     let mut functions = branches.functions;
+    let mut unreached_functions = Vec::new();
     loop {
         let before = dead.len();
         functions.retain(|(symbol, span)| {
@@ -344,16 +339,24 @@ fn dead_regions(program: &Program<'_>, refs: &Refs<'_>, found: &[Helper]) -> Vec
                 !uses.is_empty() && uses.iter().all(|r| dead.iter().any(|d| inside(*d, r.span)));
             if unreached {
                 dead.push(*span);
+                unreached_functions.push(*symbol);
             }
             !unreached
         });
         if dead.len() == before {
-            return dead;
+            return Dead {
+                regions: dead,
+                functions: unreached_functions,
+            };
         }
     }
 }
 
-fn analyse(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan {
+fn analyse(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    (unsafe_lane, nested_root): (bool, bool),
+) -> Plan {
     let mut plan = Plan {
         folds: Vec::new(),
         removals: Vec::new(),
@@ -367,17 +370,18 @@ fn analyse(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan 
     if found.is_empty() {
         return plan;
     }
-    let dead = dead_regions(program, &refs, &found);
-    let skipped: Vec<Span> = found
-        .iter()
-        .map(|h| h.statement)
-        .chain(dead.iter().copied())
-        .collect();
+    let skipped: Vec<Span> = found.iter().map(|h| h.statement).collect();
+    let mut dead = dead_regions(program, &refs, &found);
+    let unread: Vec<Span> = skipped.iter().chain(dead.regions.iter()).copied().collect();
     let predicates = found.iter().any(|h| h.predicate);
     if predicates
         && !unsafe_lane
-        && !unpatched_outside(program, scoping, &FUNCTION_PROTOTYPES, &skipped)
+        && !unpatched_outside(program, scoping, &FUNCTION_PROTOTYPES, &unread)
     {
+        dead = Dead {
+            regions: Vec::new(),
+            functions: Vec::new(),
+        };
         plan.notes.push("js-confuser opaque predicates kept: the program may give Function.prototype or Object.prototype the tested key".to_string());
         found.retain(|h| !h.predicate);
         if found.is_empty() {
@@ -391,27 +395,24 @@ fn analyse(program: &Program<'_>, scoping: &Scoping, unsafe_lane: bool) -> Plan 
         );
         return plan;
     }
-    let names: Vec<&str> = found
-        .iter()
-        .map(|h| scoping.symbol_name(h.symbol))
-        .collect();
-    if names.iter().any(|name| is_foreign_global(name)) {
+    let fns: Vec<SymbolId> = found.iter().map(|h| h.symbol).collect();
+    let named: Vec<SymbolId> = fns.iter().chain(dead.functions.iter()).copied().collect();
+    if shared_elsewhere(program, scoping, nested_root, &named) {
         plan.notes
             .push("js-confuser helpers kept: another input names them".to_string());
         return plan;
     }
-    let fns: Vec<SymbolId> = found.iter().map(|h| h.symbol).collect();
-    let statements: Vec<Span> = found.iter().map(|h| h.statement).collect();
+    let watched: Vec<&str> = named.iter().map(|s| scoping.symbol_name(*s)).collect();
     let watch = ReachWatch {
-        names: &names,
-        props: &names,
+        names: &watched,
+        props: &watched,
         fns: &fns,
         observe: true,
     };
-    let excluded: Vec<Span> = statements
+    let excluded: Vec<Span> = found
         .iter()
-        .copied()
-        .chain(dead.iter().copied())
+        .map(|h| h.statement)
+        .chain(dead.regions.iter().copied())
         .collect();
     let reach = global_reach(program, scoping, (None, &excluded), watch);
     if reach.reach.is_some() || reach.reach_by_code.is_some() {
@@ -478,7 +479,11 @@ impl<'a> Pass<'a> for FoldHelpers {
             return;
         }
         self.settled = true;
-        let plan = analyse(program, cx.scoping(), cx.opts.unsafe_transforms);
+        let plan = analyse(
+            program,
+            cx.scoping(),
+            (cx.opts.unsafe_transforms, cx.opts.nested_root),
+        );
         for note in &plan.notes {
             cx.note(note.clone(), None);
         }

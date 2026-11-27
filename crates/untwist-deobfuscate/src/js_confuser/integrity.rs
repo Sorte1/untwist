@@ -13,7 +13,9 @@ use untwist_core::semantic::{has_module_syntax, is_foreign_global, may_call_eval
 use untwist_eval::fold::{const_to_expression, Const};
 
 use super::names::{names, Names};
-use super::refs::{inside, judge_replaced, names_observed, scan, Refs};
+use super::refs::{
+    inside, judge_replaced, names_observed, scan, shared_elsewhere, Refs, FUNCTION_KEYS,
+};
 use super::templates::{matches_integrity, INTEGRITY_LENGTHS};
 use super::tokens::FIXED;
 use crate::pure_calls::literal_data;
@@ -243,6 +245,7 @@ struct Plan {
     caches: Vec<Span>,
     region: Vec<Span>,
     symbols: Vec<SymbolId>,
+    watched: Vec<SymbolId>,
 }
 
 fn function_spans(program: &Program<'_>) -> rustc_hash::FxHashMap<SymbolId, Span> {
@@ -267,7 +270,11 @@ fn function_spans(program: &Program<'_>) -> rustc_hash::FxHashMap<SymbolId, Span
     spans.out
 }
 
-fn analyse(program: &Program<'_>, scoping: &Scoping) -> Result<Plan, &'static str> {
+fn analyse(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    nested_root: bool,
+) -> Result<Plan, &'static str> {
     if has_module_syntax(program) || !program.source_text.contains(MARK) {
         return Ok(Plan::default());
     }
@@ -320,6 +327,9 @@ fn analyse(program: &Program<'_>, scoping: &Scoping) -> Result<Plan, &'static st
         let mentions = program.source_text.matches(found.key.as_str()).count();
         let cyrb_seed =
             found.seed.fract() == 0.0 && (0.0..=f64::from(u32::MAX)).contains(&found.seed);
+        if FUNCTION_KEYS.contains(&found.key.as_str()) {
+            return Err("a cache key is a property functions already have");
+        }
         if !target_uses_inside
             || mentions != KEY_MENTIONS
             || !cyrb_seed
@@ -335,13 +345,15 @@ fn analyse(program: &Program<'_>, scoping: &Scoping) -> Result<Plan, &'static st
         }
         plan.tests.push(found.test);
         plan.caches.push(found.cache);
+        plan.watched.extend([found.target, found.owner]);
     }
-    let names: Vec<&str> = region_symbols
+    let named: Vec<SymbolId> = region_symbols
         .iter()
-        .map(|s| scoping.symbol_name(*s))
+        .chain(plan.watched.iter())
+        .copied()
         .collect();
-    if names.iter().any(|n| is_foreign_global(n)) {
-        return Err("another input names its hash functions");
+    if shared_elsewhere(program, scoping, nested_root, &named) {
+        return Err("another input names its hash functions or a checked function");
     }
     let removed: Vec<Span> = region
         .statements
@@ -375,7 +387,7 @@ impl<'a> Pass<'a> for RemoveIntegrity {
             return;
         }
         self.settled = true;
-        let plan = match analyse(program, cx.scoping()) {
+        let plan = match analyse(program, cx.scoping(), cx.opts.nested_root) {
             Ok(plan) if plan.tests.is_empty() && plan.region.is_empty() => return,
             Ok(plan) => plan,
             Err(reason) => {
@@ -397,13 +409,15 @@ impl<'a> Pass<'a> for RemoveIntegrity {
             .chain(plan.caches.iter())
             .copied()
             .collect();
-        let Some(judged) = judge_replaced(
-            program,
-            cx,
-            replacements,
-            (&HASHED, &stripped),
-            &plan.symbols,
-        ) else {
+        let symbols: Vec<SymbolId> = plan
+            .symbols
+            .iter()
+            .chain(plan.watched.iter())
+            .copied()
+            .collect();
+        let Some(judged) =
+            judge_replaced(program, cx, replacements, (&HASHED, &stripped), &symbols)
+        else {
             return;
         };
         if !cx.opts.unsafe_transforms && !judged.intact {
@@ -411,7 +425,7 @@ impl<'a> Pass<'a> for RemoveIntegrity {
             return;
         }
         if judged.reach.reach.is_some() || judged.reach.reach_by_code.is_some() {
-            cx.note("js-confuser integrity checks kept: code may reach its hash functions through the global object or code text", None);
+            cx.note("js-confuser integrity checks kept: code may reach its hash functions or a checked function through the global object or code text", None);
             return;
         }
         let mut folds = ExprEdits::new();

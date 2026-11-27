@@ -11,7 +11,9 @@ use untwist_core::semantic::{has_module_syntax, is_foreign_global, may_call_eval
 use untwist_eval::fold::Const;
 
 use super::names::{names, Names};
-use super::refs::{inside, judge_replaced, names_observed, no_op_helpers, scan, Refs};
+use super::refs::{
+    inside, judge_replaced, names_observed, no_op_helpers, scan, shared_elsewhere, Refs,
+};
 use super::templates::matches_get_global;
 use super::tokens::FIXED;
 use crate::pure_calls::literal_data;
@@ -280,7 +282,7 @@ fn bound_names(scoping: &Scoping) -> FxHashSet<&str> {
     scoping.symbol_names().collect()
 }
 
-fn analyse(program: &Program<'_>, scoping: &Scoping) -> Option<Plan> {
+fn analyse(program: &Program<'_>, scoping: &Scoping, nested_root: bool) -> Option<Plan> {
     if has_module_syntax(program) || !program.source_text.contains(GETTER_MARK) {
         return None;
     }
@@ -319,8 +321,7 @@ fn analyse(program: &Program<'_>, scoping: &Scoping) -> Option<Plan> {
         .into_iter()
         .chain(mappers.iter().map(|m| m.symbol))
         .collect();
-    let names: Vec<&str> = machinery.iter().map(|s| scoping.symbol_name(*s)).collect();
-    if names.iter().any(|n| is_foreign_global(n)) {
+    if shared_elsewhere(program, scoping, nested_root, &machinery) {
         return refuse("another input names its machinery");
     }
     let mut folds = Vec::new();
@@ -413,7 +414,7 @@ impl<'a> Pass<'a> for InlineGlobals {
             return;
         }
         self.settled = true;
-        let Some(plan) = analyse(program, cx.scoping()) else {
+        let Some(plan) = analyse(program, cx.scoping(), cx.opts.nested_root) else {
             return;
         };
         if plan.folds.is_empty() {
