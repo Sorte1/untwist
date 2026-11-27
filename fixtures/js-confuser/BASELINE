@@ -3,8 +3,8 @@
 # cell	fixtures	safe	unsafe	webcrack	parity-gaps	causes (lane runs)
 ast-scrambler	9	9/9	9/9	-	0	-
 calculator	9	9/9	9/9	-	0	-
-cff-05	9	5/9	5/9	-	0	jsc-cff (8)
-cff-1	9	1/9	1/9	-	0	jsc-cff (16)
+cff-05	9	9/9	9/9	-	0	-
+cff-1	9	5/9	8/9	-	0	jsc-cff (5)
 compact-false	9	9/9	9/9	-	0	-
 dead-code	9	6/9	6/9	-	0	jsc-opaque-predicates (6)
 dispatcher	9	8/9	9/9	-	0	jsc-dispatcher (1)
@@ -61,7 +61,7 @@ variable-masking	9	1/9	1/9	-	0	jsc-variable-masking (16)
 # cause	cells	fixtures	lane-runs	parity-gap-cells	reason
 jsc-builtin-patched	15	37	37	0	safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
 jsc-dispatcher	5	5	5	0	dispatcher's name/flag/return-type function table and payload variable are not inlined back
-jsc-cff	4	30	60	0	controlFlowFlattening's state-vector dispatcher (while (sum(states) !== end) switch (sum(states))) is not undone
+jsc-cff	3	22	41	0	controlFlowFlattening's state-vector dispatcher (while (sum(states) !== end) switch (sum(states))) is not undone
 jsc-string-concealing	2	14	19	0	stringConcealing's base91 decoders over one packed string (UTF-8 through TextDecoder, Buffer or a fallback picked from the global object) are not decoded
 jsc-opaque-predicates	2	4	7	0	opaquePredicates' "key" in emptyFunction tests are not folded
 jsc-anti-debug	1	9	18	0	lock.antiDebug's debugger statements are kept
