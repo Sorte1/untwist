@@ -19,7 +19,12 @@ All notable changes to this project are documented in this file. The format is b
   literals, `"key" in dummyFunction` opaque predicates fold to `false`, and `lock.selfDefending`'s
   newline checks go when no checked function's source holds a newline. `lock.integrity` checks go when the checked function's source text, hashed with js-confuser's cyrb53 the way the check hashes it, gives the expected value; before, a reformatted output could hang on them. In the default lane each
   needs the built-ins it reads unpatched, and the machinery is removed only when no code may
-  observe the global object's names.
+  observe the global object's names. Nothing is folded or removed when another input reads,
+  calls or writes a machinery name or a checked function, when a line break follows `return`
+  where the template has none, when the integrity cache key is a property functions already
+  have (`prototype`, `bind`, ...), or when a calculator repeats a parameter name. In the default
+  lane the built-ins scan for opaque predicates covers their dead branches too, and a checked
+  function reached through the global object keeps its integrity check.
 - `dead-code` folds int32 opaque predicates by tracking which bits of a `const` are known through
   `& | ^ ~ + - << >> >>>` and `Math.imul`, for example `(Math.imul(s | 1, (s | 1) + 1) & 1) === 0`
   when only some bits of `s` are known; a test that the low unknown bits decide is tried for every

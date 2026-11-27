@@ -61,6 +61,10 @@ const KEYWORDS: [&str; 41] = [
     "static",
 ];
 
+const NO_LINE_BREAK_AFTER: [&str; 6] = ["return", "throw", "break", "continue", "yield", "async"];
+
+const NO_LINE_BREAK_BEFORE: [&str; 3] = ["++", "--", "=>"];
+
 const PUNCTUATORS: [&str; 52] = [
     ">>>=", "...", "===", "!==", "**=", "<<=", ">>=", ">>>", "&&=", "||=", "??=", "=>", "==", "!=",
     "<=", ">=", "&&", "||", "??", "?.", "++", "--", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=",
@@ -119,10 +123,14 @@ impl Lexer {
         self.chars.get(self.at + ahead).copied()
     }
 
-    fn skip_space(&mut self) -> Option<()> {
+    fn skip_space(&mut self) -> Option<bool> {
+        let mut crossed = false;
         loop {
             match (self.peek(0), self.peek(1)) {
-                (Some(c), _) if c.is_whitespace() || c == '\u{feff}' => self.at += 1,
+                (Some(c), _) if c.is_whitespace() || c == '\u{feff}' => {
+                    crossed |= is_line_terminator(c);
+                    self.at += 1;
+                }
                 (Some('/'), Some('/')) => {
                     while self.peek(0).is_some_and(|c| c != '\n' && c != '\r') {
                         self.at += 1;
@@ -131,11 +139,12 @@ impl Lexer {
                 (Some('/'), Some('*')) => {
                     self.at += 2;
                     while !(self.peek(0)? == '*' && self.peek(1) == Some('/')) {
+                        crossed |= is_line_terminator(self.peek(0)?);
                         self.at += 1;
                     }
                     self.at += 2;
                 }
-                _ => return Some(()),
+                _ => return Some(crossed),
             }
         }
     }
@@ -284,8 +293,8 @@ impl Lexer {
         Some(Token::Punct(found))
     }
 
-    fn next(&mut self) -> Option<Option<(Token, u32)>> {
-        self.skip_space()?;
+    fn next(&mut self) -> Option<Option<(Token, bool, u32)>> {
+        let crossed = self.skip_space()?;
         let Some(c) = self.peek(0) else {
             return Some(None);
         };
@@ -298,8 +307,17 @@ impl Lexer {
             c if is_name_start(c) => self.name(),
             _ => self.punct()?,
         };
-        Some(Some((token, start)))
+        Some(Some((token, crossed, start)))
     }
+}
+
+fn is_line_terminator(c: char) -> bool {
+    matches!(c, '\n' | '\r' | '\u{2028}' | '\u{2029}')
+}
+
+fn ends_at_line_break(before: Option<&Token>, token: &Token) -> bool {
+    matches!(before, Some(Token::Word(word)) if NO_LINE_BREAK_AFTER.contains(word))
+        || matches!(token, Token::Punct(p) if NO_LINE_BREAK_BEFORE.contains(&p.as_str()))
 }
 
 pub fn lex(text: &str) -> Option<Vec<(Token, u32)>> {
@@ -315,9 +333,12 @@ pub fn lex(text: &str) -> Option<Vec<(Token, u32)>> {
         offsets,
         at: 0,
     };
-    let mut out = Vec::new();
-    while let Some(token) = lexer.next()? {
-        out.push(token);
+    let mut out: Vec<(Token, u32)> = Vec::new();
+    while let Some((token, crossed, start)) = lexer.next()? {
+        if crossed && ends_at_line_break(out.last().map(|(t, _)| t), &token) {
+            return None;
+        }
+        out.push((token, start));
     }
     Some(out)
 }
@@ -424,6 +445,17 @@ mod tests {
     fn unresolved_positions_keep_their_text() {
         let tokens = canonical("({ key: 1 })", 0, &|_| None).unwrap();
         assert_eq!(render(&tokens), "( { key : 1 } )");
+    }
+
+    #[test]
+    fn line_breaks_where_asi_ends_a_statement_are_refused() {
+        assert!(lex("return\nx").is_none());
+        assert!(lex("return/*\n*/x").is_none());
+        assert!(lex("return\u{2028}x").is_none());
+        assert!(lex("throw\r\nx").is_none());
+        assert!(lex("a\n++b").is_none());
+        assert!(lex("return x\n+ y").is_some());
+        assert!(lex("return/* */x").is_some());
     }
 
     #[test]

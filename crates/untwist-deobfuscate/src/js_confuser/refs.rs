@@ -175,6 +175,45 @@ impl<'p> VisitJs<'p> for RefScan<'_, 'p> {
     }
 }
 
+pub(super) const FUNCTION_KEYS: [&str; 20] = [
+    "length",
+    "name",
+    "prototype",
+    "arguments",
+    "caller",
+    "constructor",
+    "apply",
+    "bind",
+    "call",
+    "toString",
+    "__defineGetter__",
+    "__defineSetter__",
+    "hasOwnProperty",
+    "__lookupGetter__",
+    "__lookupSetter__",
+    "isPrototypeOf",
+    "propertyIsEnumerable",
+    "valueOf",
+    "__proto__",
+    "toLocaleString",
+];
+
+pub(super) fn shared_elsewhere(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    nested_root: bool,
+    symbols: &[SymbolId],
+) -> bool {
+    use crate::stamp::original_name;
+    use untwist_core::semantic::{is_foreign_global, is_shared_global, other_inputs_given};
+    let named = |name: &str| is_shared_global(name) || is_foreign_global(name);
+    (nested_root && other_inputs_given() && !symbols.is_empty())
+        || symbols.iter().any(|symbol| {
+            named(scoping.symbol_name(*symbol))
+                || original_name(program.source_text, scoping, *symbol).is_some_and(named)
+        })
+}
+
 pub(super) fn inside(outer: Span, inner: Span) -> bool {
     outer.start <= inner.start && inner.end <= outer.end
 }

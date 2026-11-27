@@ -14,7 +14,9 @@ use untwist_eval::fold::{const_to_expression, Const};
 
 use super::base91;
 use super::names::{names, Names};
-use super::refs::{inside, judge_replaced, names_observed, no_op_helpers, scan, Refs};
+use super::refs::{
+    inside, judge_replaced, names_observed, no_op_helpers, scan, shared_elsewhere, Refs,
+};
 use super::templates::{matches_decoder, matches_getter, matches_prelude, PRELUDE_LENGTHS};
 use super::tokens::FIXED;
 use crate::pure_calls::literal_data;
@@ -366,7 +368,11 @@ fn decode_calls(pair: &Pair, packed: &Packed, refs: &Refs<'_>) -> (Vec<(Span, St
     (folds, complete)
 }
 
-fn analyse(program: &Program<'_>, scoping: &Scoping) -> Result<Plan, &'static str> {
+fn analyse(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    nested_root: bool,
+) -> Result<Plan, &'static str> {
     if !PROGRAM_MARKS
         .iter()
         .all(|m| program.source_text.contains(m))
@@ -512,11 +518,12 @@ fn analyse(program: &Program<'_>, scoping: &Scoping) -> Result<Plan, &'static st
     if !ordered_before(program, upto, &machinery) {
         return refusal("code before the prelude may run a getter before its packed string is set");
     }
-    let names: Vec<&str> = top_symbols
+    let named: Vec<SymbolId> = top_symbols
         .iter()
-        .map(|s| scoping.symbol_name(*s))
+        .copied()
+        .chain(pairs.iter().flat_map(|pair| [pair.decoder, pair.getter]))
         .collect();
-    if names.iter().any(|name| is_foreign_global(name)) {
+    if shared_elsewhere(program, scoping, nested_root, &named) {
         return refusal("another input names the machinery");
     }
     let is_top = |span: &Span| program.body.iter().any(|s| s.span() == *span);
@@ -603,7 +610,7 @@ impl<'a> Pass<'a> for DecodeStrings {
         if self.settled {
             return;
         }
-        let plan = match analyse(program, cx.scoping()) {
+        let plan = match analyse(program, cx.scoping(), cx.opts.nested_root) {
             Ok(plan)
                 if plan.folds.is_empty()
                     && plan.block_removals.is_empty()

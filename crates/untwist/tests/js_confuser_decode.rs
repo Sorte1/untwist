@@ -2,8 +2,15 @@ use untwist::{Options, Pipeline};
 use untwist_testing::js_files_in;
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
-const KEPT: [(&str, &str); 9] = [
+const KEPT: [(&str, &str); 16] = [
     ("kept-integrity-key-read.js", "fnObject"),
+    ("kept-integrity-key-prototype.js", "TAMPERED"),
+    ("kept-return-newline-integrity.js", "TAMPERED"),
+    ("kept-return-newline-strings.js", "_MAIN_STR("),
+    ("kept-return-newline-globals.js", "_getGlobalVarFn("),
+    ("kept-calculator-duplicate-params.js", "__p_c("),
+    ("patched-predicate-dead-branch.js", "__p_d"),
+    ("patched-integrity-target-global.js", "TAMPERED"),
     ("kept-altered-decoder.js", "_MAIN_STR("),
     ("kept-bom.js", "_MAIN_STR("),
     ("kept-early-call.js", "_MAIN_STR("),
@@ -34,7 +41,7 @@ fn unsafe_lane(source: &str) -> String {
 
 fn fixtures() -> Vec<(String, String)> {
     let fixtures = js_files_in("fixtures/js-confuser-decode");
-    assert_eq!(fixtures.len(), 13);
+    assert_eq!(fixtures.len(), 20);
     fixtures
 }
 
