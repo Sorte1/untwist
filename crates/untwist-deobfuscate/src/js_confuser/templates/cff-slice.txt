@@ -1,0 +1,1 @@
+function $0 ( $1 , $2 ) { return $3 [ "slice" ] ( $1 , $2 ) }

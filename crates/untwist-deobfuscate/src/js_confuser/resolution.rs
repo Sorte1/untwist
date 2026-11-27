@@ -19,10 +19,13 @@ impl Expected {
     }
 }
 
+pub(super) type Spans = FxHashMap<Span, oxc_syntax::symbol::SymbolId>;
+
 struct Record<'s, 'e> {
     scoping: &'s Scoping,
     expected: &'e mut Expected,
-    skip: Option<oxc_syntax::symbol::SymbolId>,
+    skip: &'s [oxc_syntax::symbol::SymbolId],
+    spans: Option<&'s Spans>,
 }
 
 fn declaration(scoping: &Scoping, it: &IdentifierReference<'_>) -> Option<Span> {
@@ -34,14 +37,21 @@ fn declaration(scoping: &Scoping, it: &IdentifierReference<'_>) -> Option<Span> 
 
 impl<'a> VisitJs<'a> for Record<'_, '_> {
     fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        let symbol = it
-            .reference_id
-            .get()
-            .and_then(|id| self.scoping.get_reference(id).symbol_id());
-        if (symbol.is_some() && symbol == self.skip) || it.name == "arguments" {
+        let symbol = match self.spans {
+            Some(spans) => spans.get(&it.span).copied(),
+            None => it
+                .reference_id
+                .get()
+                .and_then(|id| self.scoping.get_reference(id).symbol_id()),
+        };
+        if symbol.is_some_and(|s| self.skip.contains(&s)) || it.name == "arguments" {
             return;
         }
-        self.expected.insert(it.span, declaration(self.scoping, it));
+        let declared = match self.spans {
+            Some(_) => symbol.map(|s| self.scoping.symbol_span(s)),
+            None => declaration(self.scoping, it),
+        };
+        self.expected.insert(it.span, declared);
     }
 }
 
@@ -51,16 +61,48 @@ pub(super) fn record_function(
     expected: &mut Expected,
     skip: Option<oxc_syntax::symbol::SymbolId>,
 ) {
+    let skip: Vec<oxc_syntax::symbol::SymbolId> = skip.into_iter().collect();
     let mut record = Record {
         scoping,
         expected,
-        skip,
+        skip: &skip,
+        spans: None,
     };
     walk_js::walk_function(
         &mut record,
         function,
         oxc_syntax::scope::ScopeFlags::Function,
     );
+}
+
+pub(super) fn record_statement(
+    statement: &Statement<'_>,
+    (scoping, spans): (&Scoping, &Spans),
+    expected: &mut Expected,
+    skip: &[oxc_syntax::symbol::SymbolId],
+) {
+    Record {
+        scoping,
+        expected,
+        skip,
+        spans: Some(spans),
+    }
+    .visit_statement(statement);
+}
+
+pub(super) fn record_expression(
+    expression: &Expression<'_>,
+    (scoping, spans): (&Scoping, &Spans),
+    expected: &mut Expected,
+    skip: &[oxc_syntax::symbol::SymbolId],
+) {
+    Record {
+        scoping,
+        expected,
+        skip,
+        spans: Some(spans),
+    }
+    .visit_expression(expression);
 }
 
 struct Verify<'s, 'e> {

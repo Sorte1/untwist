@@ -39,6 +39,21 @@ const GET_GLOBALS: [&str; 3] = [
 
 const SELF_DEFENDING: [&str; 1] = [include_str!("templates/self-defending-plain.txt")];
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CffHelper {
+    Sum,
+    Slice,
+    Xor,
+    Hash,
+}
+
+const CFF_HELPERS: [(CffHelper, &str); 4] = [
+    (CffHelper::Sum, include_str!("templates/cff-sum.txt")),
+    (CffHelper::Slice, include_str!("templates/cff-slice.txt")),
+    (CffHelper::Xor, include_str!("templates/cff-xor.txt")),
+    (CffHelper::Hash, include_str!("templates/cff-hash.txt")),
+];
+
 pub const PRELUDE_LENGTHS: [usize; 2] = [9, 3];
 
 const INTEGRITY: [(usize, &str); 1] = [(6, include_str!("templates/integrity-6-plain.txt"))];
@@ -85,6 +100,14 @@ pub fn matches_integrity(source: &str, span: Span, names: &Names) -> bool {
         &INTEGRITY.map(|(_, t)| t),
         canonical_text(source, span, names),
     )
+}
+
+pub fn cff_helper(source: &str, span: Span, names: &Names) -> Option<CffHelper> {
+    let found = canonical_text(source, span, names)?;
+    CFF_HELPERS
+        .iter()
+        .find(|(_, template)| template.trim() == found)
+        .map(|(kind, _)| *kind)
 }
 
 pub fn matches_getter(source: &str, span: Span, names: &Names) -> bool {

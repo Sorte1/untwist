@@ -1,5 +1,6 @@
 mod ast;
 mod base91;
+mod cff;
 mod dispatcher;
 mod flatten;
 mod folds;
@@ -13,6 +14,7 @@ mod strings;
 mod templates;
 mod tokens;
 
+pub use cff::{boxed as cff_boxed, PASS as CFF_PASS};
 pub use dispatcher::{boxed as dispatcher_boxed, PASS as DISPATCHER_PASS};
 pub use flatten::{boxed as flatten_boxed, PASS as FLATTEN_PASS};
 pub use folds::{boxed as helpers_boxed, PASS as HELPERS_PASS};
@@ -30,5 +32,6 @@ pub fn ctors<'a>() -> Vec<untwist_core::pass::PassCtor<'a>> {
         helpers_boxed,
         dispatcher_boxed,
         flatten_boxed,
+        cff_boxed,
     ]
 }

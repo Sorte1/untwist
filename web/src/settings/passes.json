@@ -35,6 +35,11 @@
     "unsafe": false
   },
   {
+    "name": "undo-js-confuser-cff",
+    "stage": "prepare",
+    "unsafe": false
+  },
+  {
     "name": "block-statements",
     "stage": "prepare",
     "unsafe": false

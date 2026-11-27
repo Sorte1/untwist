@@ -76,6 +76,18 @@ All notable changes to this project are documented in this file. The format is b
   outside the prelude reads them. A getter and decoder moved into a function's parameters
   (`if (!g) { g = function (...) {...} }`) decode when every call of that function passes fewer
   arguments than the moved parameters' positions and the function does not read `arguments`.
+- js-confuser `controlFlowFlattening` is undone. The state machine (`while (sum(states) !== end)
+  switch (sum(states))`) is stepped from each entry's concrete state vector: case tests, state
+  updates and the fake jumps are worked out, each block's mangled numbers, booleans and
+  xor-encrypted strings become literals, the flattened `if` statements are rebuilt as nested code
+  from the blocks' post-dominators, and each function that re-enters the machine gets its own
+  blocks back as its body (keeping its rest parameter, so `length` stays 0). Scope objects become
+  `let` variables with names no other binding uses. Nothing changes when a state cannot be
+  stepped, a block would be emitted twice or the blocks do not nest, the moved code reads `this`,
+  `arguments` or the machine's names some other way, calls a variable as a method of its scope
+  object, a name in the moved code would bind to another declaration, the helpers are named
+  outside the machine or reached through the global object, or, in the default lane, the program
+  may patch `Array`, `String`, `Symbol` or `Object`.
 - `dead-code` folds int32 opaque predicates by tracking which bits of a `const` are known through
   `& | ^ ~ + - << >> >>>` and `Math.imul`, for example `(Math.imul(s | 1, (s | 1) + 1) & 1) === 0`
   when only some bits of `s` are known; a test that the low unknown bits decide is tried for every
