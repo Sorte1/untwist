@@ -484,7 +484,7 @@ fn long_hex_tokens_are_machine_names_only_under_smart() {
         &[
             "validationToken2 = \"token\"",
             "callback = function",
-            "typeof callback == \"function\"",
+            "typeof callback === \"function\"",
             "bypassToken = \"second\"",
             "hasToken ? bypassToken : undefined",
             "function (item)",

@@ -160,9 +160,18 @@ struct Gather<'s> {
     at: Option<usize>,
     shadows: FxHashSet<String>,
     fresh: FxHashSet<String>,
+    named: FxHashSet<SymbolId>,
 }
 
 impl Gather<'_> {
+    fn named_by(&mut self, reference: Option<ReferenceId>) {
+        let symbol =
+            reference.and_then(|reference| self.scoping.get_reference(reference).symbol_id());
+        if let Some(symbol) = symbol {
+            self.named.insert(symbol);
+        }
+    }
+
     fn record(&mut self, symbol: SymbolId, used: Use) {
         if self.depth > 0 {
             self.captured.insert(symbol, true);
@@ -191,6 +200,44 @@ impl<'a> VisitJs<'a> for Gather<'_> {
         self.depth += 1;
         walk_js::walk_class(self, it);
         self.depth -= 1;
+    }
+
+    fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
+        if let AssignmentTarget::AssignmentTargetIdentifier(id) = &it.left {
+            if it.right.is_anonymous_function_definition() {
+                self.named_by(id.reference_id.get());
+            }
+        }
+        walk_js::walk_assignment_expression(self, it);
+    }
+
+    fn visit_assignment_target_with_default(&mut self, it: &AssignmentTargetWithDefault<'a>) {
+        if let AssignmentTarget::AssignmentTargetIdentifier(id) = &it.binding {
+            self.named_by(id.reference_id.get());
+        }
+        walk_js::walk_assignment_target_with_default(self, it);
+    }
+
+    fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        let anonymous = it
+            .init
+            .as_ref()
+            .is_some_and(Expression::is_anonymous_function_definition);
+        if let (true, BindingPattern::BindingIdentifier(id)) = (anonymous, &it.id) {
+            if let Some(symbol) = id.symbol_id.get() {
+                self.named.insert(symbol);
+            }
+        }
+        walk_js::walk_variable_declarator(self, it);
+    }
+
+    fn visit_assignment_pattern(&mut self, it: &AssignmentPattern<'a>) {
+        if let BindingPattern::BindingIdentifier(id) = &it.left {
+            if let Some(symbol) = id.symbol_id.get() {
+                self.named.insert(symbol);
+            }
+        }
+        walk_js::walk_assignment_pattern(self, it);
     }
 
     fn visit_catch_parameter(&mut self, it: &CatchParameter<'a>) {
@@ -285,6 +332,7 @@ struct Pending {
     versions: usize,
     uses: Vec<(Option<ReferenceId>, Option<usize>, usize)>,
     assigned: Vec<(usize, bool)>,
+    kinds: Vec<VariableDeclarationKind>,
 }
 
 #[derive(Default)]
@@ -293,6 +341,7 @@ struct Plan<'a> {
     references: FxHashMap<ReferenceId, Ident<'a>>,
     bindings: FxHashMap<usize, Ident<'a>>,
     assigned: FxHashMap<usize, Ident<'a>>,
+    kinds: FxHashMap<usize, VariableDeclarationKind>,
 }
 
 impl<'a> Plan<'a> {
@@ -314,10 +363,13 @@ impl<'a> Plan<'a> {
                     self.bindings.insert(binding, name);
                 }
             }
-            for ((at, assigned), name) in pending.assigned.iter().zip(&names) {
+            for (((at, assigned), name), kind) in
+                pending.assigned.iter().zip(&names).zip(&pending.kinds)
+            {
                 if *assigned {
                     self.assigned.insert(*at, *name);
                 }
+                self.kinds.insert(*at, *kind);
             }
         }
         Some(())
@@ -362,6 +414,7 @@ fn plan<'a>(shape: &Shape<'_, 'a>, names: &mut Names, cx: &mut Cx<'a, '_>) -> Op
         at: None,
         shadows: FxHashSet::default(),
         fresh: FxHashSet::default(),
+        named: FxHashSet::default(),
     };
     gather.visit_formal_parameters(shape.params);
     for (at, stmt) in shape.statements.iter().enumerate() {
@@ -376,6 +429,7 @@ fn plan<'a>(shape: &Shape<'_, 'a>, names: &mut Names, cx: &mut Cx<'a, '_>) -> Op
         captured,
         shadows,
         fresh,
+        named,
         ..
     } = gather;
     let mut out = Plan::default();
@@ -383,7 +437,7 @@ fn plan<'a>(shape: &Shape<'_, 'a>, names: &mut Names, cx: &mut Cx<'a, '_>) -> Op
     symbols.sort_unstable();
     for symbol in symbols {
         let name = scoping.symbol_name(*symbol);
-        let shadowed = shadows.contains(name) || fresh.contains(name);
+        let shadowed = shadows.contains(name) || fresh.contains(name) || named.contains(symbol);
         if shadowed
             || captured.contains_key(symbol)
             || (mapped && shape.param_symbols.contains(symbol))
@@ -403,9 +457,14 @@ fn plan<'a>(shape: &Shape<'_, 'a>, names: &mut Names, cx: &mut Cx<'a, '_>) -> Op
             .iter()
             .map(|site| (site.at, matches!(site.boundary, Boundary::Assigned(_))))
             .collect();
+        let kinds = (1..=kept.len())
+            .zip(&assigned)
+            .map(|(version, (_, by_assignment))| kind_of(version, *by_assignment, list, &segments))
+            .collect();
         out.pending.push(Pending {
             base,
             versions: kept.len(),
+            kinds,
             uses: list
                 .iter()
                 .zip(segments)
@@ -421,7 +480,33 @@ fn plan<'a>(shape: &Shape<'_, 'a>, names: &mut Names, cx: &mut Cx<'a, '_>) -> Op
     Some(out)
 }
 
-fn declare<'a>(stmt: &mut Statement<'a>, name: Ident<'a>, cx: &Cx<'a, '_>) {
+fn kind_of(
+    version: usize,
+    by_assignment: bool,
+    uses: &[Use],
+    segments: &[usize],
+) -> VariableDeclarationKind {
+    let mine = || {
+        uses.iter()
+            .zip(segments)
+            .filter(|(_, segment)| **segment == version)
+    };
+    let bindings = mine().filter(|(used, _)| used.binding.is_some()).count();
+    let writes = mine().filter(|(used, _)| used.write).count();
+    let own = usize::from(!by_assignment);
+    match (bindings == own, writes) {
+        (false, _) => VariableDeclarationKind::Var,
+        (true, 1) => VariableDeclarationKind::Const,
+        (true, _) => VariableDeclarationKind::Let,
+    }
+}
+
+fn declare<'a>(
+    stmt: &mut Statement<'a>,
+    name: Ident<'a>,
+    kind: VariableDeclarationKind,
+    cx: &Cx<'a, '_>,
+) {
     let Statement::ExpressionStatement(node) = stmt else {
         return;
     };
@@ -433,13 +518,7 @@ fn declare<'a>(stmt: &mut Statement<'a>, name: Ident<'a>, cx: &Cx<'a, '_>) {
     let id = BindingPattern::new_binding_identifier(span, name, cx);
     let declarator = VariableDeclarator::new(span, id, None, Some(init), false, cx);
     let declarations = AVec::from_iter_in([declarator], cx);
-    *stmt = Statement::new_variable_declaration(
-        span,
-        VariableDeclarationKind::Var,
-        declarations,
-        false,
-        cx,
-    );
+    *stmt = Statement::new_variable_declaration(span, kind, declarations, false, cx);
 }
 
 fn split<'a>(
@@ -462,9 +541,17 @@ fn split<'a>(
     for stmt in body.statements.iter_mut() {
         plan.visit_statement(stmt);
     }
-    for (at, name) in &plan.assigned {
-        if let Some(stmt) = body.statements.get_mut(*at) {
-            declare(stmt, *name, &*cx);
+    for (at, kind) in &plan.kinds {
+        let Some(stmt) = body.statements.get_mut(*at) else {
+            continue;
+        };
+        match plan.assigned.get(at) {
+            Some(name) => declare(stmt, *name, *kind, &*cx),
+            None => {
+                if let Statement::VariableDeclaration(declaration) = stmt {
+                    declaration.kind = *kind;
+                }
+            }
         }
     }
     cx.changed();

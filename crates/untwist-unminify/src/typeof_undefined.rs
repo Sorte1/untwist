@@ -31,28 +31,6 @@ fn is_u_literal(expr: &Expression<'_>) -> bool {
     )
 }
 
-fn strict(operator: BinaryOperator) -> Option<BinaryOperator> {
-    match operator {
-        BinaryOperator::Equality => Some(BinaryOperator::StrictEquality),
-        BinaryOperator::Inequality => Some(BinaryOperator::StrictInequality),
-        _ => None,
-    }
-}
-
-fn is_string(expr: &Expression<'_>) -> bool {
-    is_typeof(expr)
-        || matches!(
-            expr.without_parentheses(),
-            Expression::StringLiteral(_) | Expression::TemplateLiteral(_)
-        )
-}
-
-fn compares_strings(binary: &BinaryExpression<'_>) -> bool {
-    (is_typeof(&binary.left) || is_typeof(&binary.right))
-        && is_string(&binary.left)
-        && is_string(&binary.right)
-}
-
 const ACTED_ON_EXPRESSIONS: ExpressionVariants =
     ExpressionVariants::of(&[ExpressionKind::BinaryExpression]);
 
@@ -73,13 +51,6 @@ impl<'a> Pass<'a> for TypeofUndefined {
         let Expression::BinaryExpression(binary) = expr else {
             return;
         };
-        if let Some(operator) = strict(binary.operator) {
-            if compares_strings(binary) {
-                binary.operator = operator;
-                cx.changed();
-            }
-            return;
-        }
         let Some(operator) = flipped(binary.operator) else {
             return;
         };

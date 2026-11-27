@@ -2,7 +2,7 @@
 source: crates/untwist/tests/wasm_unpack.rs
 expression: out.code()
 ---
-var Module = typeof Module != "undefined" ? Module : {};
+var Module = typeof Module !== "undefined" ? Module : {};
 var wasmBinaryFile = "data:application/octet-stream;base64,AGFzbQEAAAABEwRgA39/fwBgAABgAAF/YAF/AX8CDQIBYQFhAAABYQFiAAEDAwICAwUDAQABBw0DAWMCAAFkAAIBZQADCgsCBABBAAsEACAACwA/BG5hbWUBLQQAFWVtc2NyaXB0ZW5fbWVtY3B5X2JpZwEFYWJvcnQCBG1haW4DBm1hbGxvYwIJBAAAAQACAAMA";
 var wasmExports;
 var HEAPU8;
@@ -37,10 +37,12 @@ function Ib() {
   });
 }
 var main = function () {
-  return (main = wasmExports.d).apply(null, arguments);
+  main = wasmExports.d;
+  return main.apply(null, arguments);
 };
 var malloc = Module._malloc = function () {
-  return (malloc = Module._malloc = wasmExports.e).apply(null, arguments);
+  malloc = Module._malloc = wasmExports.e;
+  return malloc.apply(null, arguments);
 };
 Ib().then(function () {
   main();

@@ -10,7 +10,7 @@ fn a_redeclared_var_with_reads_on_both_sides_splits() {
     function f(t) {
       var o = g(t);
       h(o);
-      var o_2__ = k(t);
+      const o_2__ = k(t);
       return o_2__;
     }
     "
@@ -24,7 +24,7 @@ fn a_reused_parameter_splits() {
         [split_merged_vars::boxed],
         @"
     function f(t) {
-      var t_2__ = t.style;
+      const t_2__ = t.style;
       t_2__.color = 1;
       return t_2__;
     }
@@ -62,7 +62,7 @@ fn a_mapped_arguments_parameter_stays() {
     }
     function s(t) {
       "use strict";
-      var t_2__ = t.style;
+      const t_2__ = t.style;
       return t_2__ + arguments[0];
     }
     "#
@@ -106,7 +106,7 @@ fn a_write_in_a_nested_block_follows_its_segment() {
     function f(e) {
       var k = e;
       g(k);
-      var k_2__ = 5;
+      let k_2__ = 5;
       if (e) {
         k_2__ = 6;
       }
@@ -123,7 +123,7 @@ fn a_lead_split_in_the_same_traversal_renames_every_read() {
         [untwist_unminify::lead_assignment::boxed, untwist_unminify::sequence::boxed, split_merged_vars::boxed],
         @"
     function f(e) {
-      var e_2__ = e || {};
+      const e_2__ = e || {};
       if (e_2__.a === undefined) e_2__.a = 1;
       return e_2__.a;
     }

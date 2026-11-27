@@ -34,6 +34,7 @@ pub mod ternary_to_if;
 pub mod transpile;
 pub mod transpile_util;
 pub mod truncate_number_literal;
+pub mod typeof_strict;
 pub mod typeof_undefined;
 pub mod unary_expressions;
 pub mod unminify;
@@ -49,5 +50,5 @@ pub mod yoda;
 
 pub use prepare::prepare_ctors;
 pub use transpile::transpile_ctors;
-pub use unminify::{lexical_ctors, run_last_traversal, unminify_ctors};
+pub use unminify::{lexical_ctors, run_last_traversal, tidy_ctors, unminify_ctors};
 pub use untranspile::untranspile_ctors;

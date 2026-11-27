@@ -100,6 +100,7 @@ pub fn all_pass_ctors<'a>() -> Vec<PassCtor<'a>> {
     ctors.extend(untwist_unminify::prepare_ctors());
     ctors.extend(untwist_unminify::transpile_ctors());
     ctors.extend(untwist_unminify::unminify_ctors());
+    ctors.extend(untwist_unminify::tidy_ctors());
     ctors.extend(untwist_unminify::lexical_ctors());
     ctors.extend(untwist_deobfuscate::deobfuscate_ctors());
     ctors.extend(untwist_deobfuscate::cleanup_fixpoint_ctors());

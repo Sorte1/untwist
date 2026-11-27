@@ -368,6 +368,7 @@ fn all_pass_ctors_holds_every_group() {
         + untwist_unminify::prepare_ctors().len()
         + untwist_unminify::transpile_ctors().len()
         + untwist_unminify::unminify_ctors().len()
+        + untwist_unminify::tidy_ctors().len()
         + untwist_unminify::lexical_ctors().len()
         + untwist_deobfuscate::deobfuscate_ctors().len()
         + untwist_deobfuscate::cleanup_fixpoint_ctors().len()

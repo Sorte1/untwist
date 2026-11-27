@@ -47,7 +47,12 @@ fn is_lead(expr: &Expression<'_>, scoping: &Scoping) -> bool {
     let AssignmentTarget::AssignmentTargetIdentifier(id) = &assign.left else {
         return false;
     };
+    let literal = matches!(
+        assign.right.without_parentheses(),
+        Expression::ObjectExpression(_) | Expression::ArrayExpression(_)
+    );
     assign.operator == AssignmentOperator::Assign
+        && !literal
         && symbol_of(id, scoping).is_some_and(|symbol| plain_variable(symbol, scoping))
 }
 
