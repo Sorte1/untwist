@@ -80,7 +80,9 @@ fn delegated(
     scoping: &oxc_semantic::Scoping,
     nodes: &oxc_semantic::AstNodes<'_>,
 ) -> Option<Vec<String>> {
-    let known = runtime.esm || runtime.symbols.values().any(|rt| *rt == Rt::DelegateEvents);
+    let known = runtime.esm
+        || !runtime.minified
+        || runtime.symbols.values().any(|rt| *rt == Rt::DelegateEvents);
     if !known {
         return None;
     }
