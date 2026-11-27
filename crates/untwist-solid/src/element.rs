@@ -85,7 +85,7 @@ const PROPERTIES: &[&str] = &[
     "value",
 ];
 
-const DELEGATED: &[&str] = &[
+pub const DELEGATED: &[&str] = &[
     "beforeinput",
     "click",
     "dblclick",
@@ -586,6 +586,10 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
     }
 
     fn entry(&mut self, name: &str, value: &Expression<'_>, text: String) -> Entry {
+        let text = match value.without_parentheses() {
+            Expression::SequenceExpression(_) => format!("({text})"),
+            _ => text,
+        };
         Entry {
             seq: self.tick(),
             name: name.to_string(),
@@ -599,6 +603,13 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
         match self.fixed {
             true => crate::ast::once(value, text),
             false => text,
+        }
+    }
+
+    fn tracked(&self, value: &Expression<'_>) -> R<()> {
+        match self.fixed || crate::ast::surely_dynamic(value) {
+            true => Ok(()),
+            false => fail("an effect sets a value the compiler would set once"),
         }
     }
 
@@ -683,12 +694,7 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
         if !DELEGATED.contains(&event) {
             return fail(format!("the event `{event}` is not delegated"));
         }
-        if self
-            .cx
-            .delegated
-            .as_ref()
-            .is_some_and(|names| !names.iter().any(|name| name == event))
-        {
+        if !self.cx.delegated.iter().any(|name| name == event) {
             return fail(format!("the event `{event}` is never delegated"));
         }
         self.push_event(path, event_attr(event), text);
@@ -888,6 +894,13 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
                         else {
                             return fail("an effect declares a pattern");
                         };
+                        if self
+                            .cx
+                            .referenced_at(init.span())
+                            .any(|(_, used)| values.contains_key(&used))
+                        {
+                            return fail("an effect value reads another effect value");
+                        }
                         values.insert(symbol, init);
                     }
                 }
@@ -1038,6 +1051,7 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
                     return fail("an element block assigns to a value outside the template");
                 };
                 let value = self.value(&assign.right, param, values);
+                self.tracked(value)?;
                 let text = self.marked(value, cx.render(value)?);
                 if let Some(Node::Text(_)) = self.at(&path) {
                     let parent = path[..path.len().saturating_sub(1)].to_vec();
@@ -1109,6 +1123,9 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
                     let Some(value) = value else {
                         return fail("a setter has no value");
                     };
+                    if !matches!(rt, Rt::ClassList | Rt::Style) {
+                        self.tracked(value)?;
+                    }
                     let text = self.marked(value, cx.render(value)?);
                     self.push_attr(path, &name, format!("{name}={{{text}}}"));
                     return Ok(());
@@ -1199,7 +1216,11 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
             placed.push((first_seq(&ops.styles), "style".to_string(), text));
         }
         placed.sort_by_key(|(seq, _, _)| *seq);
-        for event in &ops.events {
+        let (capture, bubble): (Vec<&Event>, Vec<&Event>) = ops
+            .events
+            .iter()
+            .partition(|event| event.attr.starts_with("oncapture:"));
+        for event in bubble.into_iter().rev().chain(capture) {
             placed.push((
                 event.seq,
                 event.attr.clone(),

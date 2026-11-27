@@ -1,8 +1,6 @@
 use std::collections::BTreeMap;
 
-use oxc_ast::ast::{
-    ExportDefaultDeclarationKind, Expression, ImportDeclarationSpecifier, Statement,
-};
+use oxc_ast::ast::{Expression, ImportDeclarationSpecifier};
 use oxc_ast::AstKind;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::node::NodeId;
@@ -105,7 +103,7 @@ fn function_span(cx: &Cx<'_, '_>, symbol: SymbolId) -> Option<(Span, NodeId, boo
     }
 }
 
-fn inside(outer: Span, inner: Span) -> bool {
+pub fn inside(outer: Span, inner: Span) -> bool {
     outer.start <= inner.start && inner.end <= outer.end
 }
 
@@ -203,7 +201,7 @@ impl Deps {
     }
 }
 
-fn helper_owner(cx: &Cx<'_, '_>, symbol: SymbolId) -> Option<(Span, NodeId)> {
+pub fn helper_owner(cx: &Cx<'_, '_>, symbol: SymbolId) -> Option<(Span, NodeId)> {
     let declaration = cx.scoping.symbol_declaration(symbol);
     match cx.nodes.kind(declaration) {
         AstKind::Function(function) => Some((function.span, declaration)),
@@ -231,6 +229,34 @@ fn is_function_value(cx: &Cx<'_, '_>, symbol: SymbolId) -> bool {
         ),
         _ => false,
     }
+}
+
+fn is_stateful_function(cx: &Cx<'_, '_>, symbol: SymbolId) -> bool {
+    cx.scoping.get_resolved_references(symbol).any(|reference| {
+        let at = cx.nodes.kind(reference.node_id()).span();
+        !matches!(
+            cx.nodes.parent_kind(reference.node_id()),
+            AstKind::CallExpression(call) if call.callee.without_parentheses().span() == at
+        )
+    })
+}
+
+pub fn siblings(cx: &Cx<'_, '_>, home: ScopeId, symbol: SymbolId) -> Vec<SymbolId> {
+    let Some((owner, _)) = helper_owner(cx, symbol) else {
+        return vec![symbol];
+    };
+    if !matches!(
+        cx.nodes.kind(cx.scoping.symbol_declaration(symbol)),
+        AstKind::VariableDeclarator(_)
+    ) {
+        return vec![symbol];
+    }
+    cx.scoping
+        .get_bindings(home)
+        .values()
+        .copied()
+        .filter(|other| inside(owner, cx.scoping.symbol_span(*other)))
+        .collect()
 }
 
 fn import_of(cx: &Cx<'_, '_>, symbol: SymbolId, imports: &mut Vec<Import>) -> bool {
@@ -276,15 +302,15 @@ fn import_of(cx: &Cx<'_, '_>, symbol: SymbolId, imports: &mut Vec<Import>) -> bo
 
 pub const SHARED: &str = "shared";
 
-struct Unit {
+pub struct Unit {
     head: Vec<String>,
     helpers: Vec<String>,
     bodies: Vec<String>,
     children: Vec<String>,
     outside: Vec<SymbolId>,
     copied: Vec<SymbolId>,
-    reads: FxHashSet<SymbolId>,
-    spans: Vec<Span>,
+    pub reads: FxHashSet<SymbolId>,
+    pub spans: Vec<Span>,
     shares: bool,
 }
 
@@ -412,7 +438,7 @@ fn unit(
                     cx.scoping.symbol_name(symbol)
                 ));
             };
-            if !is_function_value(cx, symbol) {
+            if !is_function_value(cx, symbol) || is_stateful_function(cx, symbol) {
                 state.push(symbol);
             }
             if included.contains(&span) {
@@ -441,12 +467,14 @@ fn unit(
     let outside: Vec<SymbolId> = state
         .into_iter()
         .filter(|symbol| {
-            cx.scoping
-                .get_resolved_references(*symbol)
-                .any(|reference| {
-                    let span = cx.nodes.kind(reference.node_id()).span();
-                    !included.iter().any(|outer| inside(*outer, span))
-                })
+            siblings(cx, home, *symbol).into_iter().any(|sibling| {
+                cx.scoping
+                    .get_resolved_references(sibling)
+                    .any(|reference| {
+                        let span = cx.nodes.kind(reference.node_id()).span();
+                        !included.iter().any(|outer| inside(*outer, span))
+                    })
+            })
         })
         .collect();
     helper_texts.sort_by_key(|(start, _)| *start);
@@ -594,103 +622,6 @@ fn is_constant(cx: &Cx<'_, '_>, symbol: SymbolId) -> bool {
         })
 }
 
-struct Effect {
-    line: String,
-    symbols: Vec<SymbolId>,
-    owners: Vec<Span>,
-}
-
-impl Effect {
-    fn touches(&self, built: &Unit) -> bool {
-        self.symbols
-            .iter()
-            .any(|symbol| built.reads.contains(symbol))
-            || self
-                .owners
-                .iter()
-                .any(|owner| built.spans.iter().any(|span| inside(*span, *owner)))
-    }
-}
-
-fn is_effect(cx: &Cx<'_, '_>, statement: &Statement<'_>) -> bool {
-    match statement {
-        Statement::ImportDeclaration(_)
-        | Statement::FunctionDeclaration(_)
-        | Statement::ClassDeclaration(_)
-        | Statement::VariableDeclaration(_)
-        | Statement::ExportNamedDeclaration(_)
-        | Statement::ExportAllDeclaration(_)
-        | Statement::EmptyStatement(_) => false,
-        Statement::ExportDefaultDeclaration(export) => !matches!(
-            &export.declaration,
-            ExportDefaultDeclarationKind::FunctionDeclaration(_)
-                | ExportDefaultDeclarationKind::ClassDeclaration(_)
-                | ExportDefaultDeclarationKind::Identifier(_)
-        ),
-        Statement::ExpressionStatement(statement) => {
-            match statement.expression.without_parentheses() {
-                Expression::CallExpression(call) => {
-                    !matches!(cx.rt(&call.callee), Some(Rt::DelegateEvents))
-                        && cx.api_name(&call.callee).as_deref() != Some("render")
-                }
-                Expression::StringLiteral(_) => false,
-                _ => true,
-            }
-        }
-        _ => true,
-    }
-}
-
-fn assigned_property_of(statement: &Statement<'_>, cx: &Cx<'_, '_>) -> Option<SymbolId> {
-    let Statement::ExpressionStatement(statement) = statement else {
-        return None;
-    };
-    let Expression::AssignmentExpression(assign) = statement.expression.without_parentheses()
-    else {
-        return None;
-    };
-    let (object, _) = crate::convert::member_target(&assign.left)?;
-    expr_symbol(object, cx.scoping)
-}
-
-fn module_effects(cx: &Cx<'_, '_>, home: ScopeId, found: &[Found]) -> Vec<Effect> {
-    untwist_restore::region::statements(cx.scoping, cx.nodes, home)
-        .iter()
-        .filter(|statement| is_effect(cx, statement))
-        .filter_map(|statement| {
-            let span = statement.span();
-            let symbols: Vec<SymbolId> = cx
-                .referenced_at(span)
-                .filter(|(at, _)| !found.iter().any(|component| inside(component.span, *at)))
-                .map(|(_, symbol)| symbol)
-                .filter(|symbol| {
-                    cx.scoping.symbol_scope_id(*symbol) == home
-                        && !inside(span, cx.scoping.symbol_span(*symbol))
-                        && !cx.runtime.symbols.contains_key(symbol)
-                        && !cx.library.borrow().contains(symbol)
-                        && (!found
-                            .iter()
-                            .any(|component| component.symbol == Some(*symbol))
-                            || assigned_property_of(statement, cx) == Some(*symbol))
-                })
-                .collect();
-            if symbols.is_empty() {
-                return None;
-            }
-            let owners = symbols
-                .iter()
-                .filter_map(|symbol| helper_owner(cx, *symbol).map(|(owner, _)| owner))
-                .collect();
-            let line = cx.rw.text(span).lines().next().unwrap_or_default();
-            Some(Effect {
-                line: line.chars().take(60).collect(),
-                symbols,
-                owners,
-            })
-        })
-        .collect()
-}
-
 fn library(cx: &Cx<'_, '_>, home: ScopeId) -> FxHashSet<SymbolId> {
     let mut reached: FxHashSet<SymbolId> = FxHashSet::default();
     let mut queue: Vec<SymbolId> = cx.runtime.symbols.keys().copied().collect();
@@ -753,7 +684,8 @@ pub fn restore_all(cx: &Cx<'_, '_>, home: ScopeId, found: &[Found]) -> Restore {
     }
     let none = FxHashSet::default();
     let mut shared: FxHashSet<SymbolId> = FxHashSet::default();
-    let mut copies: rustc_hash::FxHashMap<SymbolId, usize> = Default::default();
+    let mut copies: rustc_hash::FxHashMap<u32, usize> = Default::default();
+    let mut copied: Vec<SymbolId> = Vec::new();
     for component in found {
         if let Ok(built) = unit(
             cx,
@@ -764,18 +696,25 @@ pub fn restore_all(cx: &Cx<'_, '_>, home: ScopeId, found: &[Found]) -> Restore {
             false,
         ) {
             shared.extend(built.outside);
-            for symbol in built.copied {
-                *copies.entry(symbol).or_default() += 1;
+            let mut owners: Vec<u32> = built
+                .copied
+                .iter()
+                .filter_map(|symbol| helper_owner(cx, *symbol).map(|(owner, _)| owner.start))
+                .collect();
+            owners.sort_unstable();
+            owners.dedup();
+            for owner in owners {
+                *copies.entry(owner).or_default() += 1;
             }
+            copied.extend(built.copied);
         }
     }
-    shared.extend(
-        copies
-            .into_iter()
-            .filter(|(symbol, count)| *count > 1 && !is_constant(cx, *symbol))
-            .map(|(symbol, _)| symbol),
-    );
-    let effects = module_effects(cx, home, found);
+    shared.extend(copied.into_iter().filter(|symbol| {
+        !is_constant(cx, *symbol)
+            && helper_owner(cx, *symbol)
+                .is_some_and(|(owner, _)| copies.get(&owner.start).is_some_and(|count| *count > 1))
+    }));
+    let effects = crate::effects::module_effects(cx, home, found);
     let mut out = Restore::default();
     let mut done: Vec<Done> = Vec::new();
     for component in found {
@@ -792,7 +731,10 @@ pub fn restore_all(cx: &Cx<'_, '_>, home: ScopeId, found: &[Found]) -> Restore {
                 "it shares the module binding `{}` with code outside it",
                 cx.scoping.symbol_name(*symbol)
             )),
-            None => match effects.iter().find(|effect| effect.touches(&built)) {
+            None => match effects
+                .iter()
+                .find(|effect| effect.touches(cx, home, &built, &shared))
+            {
                 Some(effect) => fail(format!(
                     "the module statement `{}` changes what it reads",
                     effect.line

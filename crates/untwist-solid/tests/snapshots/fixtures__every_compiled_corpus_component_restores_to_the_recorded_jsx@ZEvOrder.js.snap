@@ -1,0 +1,23 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/ZEvOrder.js
+---
+==== ZEvOrder.jsx
+const mk = k => {
+  console.log(k);
+  return () => console.log("h" + k);
+};
+
+const s = k => {
+  console.log(k);
+  return k;
+};
+
+export default function ZEvOrder() {
+  return (
+    <div>
+      <button title={/*@once*/ s("t")} id={/*@once*/ s("i")} onClick={mk("c")} on:foo={mk("f")}>b</button>
+    </div>
+  );
+}

@@ -1,0 +1,15 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/ZOrd5.js
+---
+==== ZOrd5.jsx
+const mk = k => {
+  console.log(k);
+  return () => {};
+};
+
+export default function ZOrd5() {
+  let el;
+  return <div><p ref={el} onClick={mk("c")} onInput={mk("i")}>x</p></div>;
+}

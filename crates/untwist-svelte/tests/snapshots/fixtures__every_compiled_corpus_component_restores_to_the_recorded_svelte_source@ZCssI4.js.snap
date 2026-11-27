@@ -1,0 +1,16 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/ZCssI4.js
+---
+==== ZCssI4.svelte
+<p class="q">t</p>
+
+<style>
+	:global([data-theme]).q {
+		color: teal;
+	}
+	p.q:hover {
+		top: 0;
+	}
+</style>

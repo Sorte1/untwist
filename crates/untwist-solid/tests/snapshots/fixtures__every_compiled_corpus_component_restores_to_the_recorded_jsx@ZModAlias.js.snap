@@ -1,0 +1,6 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/ZModAlias.js
+---
+==== ZModAlias kept as JS: the module statement `alias.push(1, 2);` changes what it reads

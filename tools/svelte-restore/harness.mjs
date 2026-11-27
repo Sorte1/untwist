@@ -59,7 +59,7 @@ async function render(js, specPath, dir, sources) {
   }
 }
 
-const svelteSource = {
+const svelteSource = (discloseVersion = true) => ({
   name: "svelte-source",
   enforce: "pre",
   resolveId(id, importer) {
@@ -68,29 +68,30 @@ const svelteSource = {
   },
   transform(code, id) {
     if (!id.endsWith(".svelte")) return null;
-    return compile(code, { filename: basename(id), generate: "client", css: "injected" }).js;
+    return compile(code, { filename: basename(id), generate: "client", css: "injected", discloseVersion }).js;
   },
-};
+});
 
-function entryFile(names, dir) {
+function entryFile(names, dir, late = false) {
   const entry = join(dir, "entry.js");
   const imports = names.map((name, index) => `import C${index} from ${JSON.stringify(join(CORPUS, `${name}.svelte`))};`);
   const use =
     names.length === 1
       ? "mount(C0, { target: document.body });"
       : `window.__mount = mount;\nwindow.__component = [${names.map((_, index) => `C${index}`).join(", ")}];`;
-  writeFileSync(entry, `import { mount } from "svelte";\n${imports.join("\n")}\n${use}\n`);
+  const mount = `import { mount } from "svelte";\n`;
+  writeFileSync(entry, late ? `${imports.join("\n")}\n${mount}${use}\n` : `${mount}${imports.join("\n")}\n${use}\n`);
   return entry;
 }
 
-async function rollupBuild(names, dir, minify, keepNames = false) {
+async function rollupBuild(names, dir, minify, keepNames = false, late = undefined) {
   const { rollup } = await import("rollup");
   const nodeResolve = (await import("@rollup/plugin-node-resolve")).default;
   const terser = (await import("@rollup/plugin-terser")).default;
   const build = await rollup({
-    input: entryFile(names, dir),
+    input: entryFile(names, dir, late !== undefined),
     onwarn: () => {},
-    plugins: [svelteSource, nodeResolve({ browser: true, exportConditions: ["svelte"], rootDir: HERE })],
+    plugins: [svelteSource(late !== "bare"), nodeResolve({ browser: true, exportConditions: ["svelte"], rootDir: HERE })],
   });
   const plugins = minify ? [terser(keepNames ? { mangle: { keep_fnames: true } } : {})] : [];
   const { output } = await build.generate({ format: "iife", plugins });
@@ -103,7 +104,7 @@ async function viteBuild(names, dir, keepNames = false) {
     configFile: false,
     root: dir,
     logLevel: "silent",
-    plugins: [svelteSource],
+    plugins: [svelteSource()],
     esbuild: keepNames ? { minifyIdentifiers: false } : {},
     build: { write: false, minify: "esbuild", modulePreload: false, rollupOptions: { input: entryFile(names, dir) } },
   });
@@ -116,6 +117,8 @@ const BUILDS = {
   min: (names, dir) => rollupBuild(names, dir, true),
   vite: (names, dir) => viteBuild(names, dir),
 };
+BUILDS.late = (names, dir) => rollupBuild(names, dir, false, false, "entry");
+BUILDS["late-bare"] = (names, dir) => rollupBuild(names, dir, false, false, "bare");
 BUILDS["min-app"] = BUILDS.min;
 BUILDS["vite-app"] = BUILDS.vite;
 
@@ -257,6 +260,7 @@ async function writeFixtures(names) {
   const dir = join(WORK, "fixture-bundle");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(FIXTURES, "bundle.iife.js"), await rollupBuild(["Parent"], dir, false));
+  writeFileSync(join(FIXTURES, "bundle.late.iife.js"), await rollupBuild(["NSnap3", "NEffect2", "ZNameU"], dir, false, false, "bare"));
   const app = ["Parent", "Counter", "EachNested", "Boundary", "SpreadChild", "Todo"];
   for (const [label, build] of [["terser", () => rollupBuild(app, dir, true)], ["vite", () => viteBuild(app, dir)]]) {
     const input = join(dir, `${label}.js`);

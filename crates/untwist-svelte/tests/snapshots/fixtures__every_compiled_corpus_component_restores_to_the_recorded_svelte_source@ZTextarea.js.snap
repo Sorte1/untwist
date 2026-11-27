@@ -1,0 +1,11 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/ZTextarea.js
+---
+==== ZTextarea.svelte
+<textarea>
+
+x</textarea>
+<textarea>y</textarea>
+<textarea>  z </textarea>

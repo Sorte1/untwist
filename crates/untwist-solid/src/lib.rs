@@ -1,5 +1,6 @@
 mod ast;
 mod convert;
+mod effects;
 mod element;
 mod fingerprints;
 mod jsx;
@@ -75,35 +76,64 @@ fn templates(
     out
 }
 
+fn event_list(call: &oxc_ast::ast::CallExpression<'_>) -> Option<Vec<String>> {
+    let [only] = call.arguments.as_slice() else {
+        return None;
+    };
+    let Some(Expression::ArrayExpression(array)) =
+        only.as_expression().map(Expression::without_parentheses)
+    else {
+        return None;
+    };
+    let names: Vec<String> = array
+        .elements
+        .iter()
+        .map(|element| element.as_expression().and_then(ast::string))
+        .collect::<Option<Vec<&str>>>()?
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+    let events = !names.is_empty()
+        && names
+            .iter()
+            .all(|name| element::DELEGATED.contains(&name.as_str()));
+    events.then_some(names)
+}
+
 fn delegated(
     runtime: &Runtime,
     scoping: &oxc_semantic::Scoping,
     nodes: &oxc_semantic::AstNodes<'_>,
-) -> Option<Vec<String>> {
+) -> Vec<String> {
     let known = runtime.esm
         || !runtime.minified
         || runtime.symbols.values().any(|rt| *rt == Rt::DelegateEvents);
-    if !known {
-        return None;
-    }
     let mut names = Vec::new();
     for node in nodes.iter() {
         let AstKind::CallExpression(call) = node.kind() else {
             continue;
         };
+        if !known {
+            names.extend(event_list(call).unwrap_or_default());
+            continue;
+        }
         if !runtime.is(&call.callee, scoping, Rt::DelegateEvents) {
             continue;
         }
         let Some(Expression::ArrayExpression(array)) =
             ast::arg(call, 0).map(Expression::without_parentheses)
         else {
-            return None;
+            continue;
         };
-        for element in &array.elements {
-            names.push(element.as_expression().and_then(ast::string)?.to_string());
-        }
+        names.extend(
+            array
+                .elements
+                .iter()
+                .filter_map(|element| element.as_expression().and_then(ast::string))
+                .map(str::to_string),
+        );
     }
-    Some(names)
+    names
 }
 
 fn references(
@@ -310,6 +340,21 @@ pub fn restore(code: &str) -> Restore {
         delegated: delegated(&runtime, scoping, nodes),
     };
     let found = module::components(&cx, home);
+    if code.contains(untwist_restore::text::LINE) {
+        return Restore {
+            kept: found
+                .iter()
+                .map(|component| {
+                    (
+                        component.name.clone(),
+                        "the source holds U+FDD0, which the printer uses to keep line breaks"
+                            .to_string(),
+                    )
+                })
+                .collect(),
+            ..Restore::default()
+        };
+    }
     let mut restored = module::restore_all(&cx, home, &found);
     for component in &mut restored.components {
         component.text = untwist_restore::text::restore_lines(&component.text);

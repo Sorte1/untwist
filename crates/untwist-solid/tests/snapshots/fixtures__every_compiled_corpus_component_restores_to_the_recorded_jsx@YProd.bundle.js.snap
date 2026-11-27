@@ -1,0 +1,48 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/YProd.bundle.js
+---
+==== YProd.jsx
+import { createSignal } from "solid-js";
+
+function produce(base, recipe) {
+  const draft = {
+    ...base
+  };
+  recipe(draft);
+  console.log("my-produce");
+  return draft;
+}
+
+function batch(list, size) {
+  const out = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
+}
+
+function unwrap(x) {
+  return x && x.value;
+}
+
+export default function YProd() {
+  const [s, setS] = createSignal({
+    n: 1
+  });
+  return (
+    <div>
+      <p>
+        {s().n}|{batch([1, 2, 3], 2).length}|{unwrap({
+          value: "v"
+        })}
+      </p>
+      <button
+        onClick={() => setS(produce(s(), d => {
+          d.n++;
+        }))}
+      >
+        inc
+      </button>
+    </div>
+  );
+}

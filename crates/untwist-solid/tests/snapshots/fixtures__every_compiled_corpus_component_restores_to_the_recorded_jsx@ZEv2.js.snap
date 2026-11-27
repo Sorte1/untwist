@@ -1,0 +1,27 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/ZEv2.js
+---
+==== ZEv2.jsx
+const mk = k => {
+  console.log(k);
+  return () => {};
+};
+
+export default function ZEv2() {
+  return (
+    <div>
+      <button
+        onClick={mk("1")}
+        onInput={mk("2")}
+        on:foo={mk("3")}
+        on:mouseenter={mk("4")}
+        onKeyDown={[mk("6"), 1]}
+        oncapture:bar={mk("5")}
+      >
+        b
+      </button>
+    </div>
+  );
+}

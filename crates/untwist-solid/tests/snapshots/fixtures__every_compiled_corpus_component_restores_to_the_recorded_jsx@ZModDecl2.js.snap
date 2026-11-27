@@ -1,0 +1,6 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/ZModDecl2.js
+---
+==== ZModDecl2 kept as JS: the module statement `export const home = addRoute("home");` changes what it reads

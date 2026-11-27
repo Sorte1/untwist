@@ -1,0 +1,7 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/ZModComputed.js
+---
+==== Kid kept as JS: the module statement `Kid[k] = "lbl";` changes what it reads
+==== ZModComputed kept as JS: the module statement `Kid[k] = "lbl";` changes what it reads

@@ -1,0 +1,7 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/ZModDecl.js
+---
+==== Kid kept as JS: the module statement `const first = setG(5);` changes what it reads
+==== ZModDecl kept as JS: its child component Kid is kept as JS

@@ -1,0 +1,13 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/ZCssH3.js
+---
+==== ZCssH3.svelte
+<span>t</span>
+
+<style>
+	span:is(:global(.z)) {
+		top: 0;
+	}
+</style>

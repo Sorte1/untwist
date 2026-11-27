@@ -1,0 +1,19 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/Ternary.min.untwisted.js
+---
+==== Component.jsx
+import { createSignal } from "solid-js";
+
+export default function Component() {
+  const [e, t] = createSignal(false);
+  const [n, o] = createSignal(0);
+  return (
+    <div>
+      {e() ? <b>on</b> : <i>off</i>}{(n() > 1) && <span>more than one</span>}{n() > 0 ? "positive" : "zero"}
+      <button class="t" onClick={() => t(!e())}>toggle</button>
+      <button class="n" onClick={() => o(n() + 1)}>inc</button>
+    </div>
+  );
+}

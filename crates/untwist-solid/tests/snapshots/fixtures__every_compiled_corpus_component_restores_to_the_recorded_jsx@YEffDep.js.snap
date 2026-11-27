@@ -1,0 +1,6 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/YEffDep.js
+---
+==== YEffDep kept as JS: an effect value reads another effect value

@@ -215,6 +215,12 @@ impl Runtime {
                 !untwist_restore::region::declared_in(scoping, nodes, *symbol, &zones)
             });
         }
+        let placed = Placement::of(scoping, nodes, template, &zones);
+        for (name, symbols) in candidates.iter_mut() {
+            if let Some(rt) = bundled(name) {
+                symbols.retain(|symbol| placed.allows(rt, *symbol));
+            }
+        }
         candidates.retain(|_, symbols| !symbols.is_empty());
         if !candidates.contains_key("insert") && !candidates.contains_key("createComponent") {
             return;
@@ -255,6 +261,16 @@ impl Runtime {
                 !untwist_restore::region::declared_in(scoping, nodes, *symbol, &zones)
             });
         }
+        let printed: Vec<SymbolId> = found.values().flatten().copied().collect();
+        for (rt, symbols) in found.iter_mut() {
+            if is_wrapper_row(*rt) {
+                symbols.retain(|symbol| match wrapped_callee(scoping, nodes, *symbol) {
+                    Some(Some(callee)) => printed.contains(&callee),
+                    Some(None) => false,
+                    None => true,
+                });
+            }
+        }
         found.retain(|_, symbols| !symbols.is_empty());
         self.minified = true;
         for (rt, symbol) in loops(&found, scoping, nodes, home, &zones) {
@@ -267,6 +283,100 @@ impl Runtime {
                 }
                 _ => self.ambiguous.extend(symbols),
             }
+        }
+    }
+}
+
+fn is_wrapper_row(rt: Rt) -> bool {
+    rt == Rt::Memo || rt.spelling().is_some_and(|(name, _)| name == "onMount")
+}
+
+fn single_call<'e, 'a>(statements: &'e [Statement<'a>]) -> Option<&'e Expression<'a>> {
+    match statements {
+        [Statement::ExpressionStatement(statement)] => Some(&statement.expression),
+        [Statement::ReturnStatement(ret)] => ret.argument.as_ref(),
+        _ => None,
+    }
+}
+
+fn wrapped_callee(
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+    symbol: SymbolId,
+) -> Option<Option<SymbolId>> {
+    let body = match nodes.kind(scoping.symbol_declaration(symbol)) {
+        AstKind::Function(function) => single_call(&function.body.as_ref()?.statements)?,
+        AstKind::VariableDeclarator(declarator) => {
+            match declarator.init.as_ref()?.without_parentheses() {
+                Expression::FunctionExpression(function) => {
+                    single_call(&function.body.as_ref()?.statements)?
+                }
+                Expression::ArrowFunctionExpression(arrow) => match arrow.get_expression() {
+                    Some(expression) => expression,
+                    None => single_call(crate::ast::arrow_statements(arrow))?,
+                },
+                _ => return None,
+            }
+        }
+        _ => return None,
+    };
+    let Expression::CallExpression(call) = body.without_parentheses() else {
+        return None;
+    };
+    match call.callee.without_parentheses() {
+        Expression::Identifier(_) => Some(expr_symbol(&call.callee, scoping)),
+        _ => None,
+    }
+}
+
+fn module_of(rt: Rt) -> &'static str {
+    match rt {
+        Rt::Api(at) => API.get(usize::from(at)).map_or(WEB, |row| row.1),
+        Rt::Effect | Rt::MergeProps | Rt::GetOwner | Rt::CreateComponent => SOLID,
+        _ => WEB,
+    }
+}
+
+struct Placement<'s, 'n, 'a> {
+    scoping: &'s Scoping,
+    nodes: &'n AstNodes<'a>,
+    template: u32,
+    first_zone: u32,
+    store: Option<u32>,
+}
+
+impl<'s, 'n, 'a> Placement<'s, 'n, 'a> {
+    fn of(
+        scoping: &'s Scoping,
+        nodes: &'n AstNodes<'a>,
+        template: SymbolId,
+        zones: &[(u32, u32)],
+    ) -> Self {
+        let store = nodes.iter().find_map(|node| match node.kind() {
+            AstKind::StringLiteral(literal) if literal.value == "store-raw" => {
+                Some(literal.span.start)
+            }
+            _ => None,
+        });
+        Placement {
+            scoping,
+            nodes,
+            template: Self::start(scoping, nodes, template),
+            first_zone: zones.iter().map(|zone| zone.0).min().unwrap_or(u32::MAX),
+            store,
+        }
+    }
+
+    fn start(scoping: &Scoping, nodes: &AstNodes<'_>, symbol: SymbolId) -> u32 {
+        oxc_span::GetSpan::span(&nodes.kind(scoping.symbol_declaration(symbol))).start
+    }
+
+    fn allows(&self, rt: Rt, symbol: SymbolId) -> bool {
+        let at = Self::start(self.scoping, self.nodes, symbol);
+        match module_of(rt) {
+            SOLID => at <= self.template,
+            STORE => self.store.is_some_and(|store| store < at),
+            _ => at < self.first_zone,
         }
     }
 }

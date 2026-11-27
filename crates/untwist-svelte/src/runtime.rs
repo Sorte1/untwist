@@ -3,7 +3,7 @@ use oxc_ast::AstKind;
 use oxc_semantic::{AstNodes, Scoping};
 use oxc_syntax::scope::ScopeId;
 use oxc_syntax::symbol::SymbolId;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Rt {
@@ -348,7 +348,15 @@ impl Runtime {
             .flatten()
             .copied()
             .collect();
-        let end = region_end(source, &templates, scoping, nodes);
+        let home = scoping.symbol_scope_id(templates[0]);
+        let (limit, end) = match region(source, &templates, scoping, nodes) {
+            (end, true) => (end, end),
+            (end, false) => (
+                end,
+                last_rooted(&candidates, home, scoping, nodes)
+                    .map_or(end, |rooted| end.min(rooted + 1)),
+            ),
+        };
         for (name, mut symbols) in candidates {
             let mut picked = false;
             if let (true, Some((_, arity))) = (
@@ -382,7 +390,10 @@ impl Runtime {
                 .filter(|bound| bare(bound.as_str()) == name)
                 .count();
             match twins == 1 || picked {
-                true if in_region(rt, *only, end, scoping) => {
+                true if in_region(rt, *only, end, scoping)
+                    || (in_region(rt, *only, limit, scoping)
+                        && compiler_called(*only, scoping, nodes)) =>
+                {
                     self.symbols.insert(*only, rt);
                 }
                 true => {}
@@ -477,8 +488,17 @@ pub fn region_end(
     scoping: &Scoping,
     nodes: &AstNodes<'_>,
 ) -> u32 {
+    region(source, templates, scoping, nodes).0
+}
+
+fn region(
+    source: &str,
+    templates: &[SymbolId],
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+) -> (u32, bool) {
     let Some(first) = templates.first() else {
-        return u32::MAX;
+        return (u32::MAX, false);
     };
     let home = scoping.symbol_scope_id(*first);
     let declared = templates
@@ -497,12 +517,72 @@ pub fn region_end(
     }
     for statement in statements_of(scoping, nodes, home).unwrap_or_default() {
         let start = oxc_span::GetSpan::span(statement).start;
-        if is_component_shape(statement) || (start > declared && is_disclosure(source, statement)) {
-            end = end.min(start);
-            break;
+        let disclosed = start > declared && is_disclosure(source, statement);
+        if is_component_shape(statement) || disclosed {
+            return (end.min(start), disclosed && start < end);
         }
     }
-    end
+    (end, false)
+}
+
+fn compiler_called(symbol: SymbolId, scoping: &Scoping, nodes: &AstNodes<'_>) -> bool {
+    scoping.get_resolved_references(symbol).any(|reference| {
+        let AstKind::CallExpression(call) = nodes.parent_kind(reference.node_id()) else {
+            return false;
+        };
+        let at = oxc_span::GetSpan::span(&nodes.kind(reference.node_id()));
+        oxc_span::GetSpan::span(call.callee.without_parentheses()) == at
+            && call.arguments.iter().any(|argument| {
+                matches!(
+                    argument.as_expression().map(Expression::without_parentheses),
+                    Some(Expression::Identifier(ident))
+                        if ident.name.starts_with("$$")
+                            && symbol_of(ident, scoping).is_some_and(|bound| {
+                                scoping.symbol_flags(bound).is_function_scoped_declaration()
+                                    && matches!(
+                                        nodes.kind(scoping.symbol_declaration(bound)),
+                                        AstKind::FormalParameter(_) | AstKind::FormalParameters(_)
+                                    )
+                            })
+                )
+            })
+    })
+}
+
+fn last_rooted(
+    candidates: &FxHashMap<&str, Vec<SymbolId>>,
+    home: ScopeId,
+    scoping: &Scoping,
+    nodes: &AstNodes<'_>,
+) -> Option<u32> {
+    let symbols: FxHashSet<SymbolId> = candidates.values().flatten().copied().collect();
+    let mut spans: Vec<(oxc_span::Span, SymbolId)> = symbols
+        .iter()
+        .filter(|symbol| scoping.symbol_scope_id(**symbol) == home)
+        .map(|symbol| {
+            let declaration = nodes.get_node(scoping.symbol_declaration(*symbol));
+            (oxc_span::GetSpan::span(&declaration.kind()), *symbol)
+        })
+        .collect();
+    spans.sort_unstable_by_key(|(span, _)| span.start);
+    let mut rooted: Option<u32> = None;
+    for helper in scoping.get_bindings(home).values() {
+        if symbols.contains(helper) {
+            continue;
+        }
+        for reference in scoping.get_resolved_references(*helper) {
+            let at = oxc_span::GetSpan::span(&nodes.kind(reference.node_id())).start;
+            let index = spans.partition_point(|(span, _)| span.start <= at);
+            let Some((span, symbol)) = index.checked_sub(1).map(|index| spans[index]) else {
+                continue;
+            };
+            if at < span.end {
+                let start = scoping.symbol_span(symbol).start;
+                rooted = Some(rooted.map_or(start, |known| known.max(start)));
+            }
+        }
+    }
+    rooted
 }
 
 fn global_aliases(scoping: &Scoping, nodes: &AstNodes<'_>, global: &str) -> Vec<SymbolId> {

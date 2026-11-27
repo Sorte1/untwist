@@ -1,0 +1,7 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/ZModAssign.js
+---
+==== Kid kept as JS: the module statement `Object.assign(Kid, {` changes what it reads
+==== ZModAssign kept as JS: the module statement `Object.assign(Kid, {` changes what it reads

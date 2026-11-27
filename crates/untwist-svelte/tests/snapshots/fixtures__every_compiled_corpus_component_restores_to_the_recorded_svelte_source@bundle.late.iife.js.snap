@@ -1,0 +1,8 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/bundle.late.iife.js
+---
+==== NSnap3 kept as JS: `snapshot` is declared outside the component in the bundle (`function snapshot(value) {`)
+==== NEffect2 kept as JS: `user_effect` is declared outside the component in the bundle (`function user_effect(f) {`)
+==== ZNameU kept as JS: `untrack` is declared outside the component in the bundle (`function untrack(f) {`)

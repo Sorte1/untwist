@@ -1,0 +1,23 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/ZF84.js
+---
+==== ZF84.svelte
+<script>
+	let a = $state('A');
+	let b = $state('');
+	let on = $state(true);
+	let items = $state([1, 2]);
+	let h = '<u>u</u>';
+
+	function t() {
+		a = a + '!';
+		b = b ? '' : 'Q';
+		on = !on;
+		items = [...items, 3];
+	}
+</script>
+
+<button class="go" onclick={t}>go</button>
+<pre>  {#if on}Y{/if}</pre>

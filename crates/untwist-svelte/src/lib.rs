@@ -4,6 +4,7 @@ mod dom;
 mod fingerprints;
 mod markup;
 mod runtime;
+mod scope;
 mod script;
 
 use untwist_restore::{fingerprint, html, text};

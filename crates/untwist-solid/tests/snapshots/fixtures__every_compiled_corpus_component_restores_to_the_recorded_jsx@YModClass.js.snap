@@ -1,0 +1,6 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/YModClass.js
+---
+==== YModClass kept as JS: the module statement `class Reg {` changes what it reads

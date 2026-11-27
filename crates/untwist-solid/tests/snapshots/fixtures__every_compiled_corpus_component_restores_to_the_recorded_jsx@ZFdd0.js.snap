@@ -1,0 +1,6 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/ZFdd0.js
+---
+==== ZFdd0 kept as JS: the source holds U+FDD0, which the printer uses to keep line breaks

@@ -194,10 +194,12 @@ fn guard(nodes: &[M]) -> Vec<M> {
     out
 }
 
-fn preserved(nodes: &[M]) -> Vec<M> {
+fn preserved(name: &str, nodes: &[M]) -> Vec<M> {
     let mut nodes = nodes.to_vec();
     if let Some(M::Text(first)) = nodes.first_mut() {
-        if let Some(rest) = first.strip_prefix('\n') {
+        if first.starts_with('\n') && name == "textarea" {
+            first.insert(0, '\n');
+        } else if let Some(rest) = first.strip_prefix('\n') {
             *first = rest.to_string();
             nodes.insert(0, ws_tag("\n"));
         }
@@ -237,11 +239,11 @@ fn pad(depth: usize) -> String {
     INDENT.repeat(depth)
 }
 
-fn inline(nodes: &[M]) -> Option<String> {
-    inline_nodes(&guard(nodes))
+fn inline(nodes: &[M], raw: bool) -> Option<String> {
+    inline_nodes(&guard(nodes), raw)
 }
 
-fn inline_nodes(nodes: &[M]) -> Option<String> {
+fn inline_nodes(nodes: &[M], raw: bool) -> Option<String> {
     let mut text = String::new();
     for node in nodes {
         match node {
@@ -259,14 +261,21 @@ fn inline_nodes(nodes: &[M]) -> Option<String> {
                         text.push_str(if attrs.is_empty() { "/>" } else { " />" });
                     }
                     false if name == "pre" || name == "textarea" => {
-                        text.push_str(&inline_nodes(&preserved(children))?);
+                        text.push_str(&inline_nodes(&preserved(name, children), true)?);
                         text.push_str(&format!("</{name}>"));
                     }
                     false => {
-                        text.push_str(&inline(children)?);
+                        text.push_str(&inline(children, raw)?);
                         text.push_str(&format!("</{name}>"));
                     }
                 }
+            }
+            M::Block { sections, close } if raw => {
+                for (header, children) in sections {
+                    text.push_str(header);
+                    text.push_str(&inline_nodes(children, true)?);
+                }
+                text.push_str(close);
             }
             M::Block { .. } => return None,
         }
@@ -293,7 +302,7 @@ fn node_lines(node: &M, depth: usize) -> Vec<String> {
         } if children.is_empty() || name == "pre" || name == "textarea" => {
             vec![format!(
                 "{at}{}",
-                inline_nodes(std::slice::from_ref(node)).unwrap_or_default()
+                inline_nodes(std::slice::from_ref(node), false).unwrap_or_default()
             )]
         }
         M::Element {
@@ -317,7 +326,7 @@ fn node_lines(node: &M, depth: usize) -> Vec<String> {
             children,
             ..
         } => {
-            if let Some(text) = inline(children).filter(|text| {
+            if let Some(text) = inline(children, false).filter(|text| {
                 !text.contains('\n')
                     && text.len() + at.len() < WIDTH
                     && children.iter().all(|child| !is_space(child))
