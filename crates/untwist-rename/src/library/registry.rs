@@ -3,7 +3,7 @@ use std::sync::{Arc, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use rustc_hash::FxHashSet;
 
-use super::collection::{sha256_hex, shard_table, Collection, CollectionError, Shard};
+use super::collection::{sha256_hex, shard_table, Collection, CollectionError, ProgramKeys, Shard};
 use super::table::{builtin_tables, LibraryTables, Table};
 
 pub trait ShardSource: Send + Sync {
@@ -55,12 +55,7 @@ impl Attached {
         entry.curated && built_in.contains(&entry.id) && !self.has_loaded(package)
     }
 
-    fn fetch(
-        &mut self,
-        (package, index): (usize, usize),
-        base: &Table,
-        built_in: &[String],
-    ) -> Option<Table> {
+    fn fetch(&mut self, (package, index): (usize, usize), built_in: &[String]) -> Option<Table> {
         self.tried.insert((package, index));
         let source = self.source.as_ref()?;
         if self.built_in(package, built_in) {
@@ -82,8 +77,7 @@ impl Attached {
                 Some(table)
             }
             (Ok(table), false) => {
-                self.loaded
-                    .insert((package, index), table.into_collection(base));
+                self.loaded.insert((package, index), table);
                 None
             }
             (Err(error), _) => {
@@ -130,7 +124,8 @@ impl Loaded {
         let shards: Vec<Table> = self
             .attached
             .iter()
-            .flat_map(|attached| attached.loaded.values().cloned())
+            .flat_map(|attached| attached.loaded.values())
+            .map(|table| table.clone().into_collection(&self.base))
             .collect();
         self.table = match shards.is_empty() {
             true => Arc::clone(&self.base),
@@ -231,14 +226,14 @@ pub fn pending() -> bool {
         .is_some_and(Attached::pending)
 }
 
-pub fn wanting(loose: &FxHashSet<u32>) -> Arc<Table> {
+pub fn wanting(keys: &ProgramKeys) -> Arc<Table> {
     with_loaded(|loaded| {
         let Some(attached) = loaded.attached.as_mut() else {
             return Arc::clone(&loaded.table);
         };
         let wanted: Vec<(usize, usize)> = attached
             .collection
-            .shards_wanted_by_keys(loose)
+            .shards_wanted(keys)
             .into_iter()
             .filter(|slot| !attached.tried.contains(slot))
             .collect();
@@ -248,7 +243,7 @@ pub fn wanting(loose: &FxHashSet<u32>) -> Arc<Table> {
         let before = attached.loaded.len();
         let mut adopted = Vec::new();
         for slot in wanted {
-            if let Some(table) = attached.fetch(slot, &loaded.base, &loaded.ids) {
+            if let Some(table) = attached.fetch(slot, &loaded.ids) {
                 let id = attached.collection.packages()[slot.0].id.clone();
                 adopted.push((id, vec![table]));
             }
@@ -264,7 +259,7 @@ pub fn wanting(loose: &FxHashSet<u32>) -> Arc<Table> {
     })
 }
 
-pub fn wanted(text: &str, loose: &FxHashSet<u32>) -> Vec<String> {
+pub fn wanted(text: &str, keys: &ProgramKeys) -> Vec<String> {
     with_loaded(|loaded| {
         let Some(attached) = &loaded.attached else {
             return Vec::new();
@@ -277,7 +272,7 @@ pub fn wanted(text: &str, loose: &FxHashSet<u32>) -> Vec<String> {
                 (0..collection.packages()[package].shards.len()).map(move |shard| (package, shard))
             })
             .collect();
-        slots.extend(collection.shards_wanted_by_keys(loose));
+        slots.extend(collection.shards_wanted(keys));
         slots.sort_unstable();
         slots.dedup();
         slots
@@ -315,7 +310,6 @@ pub fn load_shard(bytes: &[u8]) -> Result<String, CollectionError> {
             loaded.rebuild();
             return Ok(id);
         }
-        let table = table.into_collection(&loaded.base);
         let fresh = attached.loaded.insert((package, index), table).is_none();
         if fresh {
             loaded.rebuild();

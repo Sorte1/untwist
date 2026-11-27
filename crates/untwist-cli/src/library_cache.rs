@@ -109,8 +109,35 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     std::fs::rename(&partial, path).with_context(|| format!("write {}", path.display()))
 }
 
+const LOCAL_LIMIT: u64 = 256 * MEBIBYTE;
+
+pub fn read_regular(path: &Path, expected: Option<u64>) -> Result<Vec<u8>, String> {
+    let meta = std::fs::metadata(path).map_err(|error| error.to_string())?;
+    if !meta.is_file() {
+        return Err("not a regular file".to_string());
+    }
+    if expected.is_some_and(|bytes| bytes != meta.len()) {
+        return Err("the size differs from the index".to_string());
+    }
+    if meta.len() > LOCAL_LIMIT {
+        return Err(format!("it is larger than {} MiB", LOCAL_LIMIT / MEBIBYTE));
+    }
+    let mut bytes = Vec::with_capacity(meta.len() as usize);
+    std::fs::File::open(path)
+        .and_then(|file| {
+            std::io::Read::read_to_end(&mut std::io::Read::take(file, LOCAL_LIMIT + 1), &mut bytes)
+        })
+        .map_err(|error| error.to_string())?;
+    match expected.is_some_and(|size| size != bytes.len() as u64)
+        || bytes.len() as u64 > LOCAL_LIMIT
+    {
+        true => Err("the size differs from the index".to_string()),
+        false => Ok(bytes),
+    }
+}
+
 fn has_file(dir: &Path, file: &str, sha256: &str) -> bool {
-    std::fs::read(dir.join(file)).is_ok_and(|bytes| sha256_hex(&bytes) == sha256)
+    read_regular(&dir.join(file), None).is_ok_and(|bytes| sha256_hex(&bytes) == sha256)
 }
 
 fn checked(bytes: Vec<u8>, file: &str, sha256: &str, size: Option<u64>) -> Result<Vec<u8>> {
@@ -275,8 +302,10 @@ pub struct Fetched {
 impl ShardSource for Fetched {
     fn read(&self, shard: &Shard) -> Result<Vec<u8>, String> {
         if let Some(cache) = &self.cache {
-            if has_file(cache, &shard.file, &shard.sha256) {
-                return std::fs::read(cache.join(&shard.file)).map_err(|error| error.to_string());
+            if let Ok(bytes) = read_regular(&cache.join(&shard.file), Some(shard.bytes)) {
+                if sha256_hex(&bytes) == shard.sha256 {
+                    return Ok(bytes);
+                }
             }
         }
         let target = url::joined(&self.root, &shard.file)

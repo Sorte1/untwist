@@ -4,13 +4,13 @@ use sha2::{Digest, Sha256};
 
 use super::hash::mix;
 use super::table::{inflate_with_limit, Table, INFLATED_LIMIT};
-use super::SHAPE_EPOCH;
+use super::{CLUSTER_HITS, SHAPE_EPOCH};
 
 pub const SCHEMA: &str = "untwist.library-collection/1";
 pub const INDEX: &str = "collection.json";
 const BLOOM_MAGIC: &[u8; 8] = b"UTBLOOM1";
-pub const BLOOM_BITS_PER_KEY: u64 = 10;
-pub const BLOOM_HASHES: u8 = 7;
+pub const BLOOM_BITS_PER_KEY: u64 = 16;
+pub const BLOOM_HASHES: u8 = 11;
 const BLOOM_SEED: u64 = 0x5bd1_e995_9e37_79b9;
 const BLOOM_MIN_BITS: u64 = 64;
 pub const SHARD_BLOOM: char = '#';
@@ -195,6 +195,19 @@ pub fn parse_bloom_file(bytes: &[u8]) -> Option<Vec<(String, Bloom)>> {
     reader.bytes.is_empty().then_some(out)
 }
 
+struct Hits {
+    all: usize,
+    strong: usize,
+    program: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ProgramKeys {
+    pub loose: FxHashSet<u32>,
+    pub strong: FxHashSet<u32>,
+    pub program: Option<u32>,
+}
+
 pub fn sha256_hex(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
         .iter()
@@ -338,6 +351,46 @@ impl Collection {
                 None => !loose.is_empty(),
             })
             .collect()
+    }
+
+    fn shard_hits(&self, package: usize, shard: usize, keys: &ProgramKeys) -> Hits {
+        let Some(bloom) = self.bloom_of(package, shard) else {
+            let any = usize::from(!keys.loose.is_empty());
+            return Hits {
+                all: any * CLUSTER_HITS,
+                strong: any,
+                program: false,
+            };
+        };
+        let count = |set: &FxHashSet<u32>| set.iter().filter(|&&key| bloom.contains(key)).count();
+        Hits {
+            all: count(&keys.loose),
+            strong: count(&keys.strong),
+            program: keys.program.is_some_and(|key| bloom.contains(key)),
+        }
+    }
+
+    pub fn shards_wanted(&self, keys: &ProgramKeys) -> Vec<(usize, usize)> {
+        let mut wanted = Vec::new();
+        for (package, entry) in self.index.packages.iter().enumerate() {
+            let hits: Vec<Hits> = (0..entry.shards.len())
+                .map(|shard| self.shard_hits(package, shard, keys))
+                .collect();
+            let total: usize = hits.iter().map(|hit| hit.all).sum();
+            let strong: usize = hits.iter().map(|hit| hit.strong).sum();
+            let whole = hits.iter().any(|hit| hit.program);
+            let enough = entry.curated || whole || (strong > 0 && total >= CLUSTER_HITS);
+            if !enough {
+                continue;
+            }
+            wanted.extend(
+                hits.iter()
+                    .enumerate()
+                    .filter(|(_, hit)| hit.all > 0 || hit.program)
+                    .map(|(shard, _)| (package, shard)),
+            );
+        }
+        wanted
     }
 
     pub fn wanted_by_keys(&self, loose: &FxHashSet<u32>) -> Vec<usize> {

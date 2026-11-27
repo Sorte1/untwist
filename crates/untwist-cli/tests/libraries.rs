@@ -363,3 +363,54 @@ fn library_imports_needs_an_output_directory() {
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("--single-file"));
 }
+
+#[test]
+fn an_explicit_cache_without_a_collection_warns_and_uses_the_built_in_tables() {
+    let out = stdin_output("a;", &["--libraries", "cache"]);
+    assert!(out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("no cached library collection"));
+}
+
+#[test]
+fn a_path_that_is_not_a_collection_is_an_error_naming_it() {
+    let missing = fixture().join("doesnotexist");
+    let out = stdin_output("a;", &["--libraries", &missing.to_string_lossy()]);
+    assert!(!out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("doesnotexist"), "{stderr}");
+    let index = fixture().join("collection.json");
+    let out = stdin_output("a;", &["--libraries", &index.to_string_lossy()]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_shard_that_is_not_a_regular_file_is_skipped_without_reading_it() {
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let index = std::fs::read_to_string(fixture().join("collection.json")).expect("the index");
+    std::fs::write(dir.path().join("collection.json"), &index).expect("the index copy");
+    std::fs::create_dir(dir.path().join("shards")).expect("the shard dir");
+    let json: serde_json::Value = serde_json::from_str(&index).expect("json");
+    for package in json["packages"].as_array().expect("packages") {
+        let file = package["shards"][0]["file"].as_str().expect("a shard");
+        let target = dir.path().join(file);
+        match package["id"] == "eventemitter3" {
+            true => {
+                let made = std::process::Command::new("mkfifo").arg(&target).status();
+                assert!(made.is_ok_and(|status| status.success()));
+            }
+            false => {
+                std::fs::copy(fixture().join(file), &target).expect("a shard copy");
+            }
+        }
+    }
+    let filters = json["filters"]["file"].as_str().expect("a filter file");
+    std::fs::copy(fixture().join(filters), dir.path().join(filters)).expect("the filters");
+    let (json, stderr) = report(&["--libraries", &dir.path().to_string_lossy()]);
+    assert!(stderr.contains("not a regular file"), "{stderr}");
+    assert!(!libraries(&json).contains(&"eventemitter3".to_string()));
+}

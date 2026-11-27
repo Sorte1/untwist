@@ -78,14 +78,14 @@ pub mod libraries {
     pub fn wanted_for(text: &str) -> Vec<String> {
         let alloc = oxc_allocator::Allocator::default();
         let parsed = untwist_core::parse::parse_program(&alloc, text);
-        let loose = match untwist_core::parse::has_error(&parsed.diagnostics) {
+        let keys = match untwist_core::parse::has_error(&parsed.diagnostics) {
             true => Default::default(),
             false => {
                 let sem = untwist_core::semantic::build_scoping(&parsed.program);
-                untwist_rename::library::program_loose_keys(&parsed.program, &sem.scoping)
+                untwist_rename::library::program_keys(&parsed.program, &sem.scoping)
             }
         };
-        wanted(text, &loose)
+        wanted(text, &keys)
     }
 }
 pub use untwist_unpack::{Mapping, MappingMatcher};

@@ -817,7 +817,7 @@ pub fn match_program(program: &Program<'_>, scoping: &Scoping) -> Arc<LibraryNam
         return match_cached(&table::current(), program, scoping);
     }
     cache::matched_with(
-        |shaped| registry::wanting(&loose_keys(shaped, scoping)),
+        |shaped| registry::wanting(&program_keys_of(shaped, scoping)),
         program,
         scoping,
         match_shaped,
@@ -833,8 +833,26 @@ fn loose_keys(shaped: &shape::Shaped<'_, '_>, scoping: &Scoping) -> rustc_hash::
         .collect()
 }
 
-pub fn program_loose_keys(program: &Program<'_>, scoping: &Scoping) -> rustc_hash::FxHashSet<u32> {
-    loose_keys(&shape_program(program, scoping), scoping)
+fn program_keys_of(shaped: &shape::Shaped<'_, '_>, scoping: &Scoping) -> collection::ProgramKeys {
+    collection::ProgramKeys {
+        loose: loose_keys(shaped, scoping),
+        strong: shaped
+            .units
+            .iter()
+            .map(|unit| unit.loose_key(&shaped.prefix))
+            .filter(|loose| loose.0 >= STRONG_LENGTH)
+            .map(table::loose_key)
+            .collect(),
+        program: shaped
+            .units
+            .iter()
+            .find(|unit| unit.kind == UnitKind::Program)
+            .map(|unit| table::loose_key(unit.loose_key(&shaped.prefix))),
+    }
+}
+
+pub fn program_keys(program: &Program<'_>, scoping: &Scoping) -> collection::ProgramKeys {
+    program_keys_of(&shape_program(program, scoping), scoping)
 }
 
 pub fn match_cached(

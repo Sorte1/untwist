@@ -39,7 +39,7 @@ struct Directory {
 
 impl ShardSource for Directory {
     fn read(&self, shard: &Shard) -> Result<Vec<u8>, String> {
-        std::fs::read(self.root.join(&shard.file)).map_err(|error| error.to_string())
+        library_cache::read_regular(&self.root.join(&shard.file), Some(shard.bytes))
     }
 }
 
@@ -47,10 +47,17 @@ fn is_table(path: &Path) -> bool {
     path.is_file() && path.to_string_lossy().ends_with(".table.gz")
 }
 
-fn collection_root(path: &Path) -> PathBuf {
-    match path.is_dir() {
-        true => path.to_path_buf(),
-        false => path.parent().map(Path::to_path_buf).unwrap_or_default(),
+fn collection_root(path: &Path) -> Result<PathBuf> {
+    if path.is_dir() {
+        return Ok(path.to_path_buf());
+    }
+    let index = path.file_name().is_some_and(|name| name == INDEX) && path.is_file();
+    match (index, path.parent()) {
+        (true, Some(parent)) => Ok(parent.to_path_buf()),
+        _ => bail!(
+            "--libraries {}: expected a directory holding {INDEX}, a {INDEX} file or a .table.gz file",
+            path.display()
+        ),
     }
 }
 
@@ -62,13 +69,19 @@ fn load_table(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn attach_cache(err: &mut dyn Write) -> Result<()> {
-    let Some(dir) = library_cache::cache_dir() else {
-        return Ok(());
-    };
-    match library_cache::cached_index(&dir) {
-        Some(_) => attach_collection(&dir, err),
-        None => Ok(()),
+fn attach_cache(err: &mut dyn Write, asked: bool) -> Result<()> {
+    let cached =
+        library_cache::cache_dir().filter(|dir| library_cache::cached_index(dir).is_some());
+    match (cached, asked) {
+        (Some(dir), _) => attach_collection(&dir, err),
+        (None, true) => {
+            writeln!(
+                err,
+                "warning: no cached library collection; run `untwist libraries update`; using the built-in tables"
+            )?;
+            Ok(())
+        }
+        (None, false) => Ok(()),
     }
 }
 
@@ -79,10 +92,11 @@ fn attach_url(url: &str, err: &mut dyn Write) -> Result<()> {
 }
 
 fn attach_collection(path: &Path, err: &mut dyn Write) -> Result<()> {
-    let root = collection_root(path);
+    let root = collection_root(path)?;
     let index = root.join(INDEX);
-    let json =
-        std::fs::read_to_string(&index).with_context(|| format!("read {}", index.display()))?;
+    let bytes = library_cache::read_regular(&index, None)
+        .map_err(|error| anyhow::anyhow!("read {}: {error}", index.display()))?;
+    let json = String::from_utf8_lossy(&bytes);
     let mut collection = match Collection::parse(&json) {
         Ok(collection) => collection,
         Err(error) => {
@@ -96,13 +110,12 @@ fn attach_collection(path: &Path, err: &mut dyn Write) -> Result<()> {
     };
     if let Some(filters) = collection.filters().cloned() {
         let file = root.join(&filters.file);
-        let attached = std::fs::read(&file)
-            .map_err(|error| error.to_string())
-            .and_then(|bytes| {
-                collection
-                    .attach_filters(&bytes)
-                    .map_err(|error| error.to_string())
-            });
+        let expected = (filters.bytes > 0).then_some(filters.bytes);
+        let attached = library_cache::read_regular(&file, expected).and_then(|bytes| {
+            collection
+                .attach_filters(&bytes)
+                .map_err(|error| error.to_string())
+        });
         if let Err(reason) = attached {
             writeln!(
                 err,
@@ -117,7 +130,7 @@ fn attach_collection(path: &Path, err: &mut dyn Write) -> Result<()> {
 
 pub fn configure(sources: &[Source], err: &mut dyn Write) -> Result<()> {
     if sources.is_empty() {
-        return attach_cache(err);
+        return attach_cache(err, false);
     }
     let builtin = !sources.contains(&Source::None) || sources.contains(&Source::Builtin);
     libraries::use_builtin(builtin);
@@ -138,7 +151,7 @@ pub fn configure(sources: &[Source], err: &mut dyn Write) -> Result<()> {
         }
         match source {
             Source::Path(path) => attach_collection(path, err)?,
-            Source::Cache => attach_cache(err)?,
+            Source::Cache => attach_cache(err, true)?,
             Source::Url(url) => attach_url(url, err)?,
             Source::Builtin | Source::None => {}
         }
