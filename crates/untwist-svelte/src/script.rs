@@ -524,13 +524,19 @@ impl<'f> Sites<'f> {
         }
     }
 
-    fn assign(&self, span: Span, target: Piece, value: Piece) -> Site {
+    fn assign(&self, span: Span, target: Piece, value: &Expression<'_>) -> Site {
         let bare = self.bare == Some(span);
         let mut pieces = Vec::new();
         if !bare {
             pieces.push(lit("("));
         }
-        pieces.extend([target, lit(" = "), value]);
+        pieces.extend([target, lit(" = ")]);
+        match value.without_parentheses() {
+            Expression::SequenceExpression(_) => {
+                pieces.extend([lit("("), Piece::Src(value.span()), lit(")")])
+            }
+            _ => pieces.push(Piece::Src(value.span())),
+        }
         if !bare {
             pieces.push(lit(")"));
         }
@@ -557,7 +563,7 @@ impl<'f> Sites<'f> {
             Rt::Get if call.arguments.len() == 1 => site(vec![self.signal(arg(call, 0))?]),
             Rt::Set if (2..=3).contains(&call.arguments.len()) => {
                 let target = self.signal(arg(call, 0))?;
-                Some(self.assign(span, target, Piece::Src(arg(call, 1)?.span())))
+                Some(self.assign(span, target, arg(call, 1)?))
             }
             Rt::Update | Rt::UpdatePre if (1..=2).contains(&call.arguments.len()) => {
                 let target = self.signal(arg(call, 0))?;
@@ -644,7 +650,7 @@ impl<'f> Sites<'f> {
                 span: call.span,
                 pieces: vec![name],
             }),
-            1 => Some(self.assign(call.span, name, Piece::Src(arg(call, 0)?.span()))),
+            1 => Some(self.assign(call.span, name, arg(call, 0)?)),
             _ => None,
         }
     }
