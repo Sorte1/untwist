@@ -119,9 +119,7 @@ fn block(text: &str, hash: &str, depth: usize, out: &mut String) -> Option<()> {
                 false => declarations(body, depth + 1, out),
             }
             out.push_str(&format!("\n{pad}}}"));
-        } else if head.starts_with('@') {
-            return None;
-        } else if body.contains('{') {
+        } else if head.starts_with('@') || body.contains('{') {
             return None;
         } else {
             let selectors: Option<Vec<String>> = split_top(head, ',')
