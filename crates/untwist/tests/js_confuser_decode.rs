@@ -161,6 +161,8 @@ fn a_patched_iterator_keeps_flatten_in_the_default_lane_only() {
     assert!(default_lane(&source).contains("_flat_twice("));
     assert!(!unsafe_lane(&source).contains("_flat_twice("));
 }
+
+#[test]
 fn a_custom_string_encoding_decodes_by_evaluation_in_both_lanes() {
     let source = named(&fixtures(), "custom-encoding.js");
     for code in [default_lane(&source), unsafe_lane(&source)] {
