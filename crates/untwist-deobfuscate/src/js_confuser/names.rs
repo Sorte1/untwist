@@ -3,15 +3,51 @@ use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
 use rustc_hash::FxHashMap;
 
-use super::tokens::Key;
+use oxc_syntax::symbol::SymbolId;
+use untwist_eval::fold::Const;
+
+use super::tokens::{Key, Literals, Token};
 
 pub(super) struct Names {
     keys: FxHashMap<u32, Key>,
+    literals: Option<(Key, Vec<Option<Vec<Token>>>)>,
+}
+
+fn literal_tokens(value: &Const) -> Option<Vec<Token>> {
+    match value {
+        Const::Num(n) if *n > 0.0 || (*n == 0.0 && n.is_sign_positive()) => {
+            Some(vec![Token::Num(n.to_bits())])
+        }
+        Const::Num(n) if *n < 0.0 => Some(vec![
+            Token::Punct("-".to_string()),
+            Token::Num((-n).to_bits()),
+        ]),
+        Const::Str(text) => Some(vec![Token::Str(text.encode_utf16().collect())]),
+        Const::Bool(true) => Some(vec![Token::Word("true")]),
+        Const::Bool(false) => Some(vec![Token::Word("false")]),
+        Const::Null => Some(vec![Token::Word("null")]),
+        Const::Undefined => Some(vec![Token::Word("void"), Token::Num(0f64.to_bits())]),
+        _ => None,
+    }
 }
 
 impl Names {
     pub(super) fn resolve(&self, start: u32) -> Option<Key> {
         self.keys.get(&start).copied()
+    }
+
+    pub(super) fn literals(&self) -> Option<Literals<'_>> {
+        self.literals
+            .as_ref()
+            .map(|(key, values)| Literals { key: *key, values })
+    }
+
+    pub(super) fn with_literals(mut self, array: SymbolId, values: &[Const]) -> Self {
+        self.literals = Some((
+            Key::Binding(array.index() as u32),
+            values.iter().map(literal_tokens).collect(),
+        ));
+        self
     }
 }
 
@@ -52,5 +88,8 @@ pub(super) fn names(program: &Program<'_>, scoping: &Scoping) -> Names {
         keys: FxHashMap::default(),
     };
     collect.visit_program(program);
-    Names { keys: collect.keys }
+    Names {
+        keys: collect.keys,
+        literals: None,
+    }
 }

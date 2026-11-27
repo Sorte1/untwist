@@ -350,12 +350,120 @@ pub enum Key {
     Free,
 }
 
-pub fn canonical(
+pub struct Literals<'k> {
+    pub key: Key,
+    pub values: &'k [Option<Vec<Token>>],
+}
+
+fn ends_operand(token: Option<&(Token, u32)>) -> bool {
+    matches!(token, Some((Token::Name(_), _)))
+        || matches!(token, Some((Token::Punct(p), _)) if p == ")" || p == "]")
+}
+
+fn property_name(tokens: &[Token]) -> Option<String> {
+    let [Token::Str(units)] = tokens else {
+        return None;
+    };
+    let name = String::from_utf16(units).ok()?;
+    let mut chars = name.chars();
+    let named = chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == '_' || c == '$')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$');
+    (named && !KEYWORDS.contains(&name.as_str())).then_some(name)
+}
+
+fn inline_literals(
+    raw: Vec<(Token, u32)>,
+    base: u32,
+    resolve: &dyn Fn(u32) -> Option<Key>,
+    literals: &Literals<'_>,
+) -> Vec<(Token, u32)> {
+    let mut out: Vec<(Token, u32)> = Vec::with_capacity(raw.len());
+    let mut at = 0;
+    while at < raw.len() {
+        let value = match (&raw[at], raw.get(at + 1), raw.get(at + 2), raw.get(at + 3)) {
+            (
+                (Token::Name(_), start),
+                Some((Token::Punct(open), _)),
+                Some((Token::Num(bits), _)),
+                Some((Token::Punct(close), _)),
+            ) if open == "["
+                && close == "]"
+                && resolve(base + start) == Some(literals.key)
+                && !matches!(out.last(), Some((Token::Punct(p), _)) if p == "." || p == "?.") =>
+            {
+                let index = f64::from_bits(*bits);
+                (index.fract() == 0.0 && index >= 0.0)
+                    .then(|| literals.values.get(index as usize).cloned().flatten())
+                    .flatten()
+            }
+            _ => None,
+        };
+        let Some(value) = value else {
+            out.push(raw[at].clone());
+            at += 1;
+            continue;
+        };
+        let start = raw[at].1;
+        let member = matches!(out.last(), Some((Token::Punct(p), _)) if p == "[")
+            && ends_operand(out.len().checked_sub(2).and_then(|i| out.get(i)))
+            && matches!(raw.get(at + 4), Some((Token::Punct(p), _)) if p == "]");
+        match property_name(&value).filter(|_| member) {
+            Some(name) => {
+                out.pop();
+                out.push((Token::Punct(".".to_string()), start));
+                out.push((Token::Name(name), start));
+                at += 5;
+            }
+            None => {
+                out.extend(value.into_iter().map(|token| (token, start)));
+                at += 4;
+            }
+        }
+    }
+    out
+}
+
+pub fn dotted(tokens: Vec<Token>) -> Vec<Token> {
+    let mut out: Vec<Token> = Vec::with_capacity(tokens.len());
+    let mut at = 0;
+    while at < tokens.len() {
+        let operand = matches!(out.last(), Some(Token::Name(_)))
+            || matches!(out.last(), Some(Token::Punct(p)) if p == ")" || p == "]");
+        let name = match (&tokens[at], tokens.get(at + 1), tokens.get(at + 2)) {
+            (Token::Punct(open), Some(key @ Token::Str(_)), Some(Token::Punct(close)))
+                if operand && open == "[" && close == "]" =>
+            {
+                property_name(std::slice::from_ref(key))
+            }
+            _ => None,
+        };
+        match name {
+            Some(name) => {
+                out.push(Token::Punct(".".to_string()));
+                out.push(Token::Name(name));
+                at += 3;
+            }
+            None => {
+                out.push(tokens[at].clone());
+                at += 1;
+            }
+        }
+    }
+    out
+}
+
+pub fn canonical_in(
     text: &str,
     base: u32,
     resolve: &dyn Fn(u32) -> Option<Key>,
+    literals: Option<&Literals<'_>>,
 ) -> Option<Vec<Token>> {
-    let raw = lex(text)?;
+    let raw = match literals {
+        Some(literals) => inline_literals(lex(text)?, base, resolve, literals),
+        None => lex(text)?,
+    };
     let mut bindings: FxHashMap<u32, usize> = FxHashMap::default();
     let mut labels: FxHashMap<String, usize> = FxHashMap::default();
     let mut tokens: Vec<Token> = Vec::with_capacity(raw.len());
@@ -415,7 +523,7 @@ mod tests {
                 }
             }
         };
-        canonical(text, 0, &resolve).unwrap()
+        canonical_in(text, 0, &resolve, None).unwrap()
     }
 
     #[test]
@@ -443,7 +551,7 @@ mod tests {
 
     #[test]
     fn unresolved_positions_keep_their_text() {
-        let tokens = canonical("({ key: 1 })", 0, &|_| None).unwrap();
+        let tokens = canonical_in("({ key: 1 })", 0, &|_| None, None).unwrap();
         assert_eq!(render(&tokens), "( { key : 1 } )");
     }
 

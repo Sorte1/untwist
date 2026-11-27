@@ -65,6 +65,17 @@ All notable changes to this project are documented in this file. The format is b
   `with`; a `void f;` statement goes with `f`.
 - With `--rename smart`, a binding exported as `module.exports = { key: f }`, `exports.key = f` or
   `module.exports.key = f` takes the key as its name.
+- js-confuser presets: string concealing decodes when the presets' minify, moved declarations,
+  duplicate-literal array and AST scrambler have rewritten its machinery. Reads of the
+  duplicate-literal array are read as their literals when the templates are matched; a decoder that
+  no longer matches the base91 template is run in the sandboxed evaluator with `bufferToString`
+  standing in as a byte collector, and its bytes are read as UTF-8 the way `TextDecoder` reads
+  them. The prelude whose declarations moved to the top `var` list is accepted when its
+  `getGlobal` matches the template, each prelude variable is written once in one statement,
+  `bufferToString` reads `TextDecoder` and `Uint8Array` from the `getGlobal` result, and nothing
+  outside the prelude reads them. A getter and decoder moved into a function's parameters
+  (`if (!g) { g = function (...) {...} }`) decode when every call of that function passes fewer
+  arguments than the moved parameters' positions and the function does not read `arguments`.
 - `dead-code` folds int32 opaque predicates by tracking which bits of a `const` are known through
   `& | ^ ~ + - << >> >>>` and `Math.imul`, for example `(Math.imul(s | 1, (s | 1) + 1) & 1) === 0`
   when only some bits of `s` are known; a test that the low unknown bits decide is tried for every

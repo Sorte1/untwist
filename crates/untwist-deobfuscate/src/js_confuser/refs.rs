@@ -17,7 +17,38 @@ pub(super) struct Ref {
 pub(super) struct Call {
     pub(super) span: Span,
     pub(super) args: Vec<Option<Const>>,
+    pub(super) indexed: Vec<Option<(SymbolId, f64)>>,
     pub(super) spread: bool,
+}
+
+impl Call {
+    pub(super) fn resolved(&self, array: Option<(SymbolId, &[Const])>) -> Vec<Option<Const>> {
+        self.args
+            .iter()
+            .zip(&self.indexed)
+            .map(|(arg, indexed)| match (arg, indexed, array) {
+                (Some(value), _, _) => Some(value.clone()),
+                (None, Some((symbol, index)), Some((array, values)))
+                    if *symbol == array && index.fract() == 0.0 && *index >= 0.0 =>
+                {
+                    values.get(*index as usize).cloned()
+                }
+                _ => None,
+            })
+            .collect()
+    }
+}
+
+fn indexed_read(expr: &Expression<'_>, scoping: &Scoping) -> Option<(SymbolId, f64)> {
+    match expr.without_parentheses() {
+        Expression::ComputedMemberExpression(member) => match &member.expression {
+            Expression::NumericLiteral(index) => {
+                Some((symbol_of(&member.object, scoping)?, index.value))
+            }
+            _ => None,
+        },
+        _ => None,
+    }
 }
 
 #[derive(Default)]
@@ -47,12 +78,17 @@ impl Refs<'_> {
 
 pub(super) fn literal_value(expr: &Expression<'_>) -> Option<Const> {
     match expr.without_parentheses() {
-        Expression::UnaryExpression(unary) if unary.operator == UnaryOperator::UnaryNegation => {
-            match const_from_literal(&unary.argument)? {
+        Expression::UnaryExpression(unary) => match (unary.operator, &unary.argument) {
+            (UnaryOperator::UnaryNegation, argument) => match const_from_literal(argument)? {
                 Const::Num(n) => Some(Const::Num(-n)),
                 _ => None,
+            },
+            (UnaryOperator::LogicalNot, Expression::NumericLiteral(n)) => {
+                Some(Const::Bool(n.value == 0.0 || n.value.is_nan()))
             }
-        }
+            (UnaryOperator::Void, Expression::NumericLiteral(_)) => Some(Const::Undefined),
+            _ => None,
+        },
         other => const_from_literal(other),
     }
 }
@@ -112,9 +148,18 @@ impl<'p> VisitJs<'p> for RefScan<'_, 'p> {
                 .iter()
                 .map(|a| a.as_expression().and_then(literal_value))
                 .collect();
+            let indexed = it
+                .arguments
+                .iter()
+                .map(|a| {
+                    a.as_expression()
+                        .and_then(|e| indexed_read(e, self.scoping))
+                })
+                .collect();
             self.refs.calls.entry(symbol).or_default().push(Call {
                 span: it.span,
                 args,
+                indexed,
                 spread,
             });
         }
@@ -241,6 +286,62 @@ pub(super) struct Judged {
     pub(super) reach: crate::calls::agnostic::GlobalReach,
 }
 
+fn var_initialisers<'a>(
+    program: &Program<'a>,
+    scoping: &Scoping,
+    cx: &untwist_core::pass::Cx<'a, '_>,
+) -> untwist_core::ast_util::edit::StmtEdits<'a> {
+    use oxc_allocator::{CloneIn, GetAllocator};
+    use oxc_syntax::symbol::SymbolFlags;
+    let mut edits = untwist_core::ast_util::edit::StmtEdits::new();
+    let root = scoping.root_scope_id();
+    for statement in &program.body {
+        let Statement::ExpressionStatement(expression) = statement else {
+            continue;
+        };
+        let Expression::AssignmentExpression(assign) = &expression.expression else {
+            continue;
+        };
+        let AssignmentTarget::AssignmentTargetIdentifier(target) = &assign.left else {
+            continue;
+        };
+        let symbol = target
+            .reference_id
+            .get()
+            .and_then(|id| scoping.get_reference(id).symbol_id());
+        let var = symbol.is_some_and(|symbol| {
+            scoping.symbol_scope_id(symbol) == root
+                && scoping
+                    .symbol_flags(symbol)
+                    .contains(SymbolFlags::FunctionScopedVariable)
+        });
+        if assign.operator != oxc_syntax::operator::AssignmentOperator::Assign || !var {
+            continue;
+        }
+        let name = oxc_str::Ident::from_str_in(target.name.as_str(), cx.ast());
+        let pattern = BindingPattern::new_binding_identifier(target.span, name, cx.ast());
+        let value = assign.right.clone_in(cx.allocator());
+        let mut declarators = oxc_allocator::Vec::new_in(cx.ast());
+        declarators.push(VariableDeclarator::new(
+            target.span,
+            pattern,
+            None,
+            Some(value),
+            false,
+            cx.ast(),
+        ));
+        let declaration = Statement::new_variable_declaration(
+            statement.span(),
+            VariableDeclarationKind::Var,
+            declarators,
+            false,
+            cx.ast(),
+        );
+        edits.replace(statement.span(), vec![declaration]);
+    }
+    edits
+}
+
 pub(super) fn judge_replaced<'a>(
     program: &Program<'a>,
     cx: &untwist_core::pass::Cx<'a, '_>,
@@ -272,6 +373,11 @@ pub(super) fn judge_replaced<'a>(
     }
     stripped.apply(&mut clone, alloc, &mut scoping);
     let mut scoping = SemanticBuilder::new().build(&clone).semantic.into_scoping();
+    let declared = var_initialisers(&clone, &scoping, cx);
+    if !declared.is_empty() {
+        declared.apply(&mut clone, alloc, &mut scoping);
+        scoping = SemanticBuilder::new().build(&clone).semantic.into_scoping();
+    }
     if let Some((inlined, restored)) = super::dispatcher::undone(&clone, &scoping, cx) {
         clone = inlined;
         scoping = restored;

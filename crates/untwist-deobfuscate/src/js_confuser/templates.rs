@@ -1,7 +1,7 @@
 use oxc_span::Span;
 
 use super::names::Names;
-use super::tokens::{canonical, render, Token};
+use super::tokens::{canonical_in, dotted, render, Token};
 
 const TABLE: &str = "%TABLE%";
 
@@ -21,6 +21,15 @@ const GETTERS: [&str; 2] = [
     include_str!("templates/getter-plain.txt"),
     include_str!("templates/getter-minify.txt"),
 ];
+
+const MOVED_GETTERS: [&str; 2] = [
+    include_str!("templates/getter-moved-plain.txt"),
+    include_str!("templates/getter-moved-minify.txt"),
+];
+
+const BUFFER_TO_STRING: [&str; 1] = [include_str!("templates/buffer-to-string-minify.txt")];
+
+const MOVED_GET_GLOBALS: [&str; 1] = [include_str!("templates/getglobal-moved.txt")];
 
 const GET_GLOBALS: [&str; 3] = [
     include_str!("templates/getglobal-plain.txt"),
@@ -44,10 +53,11 @@ fn slice(source: &str, span: Span) -> &str {
 
 pub(super) fn canonical_text(source: &str, span: Span, names: &Names) -> Option<String> {
     let resolve = |start: u32| names.resolve(start);
-    Some(render(&canonical(
+    Some(render(&canonical_in(
         slice(source, span),
         span.start,
         &resolve,
+        names.literals().as_ref(),
     )?))
 }
 
@@ -81,9 +91,37 @@ pub fn matches_getter(source: &str, span: Span, names: &Names) -> bool {
     listed(&GETTERS, canonical_text(source, span, names))
 }
 
+fn dotted_text(source: &str, span: Span, names: &Names) -> Option<String> {
+    let resolve = |start: u32| names.resolve(start);
+    let tokens = canonical_in(
+        slice(source, span),
+        span.start,
+        &resolve,
+        names.literals().as_ref(),
+    )?;
+    Some(render(&dotted(tokens)))
+}
+
+pub fn matches_moved_getter(source: &str, span: Span, names: &Names) -> bool {
+    listed(&MOVED_GETTERS, dotted_text(source, span, names))
+}
+
+pub fn matches_buffer_to_string(source: &str, span: Span, names: &Names) -> bool {
+    listed(&BUFFER_TO_STRING, dotted_text(source, span, names))
+}
+
+pub fn matches_moved_get_global(source: &str, span: Span, names: &Names) -> bool {
+    listed(&MOVED_GET_GLOBALS, dotted_text(source, span, names))
+}
+
 pub(super) fn decoder_shape(source: &str, span: Span, names: &Names) -> Option<(String, Vec<u16>)> {
     let resolve = |start: u32| names.resolve(start);
-    let mut tokens = canonical(slice(source, span), span.start, &resolve)?;
+    let mut tokens = canonical_in(
+        slice(source, span),
+        span.start,
+        &resolve,
+        names.literals().as_ref(),
+    )?;
     let at = tokens.iter().position(|t| matches!(t, Token::Str(_)))?;
     let Token::Str(table) = std::mem::replace(&mut tokens[at], Token::Name(TABLE.to_string()))
     else {
