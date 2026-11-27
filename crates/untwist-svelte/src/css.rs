@@ -1,10 +1,44 @@
-pub fn restore(code: &str, hash: &str) -> Option<String> {
-    let code = strip_unused(code)?;
+use std::cell::RefCell;
+
+use crate::scope::El;
+
+struct Sheet<'e> {
+    hash: &'e str,
+    elements: &'e [El],
+    locals: RefCell<Vec<Vec<String>>>,
+    reason: RefCell<Option<&'static str>>,
+}
+
+const PARSE: &str = "a style sheet that does not parse";
+const GLOBAL: &str = "a style selector whose :global parts cannot be told apart";
+const COVER: &str = "a scoped element that the restored style would not match";
+
+pub fn restore(
+    code: &str,
+    hash: &str,
+    elements: &[El],
+    scoped: &[El],
+) -> Result<String, &'static str> {
+    let code = strip_unused(code).ok_or(PARSE)?;
     let code = global_frames(&code, hash);
     let code = code.replace(&format!("{hash}-"), "");
+    let sheet = Sheet {
+        hash,
+        elements,
+        locals: RefCell::default(),
+        reason: RefCell::default(),
+    };
     let mut out = String::new();
-    block(&code, hash, 1, &mut out)?;
-    (!out.contains(hash)).then_some(out)
+    if block(&code, &sheet, 1, &mut out).is_none() {
+        return Err(sheet.reason.take().unwrap_or(PARSE));
+    }
+    if out.contains(hash) {
+        return Err(PARSE);
+    }
+    match sheet.covers(scoped) {
+        true => Ok(out),
+        false => Err(COVER),
+    }
 }
 
 fn global_frames(code: &str, hash: &str) -> String {
@@ -84,7 +118,7 @@ fn matching(text: &str, open: usize) -> Option<usize> {
     None
 }
 
-fn block(text: &str, hash: &str, depth: usize, out: &mut String) -> Option<()> {
+fn block(text: &str, sheet: &Sheet<'_>, depth: usize, out: &mut String) -> Option<()> {
     let pad = "\t".repeat(depth);
     let mut rest = text.trim();
     while !rest.is_empty() {
@@ -102,7 +136,7 @@ fn block(text: &str, hash: &str, depth: usize, out: &mut String) -> Option<()> {
         {
             out.push_str(&format!("{pad}{head} {{\n"));
             let mut inner = String::new();
-            block(body, hash, depth + 1, &mut inner)?;
+            block(body, sheet, depth + 1, &mut inner)?;
             out.push_str(&inner);
             out.push_str(&format!("\n{pad}}}"));
         } else if head.starts_with("@keyframes")
@@ -124,7 +158,7 @@ fn block(text: &str, hash: &str, depth: usize, out: &mut String) -> Option<()> {
         } else {
             let selectors: Option<Vec<String>> = split_top(head, ',')
                 .into_iter()
-                .map(|selector| complex(selector.trim(), hash))
+                .map(|selector| sheet.complex(selector.trim()))
                 .collect();
             out.push_str(&format!(
                 "{pad}{} {{\n",
@@ -169,78 +203,206 @@ fn declarations(text: &str, depth: usize, out: &mut String) {
     out.push_str(&lines.join("\n"));
 }
 
-fn complex(selector: &str, hash: &str) -> Option<String> {
-    let mut out = String::new();
-    let mut compound = String::new();
-    let mut depth = 0i32;
-    let mut pending: Option<String> = None;
-    let flush =
-        |compound: &mut String, out: &mut String, pending: &mut Option<String>| -> Option<()> {
-            if compound.is_empty() {
-                return Some(());
-            }
-            if let Some(combinator) = pending.take() {
-                out.push_str(&combinator);
-            }
-            out.push_str(&scoped(compound, hash)?);
-            compound.clear();
-            Some(())
-        };
-    for c in selector.chars() {
-        match c {
-            '(' | '[' => {
-                depth += 1;
-                compound.push(c);
-            }
-            ')' | ']' => {
-                depth -= 1;
-                compound.push(c);
-            }
-            '>' | '+' | '~' if depth == 0 => {
-                flush(&mut compound, &mut out, &mut pending)?;
-                pending = Some(format!(" {c} "));
-            }
-            c if c.is_whitespace() && depth == 0 => {
-                flush(&mut compound, &mut out, &mut pending)?;
-                if pending.is_none() && !out.is_empty() {
-                    pending = Some(" ".to_string());
+impl Sheet<'_> {
+    fn complex(&self, selector: &str) -> Option<String> {
+        let mut out = String::new();
+        let mut compound = String::new();
+        let mut depth = 0i32;
+        let mut pending: Option<String> = None;
+        let flush =
+            |compound: &mut String, out: &mut String, pending: &mut Option<String>| -> Option<()> {
+                if compound.is_empty() {
+                    return Some(());
                 }
+                if let Some(combinator) = pending.take() {
+                    out.push_str(&combinator);
+                }
+                out.push_str(&self.scoped(compound)?);
+                compound.clear();
+                Some(())
+            };
+        for c in selector.chars() {
+            match c {
+                '(' | '[' => {
+                    depth += 1;
+                    compound.push(c);
+                }
+                ')' | ']' => {
+                    depth -= 1;
+                    compound.push(c);
+                }
+                '>' | '+' | '~' if depth == 0 => {
+                    flush(&mut compound, &mut out, &mut pending)?;
+                    pending = Some(format!(" {c} "));
+                }
+                c if c.is_whitespace() && depth == 0 => {
+                    flush(&mut compound, &mut out, &mut pending)?;
+                    if pending.is_none() && !out.is_empty() {
+                        pending = Some(" ".to_string());
+                    }
+                }
+                _ => compound.push(c),
             }
-            _ => compound.push(c),
         }
+        flush(&mut compound, &mut out, &mut pending)?;
+        let out = out.trim_start().to_string();
+        (!out.is_empty()).then_some(out)
     }
-    flush(&mut compound, &mut out, &mut pending)?;
-    (!out.is_empty()).then_some(out)
+
+    fn is_mark(&self, part: &str) -> bool {
+        part.strip_prefix('.') == Some(self.hash)
+            || part
+                .strip_prefix(":where(.")
+                .and_then(|rest| rest.strip_suffix(')'))
+                == Some(self.hash)
+    }
+
+    fn scoped(&self, compound: &str) -> Option<String> {
+        let parts = parts(compound);
+        let Some(at) = parts.iter().position(|part| self.is_mark(part)) else {
+            return self.unscoped(&parts);
+        };
+        let after: Vec<&str> = parts[at + 1..]
+            .iter()
+            .copied()
+            .filter(|part| !self.is_mark(part))
+            .collect();
+        let twice = after.len() + at + 1 < parts.len();
+        let head = self.before(&parts[..at])?;
+        let tail = self.after(&after, twice)?;
+        Some(format!("{head}{tail}"))
+    }
+
+    fn unscoped(&self, parts: &[&str]) -> Option<String> {
+        if !parts.iter().any(|part| part.contains(self.hash)) {
+            return Some(format!(":global({})", parts.concat()));
+        }
+        let mut out = String::new();
+        let mut group = String::new();
+        for part in parts {
+            match self.functional(part)? {
+                Some(text) => {
+                    push_global(&mut out, &mut group, true);
+                    out.push_str(&text);
+                }
+                None => group.push_str(part),
+            }
+        }
+        push_global(&mut out, &mut group, true);
+        Some(out)
+    }
+
+    fn before(&self, parts: &[&str]) -> Option<String> {
+        if parts.len() < 2 {
+            let mut text = String::new();
+            for part in parts {
+                text.push_str(&self.functional(part)?.unwrap_or_else(|| part.to_string()));
+            }
+            self.locals
+                .borrow_mut()
+                .push(parts.iter().map(|part| part.to_string()).collect());
+            return Some(if text.is_empty() {
+                "*".to_string()
+            } else {
+                text
+            });
+        }
+        if parts.iter().any(|part| part.starts_with(':')) {
+            return self.refuse();
+        }
+        let carried: Vec<bool> = parts
+            .iter()
+            .map(|part| self.elements.iter().any(|el| el.carries(part)))
+            .collect();
+        let global = carried.iter().take_while(|carried| !**carried).count();
+        if global == parts.len() || carried[global..].iter().any(|carried| !carried) {
+            return self.refuse();
+        }
+        self.locals.borrow_mut().push(
+            parts[global..]
+                .iter()
+                .map(|part| part.to_string())
+                .collect(),
+        );
+        Some(match global {
+            0 => parts.concat(),
+            _ => format!(
+                ":global({}){}",
+                parts[..global].concat(),
+                parts[global..].concat()
+            ),
+        })
+    }
+
+    fn after(&self, parts: &[&str], twice: bool) -> Option<String> {
+        let mut out = String::new();
+        let mut group = String::new();
+        for part in parts {
+            match self.functional(part)? {
+                Some(text) => {
+                    let wrap = !twice && has_simple(&group);
+                    push_global(&mut out, &mut group, wrap);
+                    out.push_str(&text);
+                }
+                None => group.push_str(part),
+            }
+        }
+        let wrap = !twice && has_simple(&group);
+        push_global(&mut out, &mut group, wrap);
+        Some(out)
+    }
+
+    fn functional(&self, part: &str) -> Option<Option<String>> {
+        let Some(name) = [":is(", ":where(", ":has("]
+            .into_iter()
+            .find(|name| part.starts_with(name))
+        else {
+            return Some(None);
+        };
+        if self.is_mark(part) || !part.ends_with(')') {
+            return Some(None);
+        }
+        let inner = &part[name.len()..part.len() - 1];
+        let args: Option<Vec<String>> = split_top(inner, ',')
+            .into_iter()
+            .map(str::trim)
+            .filter(|arg| !arg.is_empty())
+            .map(|arg| self.complex(arg))
+            .collect();
+        let args = args?;
+        if args.is_empty() {
+            return self.refuse();
+        }
+        Some(Some(format!("{name}{})", args.join(", "))))
+    }
+
+    fn refuse<T>(&self) -> Option<T> {
+        self.reason.replace(Some(GLOBAL));
+        None
+    }
+
+    fn covers(&self, scoped: &[El]) -> bool {
+        let locals = self.locals.borrow();
+        scoped.iter().all(|el| {
+            locals
+                .iter()
+                .any(|parts| parts.iter().all(|part| el.carries(part)))
+        })
+    }
 }
 
-fn scoped(compound: &str, hash: &str) -> Option<String> {
-    let class = format!(".{hash}");
-    let wrapped = format!(":where({class})");
-    let found = [&wrapped, &class]
-        .into_iter()
-        .filter_map(|marker| compound.find(marker.as_str()).map(|at| (at, marker.len())))
-        .min();
-    let Some((at, len)) = found else {
-        return Some(format!(":global({compound})"));
-    };
-    let before = &compound[..at];
-    let after = &compound[at + len..];
-    let before = if before.is_empty() { "*" } else { before };
-    if after.contains(hash) {
-        let bare = compound.replace(&wrapped, "").replace(&class, "");
-        return Some(if bare.is_empty() {
-            "*".to_string()
-        } else {
-            bare
-        });
+fn push_global(out: &mut String, group: &mut String, wrap: bool) {
+    if group.is_empty() {
+        return;
     }
-    match simple_outside_parens(after) {
-        true => Some(format!("{before}:global({after})")),
-        false => Some(format!("{before}{after}")),
+    match wrap {
+        true => out.push_str(&format!(":global({group})")),
+        false => out.push_str(group),
     }
+    group.clear();
 }
 
-fn simple_outside_parens(text: &str) -> bool {
+fn has_simple(text: &str) -> bool {
     let mut depth = 0i32;
     for c in text.chars() {
         match c {
@@ -253,9 +415,69 @@ fn simple_outside_parens(text: &str) -> bool {
     false
 }
 
+fn parts(compound: &str) -> Vec<&str> {
+    let mut out = Vec::new();
+    let mut start = 0;
+    let mut depth = 0i32;
+    let mut quote: Option<char> = None;
+    let mut escaped = false;
+    let mut previous = '\0';
+    for (index, c) in compound.char_indices() {
+        let split = match (escaped, quote, c) {
+            (true, _, _) => {
+                escaped = false;
+                false
+            }
+            (_, _, '\\') => {
+                escaped = true;
+                false
+            }
+            (_, Some(q), _) => {
+                if c == q {
+                    quote = None;
+                }
+                false
+            }
+            (_, None, '"' | '\'') => {
+                quote = Some(c);
+                false
+            }
+            (_, None, '(' | '[') => {
+                depth += 1;
+                c == '[' && depth == 1
+            }
+            (_, None, ')' | ']') => {
+                depth -= 1;
+                false
+            }
+            (_, None, '.' | '#') => depth == 0,
+            (_, None, ':') => depth == 0 && previous != ':',
+            _ => false,
+        };
+        if split && index > start {
+            out.push(&compound[start..index]);
+            start = index;
+        }
+        previous = c;
+    }
+    if start < compound.len() {
+        out.push(&compound[start..]);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
-    use super::restore;
+    use crate::scope::El;
+
+    fn restore(code: &str, hash: &str) -> Option<String> {
+        super::restore(code, hash, &[], &[]).ok()
+    }
+
+    fn el(name: &str, attrs: &[&str]) -> El {
+        let attrs: Vec<String> = attrs.iter().map(|attr| attr.to_string()).collect();
+        El::of(name, &attrs).unwrap()
+    }
 
     #[test]
     fn removes_the_hash_and_wraps_unscoped_compounds() {
@@ -313,5 +535,79 @@ mod tests {
         )
         .is_none());
         assert!(restore(".box.svelte-x {.q {right:1px;}}", "svelte-x").is_none());
+    }
+
+    #[test]
+    fn a_leading_part_no_element_carries_came_from_global() {
+        let elements = [el("div", &["class=\"b\""])];
+        let css = super::restore(
+            ".dyn.b.svelte-x {color:teal;}",
+            "svelte-x",
+            &elements,
+            &elements,
+        )
+        .unwrap();
+        assert!(css.contains(":global(.dyn).b {"), "{css}");
+        let css = super::restore(
+            "#app.b.svelte-x {color:teal;}",
+            "svelte-x",
+            &elements,
+            &elements,
+        )
+        .unwrap();
+        assert!(css.contains(":global(#app).b {"), "{css}");
+        let both = [el("div", &["class=\"dyn b\""])];
+        let css =
+            super::restore(".dyn.b.svelte-x {color:teal;}", "svelte-x", &both, &both).unwrap();
+        assert!(css.contains("\t.dyn.b {"), "{css}");
+    }
+
+    #[test]
+    fn a_scoped_element_the_restored_selectors_miss_is_refused() {
+        let elements = [
+            el("div", &["class=\"dyn b\""]),
+            el("span", &["class=\"b\""]),
+        ];
+        assert!(super::restore(
+            ".dyn.b.svelte-x {color:teal;}",
+            "svelte-x",
+            &elements,
+            &elements
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn a_part_no_element_carries_after_a_carried_one_is_refused() {
+        let elements = [el("div", &["class=\"b\""])];
+        assert!(
+            super::restore(".b.dyn.svelte-x {color:teal;}", "svelte-x", &elements, &[]).is_err()
+        );
+    }
+
+    #[test]
+    fn unscoped_compounds_inside_has_is_and_where_came_from_global() {
+        let css = restore(
+            "p.svelte-x:has(.x) {top:0}p.svelte-x:has(> .x) {top:1px}p.svelte-x:where(.x) {top:2px}span.svelte-x:is(.z /* (unused) .w*/) {top:3px}",
+            "svelte-x",
+        )
+        .unwrap();
+        assert!(css.contains("p:has(:global(.x)) {"), "{css}");
+        assert!(css.contains("p:has(> :global(.x)) {"), "{css}");
+        assert!(css.contains("p:where(:global(.x)) {"), "{css}");
+        assert!(css.contains("span:is(:global(.z)) {"), "{css}");
+    }
+
+    #[test]
+    fn scoped_compounds_inside_has_and_is_stay_scoped() {
+        let css = restore(
+            "p.svelte-x:has(> .x:where(.svelte-x), b:where(.svelte-x)) {top:0}:is(p:where(.svelte-x)) span.svelte-x {top:1px}i.svelte-x.zz:is(.z:where(.svelte-x)) {top:2px}p.svelte-x .x:has(b:where(.svelte-x)) {top:3px}",
+            "svelte-x",
+        )
+        .unwrap();
+        assert!(css.contains("p:has(> .x, b) {"), "{css}");
+        assert!(css.contains(":is(p) span {"), "{css}");
+        assert!(css.contains("i:global(.zz):is(.z) {"), "{css}");
+        assert!(css.contains("p :global(.x):has(b) {"), "{css}");
     }
 }

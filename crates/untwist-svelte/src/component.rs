@@ -150,6 +150,7 @@ impl<'a, 's> Shared<'a, 's> {
                 .map(|(function, name)| (function.span, name.clone()))
                 .collect(),
             consumed: Default::default(),
+            scoped: Default::default(),
         }
     }
 
@@ -766,8 +767,8 @@ impl<'a, 's> Shared<'a, 's> {
         nodes.extend(markup);
         out.push_str(&print(&nodes));
         if let Some(css) = parts.css {
-            let code =
-                css::restore(&css.code, &css.hash).ok_or("a style sheet that does not parse")?;
+            let elements = crate::scope::elements(&nodes);
+            let code = css::restore(&css.code, &css.hash, &elements, &cx.scoped.borrow())?;
             out.push_str(&format!("\n<style>\n{code}\n</style>\n"));
         }
         Ok(out)

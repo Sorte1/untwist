@@ -46,6 +46,7 @@ pub struct Cx<'a, 's> {
     pub specials: RefCell<Vec<(&'static str, String)>>,
     pub components: Vec<(Span, String)>,
     pub consumed: RefCell<FxHashSet<SymbolId>>,
+    pub scoped: RefCell<Vec<crate::scope::El>>,
 }
 
 enum DKind {
@@ -67,6 +68,8 @@ struct DNode {
     children: Vec<usize>,
     attrs: Vec<String>,
     fill: Option<Fill>,
+    scoped: bool,
+    late: bool,
 }
 
 pub struct Body {
@@ -379,6 +382,8 @@ impl<'a, 's> Cx<'a, 's> {
                 children: Vec::new(),
                 attrs: Vec::new(),
                 fill: None,
+                scoped: false,
+                late: false,
             });
             body.refs.insert(seed, 0);
         }
@@ -504,6 +509,7 @@ impl<'a, 's> Cx<'a, 's> {
 
     fn add(&self, body: &mut Body, node: &Node, parent: Option<usize>, svg: bool) -> usize {
         let id = body.dom.len();
+        let scoped = matches!(node, Node::Element(element) if self.has_hash(&element.attrs));
         let (kind, attrs, children) = match node {
             Node::Element(element) => {
                 let svg = svg || element.name == "svg";
@@ -530,6 +536,8 @@ impl<'a, 's> Cx<'a, 's> {
             children: Vec::new(),
             attrs,
             fill: None,
+            scoped,
+            late: false,
         });
         if let Some((children, svg)) = children {
             let ids: Vec<usize> = children
@@ -539,6 +547,18 @@ impl<'a, 's> Cx<'a, 's> {
             body.dom[id].children = ids;
         }
         id
+    }
+
+    fn has_hash(&self, attrs: &[(String, Option<String>)]) -> bool {
+        let Some(hash) = self.hash.as_deref() else {
+            return false;
+        };
+        attrs.iter().any(|(name, value)| {
+            name == "class"
+                && value
+                    .as_deref()
+                    .is_some_and(|value| value.split_whitespace().any(|class| class == hash))
+        })
     }
 
     fn static_attr(&self, name: &str, value: Option<&str>) -> Option<String> {
@@ -569,6 +589,8 @@ impl<'a, 's> Cx<'a, 's> {
             children: Vec::new(),
             attrs: Vec::new(),
             fill: None,
+            scoped: false,
+            late: false,
         });
         let ids: Vec<usize> = nodes
             .iter()
@@ -842,6 +864,11 @@ impl<'a, 's> Cx<'a, 's> {
                     }
                     Some(_) => return fail("an element filled as text"),
                 };
+                if node.scoped {
+                    self.scoped
+                        .borrow_mut()
+                        .extend(crate::scope::El::of(name, &node.attrs));
+                }
                 Ok(vec![M::Element {
                     name: name.clone(),
                     attrs: node.attrs.clone(),
