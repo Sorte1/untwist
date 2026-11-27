@@ -372,6 +372,11 @@ fn check_source_map_target(args: &Args) -> Result<()> {
     if args.library_imports && args.output.is_none() {
         anyhow::bail!("--library-imports needs --output DIR, where the module files and package.json are written");
     }
+    if args.library_imports && args.single_file {
+        anyhow::bail!(
+            "--library-imports replaces module files, which --single-file does not write"
+        );
+    }
     Ok(())
 }
 

@@ -222,4 +222,17 @@ fn library_imports_needs_an_output_directory() {
     let out = stdin_output("a;", &["--library-imports"]);
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("--library-imports needs --output"));
+    let dir = tempfile::tempdir().expect("a temp dir");
+    let out_dir = dir.path().join("out");
+    let out = stdin_output(
+        "a;",
+        &[
+            "--library-imports",
+            "--single-file",
+            "-o",
+            &out_dir.to_string_lossy(),
+        ],
+    );
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("--single-file"));
 }
