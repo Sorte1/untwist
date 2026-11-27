@@ -12,6 +12,7 @@ pub enum Role {
     Wrapper,
     Export,
     Function,
+    Order,
 }
 
 impl Role {
@@ -21,6 +22,7 @@ impl Role {
             Role::Wrapper => "wrapper",
             Role::Export => "export",
             Role::Function => "function",
+            Role::Order => "order",
         }
     }
 
@@ -30,6 +32,7 @@ impl Role {
             Role::Wrapper => 'w',
             Role::Export => 'e',
             Role::Function => 'f',
+            Role::Order => 'o',
         }
     }
 
@@ -39,6 +42,7 @@ impl Role {
             "w" => Some(Role::Wrapper),
             "e" => Some(Role::Export),
             "f" => Some(Role::Function),
+            "o" => Some(Role::Order),
             _ => None,
         }
     }
@@ -50,6 +54,10 @@ pub fn loose_key(loose: (u32, u64)) -> u32 {
 
 pub fn exact_key(exact: u128) -> u64 {
     (exact >> 64) as u64 ^ exact as u64
+}
+
+pub fn order_key(loose: (u32, u64)) -> u64 {
+    mix(loose.1.rotate_left(17) ^ u64::from(loose.0))
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -121,6 +129,7 @@ pub struct Table {
     strings: Vec<String>,
     lists: Vec<Vec<u32>>,
     pub rows: Vec<Row>,
+    pub order: Vec<Row>,
     loose: rustc_hash::FxHashSet<u32>,
     exact: FxHashMap<u64, (u32, u32)>,
     collection: bool,
@@ -149,7 +158,9 @@ impl Table {
         Self::assemble(interner.strings, interner.lists, compact)
     }
 
-    fn assemble(strings: Vec<String>, lists: Vec<Vec<u32>>, mut rows: Vec<Row>) -> Self {
+    fn assemble(strings: Vec<String>, lists: Vec<Vec<u32>>, rows: Vec<Row>) -> Self {
+        let (mut order, mut rows): (Vec<Row>, Vec<Row>) =
+            rows.into_iter().partition(|row| row.role == Role::Order);
         rows.sort_by_key(|row| row.exact);
         let mut table = Table {
             strings,
@@ -157,6 +168,21 @@ impl Table {
             rows,
             ..Table::default()
         };
+        order.sort_by(|a, b| {
+            (
+                table.label(a),
+                table.module(a),
+                a.specific,
+                table.versions(a),
+            )
+                .cmp(&(
+                    table.label(b),
+                    table.module(b),
+                    b.specific,
+                    table.versions(b),
+                ))
+        });
+        table.order = order;
         table.loose.reserve(table.rows.len());
         table.exact.reserve(table.rows.len());
         table.collection = table.rows.iter().any(|row| row.collection);
@@ -186,7 +212,7 @@ impl Table {
                     .into_iter()
                     .map(|list| list.into_iter().map(|id| id + string_base).collect()),
             );
-            rows.extend(table.rows.into_iter().map(|row| Row {
+            rows.extend(table.rows.into_iter().chain(table.order).map(|row| Row {
                 label: row.label + string_base,
                 versions: row.versions + string_base,
                 module: row.module + string_base,
@@ -216,6 +242,7 @@ impl Table {
             .rows
             .into_iter()
             .filter(|row| !known.has_exact(row.exact))
+            .chain(self.order)
             .map(|row| Row {
                 collection: true,
                 ..row
@@ -315,8 +342,8 @@ impl Table {
             text.push_str(&ids.join(" "));
             text.push('\n');
         }
-        text.push_str(&format!("#rows\t{}\n", self.rows.len()));
-        for row in &self.rows {
+        text.push_str(&format!("#rows\t{}\n", self.rows.len() + self.order.len()));
+        for row in self.rows.iter().chain(&self.order) {
             text.push_str(&format!(
                 "{:08x}\t{:016x}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
                 row.loose,

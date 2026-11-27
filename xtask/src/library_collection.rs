@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 use untwist_rename::library::collection::{
     bloom_file, sha256_hex, Bloom, FileRef, Index, Package, Shard, INDEX, SCHEMA,
 };
-use untwist_rename::library::table::{RowData as Row, Table};
+use untwist_rename::library::table::{Role, RowData as Row, Table};
 use untwist_rename::library::SHAPE_EPOCH;
 
 use crate::library_table::{aggregate, process_build, read_manifest, Observed};
@@ -475,7 +475,12 @@ fn helper_like(row: &Row, helpers: &BTreeSet<String>) -> bool {
 fn table_rows(path: &Path) -> Result<Vec<Row>> {
     let table = Table::parse(&crate::library_gz::read(path)?)
         .with_context(|| format!("{} does not parse", path.display()))?;
-    Ok(table.rows.iter().map(|row| table.data(row)).collect())
+    Ok(table
+        .rows
+        .iter()
+        .chain(&table.order)
+        .map(|row| table.data(row))
+        .collect())
 }
 
 fn builtin_exact() -> BTreeSet<u64> {
@@ -485,7 +490,7 @@ fn builtin_exact() -> BTreeSet<u64> {
 
 pub(crate) fn shared_exact(rows: &[Row], limit: usize) -> BTreeSet<u64> {
     let mut labels: BTreeMap<u64, BTreeSet<&str>> = BTreeMap::new();
-    for row in rows {
+    for row in rows.iter().filter(|row| row.role != Role::Order) {
         labels.entry(row.exact).or_default().insert(&row.label);
     }
     labels
@@ -495,14 +500,17 @@ pub(crate) fn shared_exact(rows: &[Row], limit: usize) -> BTreeSet<u64> {
         .collect()
 }
 
+type MergeKey = (u64, String, String, String, Option<(u32, Option<String>)>);
+
 fn merged_rows(rows: Vec<Row>) -> Vec<Row> {
-    let mut merged: BTreeMap<(u64, String, String, String), Row> = BTreeMap::new();
+    let mut merged: BTreeMap<MergeKey, Row> = BTreeMap::new();
     for row in rows {
         let key = (
             row.exact,
             row.label.clone(),
             row.module.clone(),
             row.role.as_str().to_string(),
+            (row.role == Role::Order).then(|| (row.specific, row.own.clone())),
         );
         match merged.get_mut(&key) {
             Some(known) => {
@@ -696,7 +704,10 @@ fn pack(
     rows.retain(|row| !curated_labels.contains(row.label.as_str()));
     let total = rows.len();
     let known = |row: &Row| {
-        builtin.contains(&row.exact) || runtimes.contains(&row.exact) || helper_like(row, &helpers)
+        row.role != Role::Order
+            && (builtin.contains(&row.exact)
+                || runtimes.contains(&row.exact)
+                || helper_like(row, &helpers))
     };
     let (kept, dropped): (Vec<Row>, Vec<Row>) = rows
         .into_iter()
@@ -733,7 +744,11 @@ fn pack(
                 .unwrap_or_default(),
             curated: false,
         });
-        let loose: Vec<u32> = rows.iter().map(|row| row.loose).collect();
+        let loose: Vec<u32> = rows
+            .iter()
+            .filter(|row| row.role != Role::Order)
+            .map(|row| row.loose)
+            .collect();
         blooms.push((label.clone(), Bloom::with_keys(&loose)));
     }
     for table in curated {
