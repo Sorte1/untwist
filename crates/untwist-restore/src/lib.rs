@@ -1,5 +1,6 @@
 pub mod fingerprint;
 pub mod html;
+pub mod region;
 pub mod table;
 pub mod text;
 

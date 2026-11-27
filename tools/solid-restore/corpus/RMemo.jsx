@@ -1,0 +1,8 @@
+import { createSignal } from "solid-js";
+const log = (f) => { console.log("wrapped"); return f; };
+const wrap = fn => log(() => fn());
+export default function RMemo() {
+  const [n, setN] = createSignal(1);
+  const w = wrap(() => n() * 2);
+  return <div><p>{w()}</p><p>{wrap(() => n())()}</p><button onClick={() => setN(n() + 1)}>inc</button></div>;
+}

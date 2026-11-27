@@ -1,0 +1,7 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/F2ModState.js
+---
+==== Kid kept as JS: the module statement `setG(5);` changes what it reads
+==== F2ModState kept as JS: the module statement `for (let i = 0; i < 3; i++) list.push(i);` changes what it reads

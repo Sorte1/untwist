@@ -1,0 +1,26 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/RMemo.vite.untwisted.js
+---
+==== Component.jsx
+import { createSignal } from "solid-js";
+
+const fe = (e) => {
+  console.log("wrapped");
+  return e;
+};
+
+const I = (e) => fe(() => e());
+
+export default function Component() {
+  const [e, t] = createSignal(1);
+  const s = I(() => e() * 2);
+  return (
+    <div>
+      <p>{s}</p>
+      <p>{I(() => e())()}</p>
+      <button onClick={() => t(e() + 1)}>inc</button>
+    </div>
+  );
+}

@@ -77,22 +77,77 @@ fn text_piece(raw: &str, html: bool) -> Piece {
         return Piece::Space(raw.to_string());
     }
     if !plain_space(raw) || raw.contains('\n') {
-        let value = match html {
-            true => return Piece::Inline(format!("{{{}}}", js_string(&decode(raw)))),
-            false => raw.to_string(),
-        };
-        return Piece::Inline(format!("{{{}}}", js_string(&value)));
+        return Piece::Inline(match html {
+            true => html_expression(raw),
+            false => format!("{{{}}}", js_string(raw)),
+        });
     }
     Piece::Inline(escape(raw))
 }
 
-fn decode(text: &str) -> String {
-    text.replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&#39;", "'")
-        .replace("&nbsp;", "\u{a0}")
-        .replace("&amp;", "&")
+enum Entity {
+    Char(char),
+    Named,
+}
+
+fn entity(text: &str) -> Option<(usize, Entity)> {
+    let end = text.find(';').filter(|at| *at <= 33)?;
+    let name = &text[1..end];
+    let number = |digits: &str, radix: u32| {
+        (!digits.is_empty())
+            .then(|| u32::from_str_radix(digits, radix).ok())
+            .flatten()
+            .and_then(char::from_u32)
+    };
+    let found = match name {
+        "lt" => Entity::Char('<'),
+        "gt" => Entity::Char('>'),
+        "quot" => Entity::Char('"'),
+        "apos" => Entity::Char('\''),
+        "nbsp" => Entity::Char('\u{a0}'),
+        "amp" => Entity::Char('&'),
+        _ if name.starts_with("#x") || name.starts_with("#X") => {
+            Entity::Char(number(&name[2..], 16)?)
+        }
+        _ if name.starts_with('#') => Entity::Char(number(&name[1..], 10)?),
+        _ if !name.is_empty() && name.bytes().all(|b| b.is_ascii_alphanumeric()) => Entity::Named,
+        _ => return None,
+    };
+    Some((end + 1, found))
+}
+
+fn html_expression(raw: &str) -> String {
+    let mut out = String::new();
+    let mut run = String::new();
+    let flush = |run: &mut String, out: &mut String| {
+        if !run.is_empty() {
+            out.push_str(&format!("{{{}}}", js_string(run)));
+            run.clear();
+        }
+    };
+    let mut rest = raw;
+    while let Some(at) = rest.find('&') {
+        run.push_str(&rest[..at]);
+        rest = &rest[at..];
+        match entity(rest) {
+            Some((length, Entity::Char(c))) => {
+                run.push(c);
+                rest = &rest[length..];
+            }
+            Some((length, Entity::Named)) => {
+                flush(&mut run, &mut out);
+                out.push_str(&rest[..length]);
+                rest = &rest[length..];
+            }
+            None => {
+                run.push('&');
+                rest = &rest[1..];
+            }
+        }
+    }
+    run.push_str(rest);
+    flush(&mut run, &mut out);
+    out
 }
 
 fn pieces(children: &[Child]) -> Vec<Piece> {

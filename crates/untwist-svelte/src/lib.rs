@@ -116,6 +116,9 @@ pub fn restore(code: &str) -> Restore {
     {
         rw.forbid(*symbol);
     }
+    for (symbol, name) in &collected.facts.renames {
+        rw.rename(*symbol, name.clone());
+    }
     for (symbol, at) in &runtime.exports {
         let name = runtime::EXPORTS[usize::from(*at)].0;
         if scoping.symbol_name(*symbol) != name {

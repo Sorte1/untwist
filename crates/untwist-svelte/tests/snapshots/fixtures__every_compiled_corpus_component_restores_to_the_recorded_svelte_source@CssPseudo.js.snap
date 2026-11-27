@@ -1,0 +1,29 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/CssPseudo.js
+---
+==== CssPseudo.svelte
+<script>
+	let on = true;
+</script>
+
+<div class="box" class:on><p class="a b">t</p><span>s</span></div>
+
+<style>
+	div:global(.g:not(span)) {
+		top: 0;
+	}
+	:global(:root) {
+		--v: 1;
+	}
+	:global(*) {
+		box-sizing: border-box;
+	}
+	.box:global(.a.b) > span {
+		top: 1px;
+	}
+	p:hover {
+		left: 0;
+	}
+</style>

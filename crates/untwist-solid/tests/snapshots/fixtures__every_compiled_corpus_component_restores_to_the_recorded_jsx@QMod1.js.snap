@@ -1,0 +1,6 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/QMod1.js
+---
+==== QMod1 kept as JS: the module statement `table.k = "v";` changes what it reads

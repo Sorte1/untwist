@@ -1,0 +1,16 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/F4Text.js
+---
+==== F4Text.jsx
+export default function F4Text() {
+  return (
+    <div>
+      <p data-nl="a
+b">x</p>
+      <p>{"one\ntwo\nthree & four"}</p>
+      <p>{"\n<b>"}</p>
+    </div>
+  );
+}

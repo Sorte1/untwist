@@ -53,6 +53,7 @@ pub struct Cx<'a, 's> {
     pub deleted: RefCell<Vec<Span>>,
     pub library: RefCell<rustc_hash::FxHashSet<SymbolId>>,
     pub candidates: Vec<(Span, oxc_syntax::node::NodeId)>,
+    pub delegated: Option<Vec<String>>,
 }
 
 pub fn unwrap_parens(text: String) -> String {
@@ -335,7 +336,7 @@ impl<'a, 's> Cx<'a, 's> {
                 continue;
             }
             let found = match self.nodes.kind(id) {
-                AstKind::CallExpression(call) => self.root_call(call)?,
+                AstKind::CallExpression(call) => self.root_call(call, id)?,
                 AstKind::ArrayExpression(array) => self.root_array(array)?,
                 AstKind::SequenceExpression(sequence) => {
                     if let Some(found) = self.memo_sequence(&sequence.expressions, span)? {
@@ -388,7 +389,7 @@ impl<'a, 's> Cx<'a, 's> {
                         return Ok(None);
                     }
                     if let Some(element) = element.as_expression() {
-                        children.extend(self.child(element, Ctx::Children)?);
+                        children.extend(self.child(element, Ctx::Children, true)?);
                     }
                 }
                 Ok(Some((Kind::Jsx, jsx::fragment(&children))))
@@ -396,7 +397,33 @@ impl<'a, 's> Cx<'a, 's> {
         }
     }
 
-    fn root_call(&self, call: &CallExpression<'_>) -> R<Option<(Kind, String)>> {
+    fn condition(&self, value: &Expression<'_>, node: oxc_syntax::node::NodeId) -> R<String> {
+        let at = self.nodes.kind(node).span();
+        let counted = !std::ptr::eq(strip_bang(value), value.without_parentheses())
+            || matches!(value.without_parentheses(), Expression::BinaryExpression(_));
+        let tested = match self.nodes.parent_kind(node) {
+            AstKind::ConditionalExpression(branch) => {
+                branch.test.without_parentheses().span() == at
+            }
+            AstKind::UnaryExpression(unary) => unary.operator == UnaryOperator::LogicalNot,
+            AstKind::LogicalExpression(logical) => {
+                counted
+                    && logical.operator == oxc_ast::ast::LogicalOperator::And
+                    && logical.left.without_parentheses().span() == at
+            }
+            _ => false,
+        };
+        if !tested {
+            return fail("a memo condition is read as a value");
+        }
+        self.render_value(strip_bang(value))
+    }
+
+    fn root_call(
+        &self,
+        call: &CallExpression<'_>,
+        node: oxc_syntax::node::NodeId,
+    ) -> R<Option<(Kind, String)>> {
         if self.is_template_call(call) {
             let symbol = expr_symbol(&call.callee, self.scoping);
             if let Some(template) = symbol.and_then(|symbol| self.templates.get(&symbol)) {
@@ -440,12 +467,12 @@ impl<'a, 's> Cx<'a, 's> {
                 if let Expression::CallExpression(inner) = callee {
                     if self.is(&inner.callee, Rt::Memo) && inner.arguments.len() == 1 {
                         if let Some(value) = arg(inner, 0).and_then(thunk) {
-                            return Ok(Some((Kind::Expr, self.render_value(strip_bang(value))?)));
+                            return Ok(Some((Kind::Expr, self.condition(value, node)?)));
                         }
                     }
                 }
                 if let Some(value) = self.memo_local(callee) {
-                    return Ok(Some((Kind::Expr, self.render_value(strip_bang(value))?)));
+                    return Ok(Some((Kind::Expr, self.condition(value, node)?)));
                 }
                 Ok(None)
             }
@@ -578,7 +605,7 @@ impl<'a, 's> Cx<'a, 's> {
         ))
     }
 
-    pub fn child(&self, expr: &Expression<'_>, ctx: Ctx) -> R<Vec<Child>> {
+    pub fn child(&self, expr: &Expression<'_>, ctx: Ctx, fixed: bool) -> R<Vec<Child>> {
         let expr = expr.without_parentheses();
         if let Some(text) = string(expr) {
             return Ok(vec![Child::Str(text.to_string())]);
@@ -596,7 +623,7 @@ impl<'a, 's> Cx<'a, 's> {
                 let Some(element) = element.as_expression() else {
                     return fail("a children array holds a spread or a hole");
                 };
-                out.extend(self.child(element, ctx)?);
+                out.extend(self.child(element, ctx, true)?);
             }
             return Ok(out);
         }
@@ -613,7 +640,11 @@ impl<'a, 's> Cx<'a, 's> {
                 return Ok(vec![Child::Expr(format!("{}()", self.render(expr)?))]);
             }
         }
-        Ok(vec![Child::Expr(self.render(expr)?)])
+        let text = self.render(expr)?;
+        Ok(vec![Child::Expr(match fixed {
+            true => crate::ast::once(expr, text),
+            false => text,
+        })])
     }
 
     pub fn api_name(&self, callee: &Expression<'_>) -> Option<String> {
@@ -763,7 +794,7 @@ impl<'a, 's> Cx<'a, 's> {
                 let value = self.getter(statements)?;
                 match (key.as_str(), value) {
                     ("children", Getter::Value(expr)) => {
-                        children.extend(self.child(expr, Ctx::Children)?)
+                        children.extend(self.child(expr, Ctx::Children, false)?)
                     }
                     ("children", Getter::Jsx(text)) => children.push(Child::Jsx(text)),
                     ("children", Getter::Text(text)) => children.push(Child::Expr(text)),
@@ -777,7 +808,7 @@ impl<'a, 's> Cx<'a, 's> {
                 continue;
             }
             if key == "children" {
-                children.extend(self.child(&property.value, Ctx::Children)?);
+                children.extend(self.child(&property.value, Ctx::Children, true)?);
                 continue;
             }
             attrs.push(self.static_prop(&key, &property.value)?);
@@ -796,7 +827,10 @@ impl<'a, 's> Cx<'a, 's> {
                 return Ok(key.to_string());
             }
         }
-        Ok(format!("{key}={{{}}}", self.render(value)?))
+        Ok(format!(
+            "{key}={{{}}}",
+            crate::ast::once(value, self.render(value)?)
+        ))
     }
 
     fn getter<'e, 'b>(&self, statements: &'e [Statement<'b>]) -> R<Getter<'e, 'b>> {

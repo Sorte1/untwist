@@ -1,0 +1,14 @@
+import { createSignal } from "solid-js";
+export default function POnce() {
+  const [n, setN] = createSignal(1);
+  const o = { get v() { return n(); } };
+  return (
+    <div>
+      <p>{/*@once*/ o.v}</p>
+      <p>{o.v}</p>
+      <p title={/*@once*/ o.v} class={/*@once*/ "c" + n()}>t</p>
+      <p title={o.v}>u</p>
+      <button onClick={() => setN(n() + 1)}>inc</button>
+    </div>
+  );
+}

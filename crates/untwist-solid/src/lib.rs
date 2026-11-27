@@ -75,6 +75,37 @@ fn templates(
     out
 }
 
+fn delegated(
+    runtime: &Runtime,
+    scoping: &oxc_semantic::Scoping,
+    nodes: &oxc_semantic::AstNodes<'_>,
+) -> Option<Vec<String>> {
+    let known = runtime.esm
+        || !runtime.minified
+        || runtime.symbols.values().any(|rt| *rt == Rt::DelegateEvents);
+    if !known {
+        return None;
+    }
+    let mut names = Vec::new();
+    for node in nodes.iter() {
+        let AstKind::CallExpression(call) = node.kind() else {
+            continue;
+        };
+        if !runtime.is(&call.callee, scoping, Rt::DelegateEvents) {
+            continue;
+        }
+        let Some(Expression::ArrayExpression(array)) =
+            ast::arg(call, 0).map(Expression::without_parentheses)
+        else {
+            return None;
+        };
+        for element in &array.elements {
+            names.push(element.as_expression().and_then(ast::string)?.to_string());
+        }
+    }
+    Some(names)
+}
+
 fn references(
     nodes: &oxc_semantic::AstNodes<'_>,
     scoping: &oxc_semantic::Scoping,
@@ -236,7 +267,19 @@ pub fn restore(code: &str) -> Restore {
         })
         .collect();
     idents.sort_by_key(|(span, _)| span.start);
-    let rw = Rewriter::new(code, "Solid", Vec::new(), refs, shorthands);
+    let mut rw = Rewriter::new(code, "Solid", Vec::new(), refs, shorthands);
+    rw.keep_lines(
+        nodes
+            .iter()
+            .filter_map(|node| match node.kind() {
+                AstKind::TemplateLiteral(template) => Some(template),
+                _ => None,
+            })
+            .flat_map(|template| template.quasis.iter())
+            .filter(|quasi| quasi.value.raw.contains('\n'))
+            .map(|quasi| quasi.span)
+            .collect(),
+    );
     for (symbol, rt) in &runtime.symbols {
         match (runtime.esm, rt.spelling()) {
             (false, Some((name, _))) => {
@@ -264,7 +307,12 @@ pub fn restore(code: &str) -> Restore {
         deleted: Default::default(),
         library: Default::default(),
         candidates: convert::candidates(nodes),
+        delegated: delegated(&runtime, scoping, nodes),
     };
     let found = module::components(&cx, home);
-    module::restore_all(&cx, home, &found)
+    let mut restored = module::restore_all(&cx, home, &found);
+    for component in &mut restored.components {
+        component.text = untwist_restore::text::restore_lines(&component.text);
+    }
+    restored
 }

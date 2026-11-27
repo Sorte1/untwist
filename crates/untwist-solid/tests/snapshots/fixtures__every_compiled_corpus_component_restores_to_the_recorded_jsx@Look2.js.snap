@@ -1,0 +1,6 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/Look2.js
+---
+==== Look2 kept as JS: an effect starts from a state other than undefined

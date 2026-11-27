@@ -1,0 +1,25 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/Pre.js
+---
+==== Pre.svelte
+<script>
+	let a = $state('x');
+</script>
+
+<button onclick={() => (a = a + 'y')}>b</button>
+<pre>{'\n'}  first
+    {a}
+</pre>
+<pre>{'\n'}two</pre>
+<pre>static
+  only </pre>
+<textarea value={` lead ${a ?? ''}`}></textarea>
+<p>{a} <b>bold</b> tail</p>
+<p>x {a}  y   z</p>
+<span></span><em>
+	{' '}
+</em>
+<p>{a}</p><p>{a}</p>
+<div>ab</div>

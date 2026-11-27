@@ -1,0 +1,40 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/Ws2.js
+---
+==== Ws2.svelte
+<script>
+	let a = 'x';
+	let t = $state(true);
+</script>
+
+<p><em>{' '}</em>|<b>x</b>|<i>x{' '}</i>|<u>{' '}x</u></p>
+<p>
+	a
+x
+b
+</p>
+<div>
+	{#if t}
+		yes
+	{:else}
+		no
+	{/if}
+</div>
+<div>
+	{#each [1, 2] as k}
+		{k}
+	{/each}
+</div>
+<div>
+	{#each [1, 2] as k}
+		<span>{k}</span>
+	{/each}
+</div>
+<div>
+	<span>a</span>
+	<span>b</span>
+	<span>c</span>&#32;<span>d</span>
+</div>
+<button onclick={() => (t = !t)}>b</button>

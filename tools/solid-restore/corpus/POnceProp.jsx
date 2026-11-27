@@ -1,0 +1,12 @@
+import { createSignal } from "solid-js";
+function Kid(props) { return <i>{props.a}|{props.b}|{props.c}</i>; }
+export default function POnceProp() {
+  const [n, setN] = createSignal(1);
+  const f = (k) => n() * k;
+  return (
+    <div>
+      <Kid a={/*@once*/ f(2)} b={f(3)} c={n} />
+      <button onClick={() => setN(n() + 1)}>inc</button>
+    </div>
+  );
+}

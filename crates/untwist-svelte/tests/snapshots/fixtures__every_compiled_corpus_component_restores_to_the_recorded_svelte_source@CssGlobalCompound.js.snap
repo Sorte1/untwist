@@ -1,0 +1,23 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/CssGlobalCompound.js
+---
+==== CssGlobalCompound.svelte
+<script>
+	let on = true;
+</script>
+
+<div class="box" class:on><p class="a b">t</p><span>s</span></div>
+
+<style>
+	span:global(.dyn) {
+		color: teal;
+	}
+	:global(.out) p.a {
+		top: 0;
+	}
+	p:global(.x:hover) {
+		left: 0;
+	}
+</style>

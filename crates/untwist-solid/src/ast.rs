@@ -91,3 +91,59 @@ pub fn is_simple(expr: &Expression<'_>) -> bool {
             | Expression::ParenthesizedExpression(_)
     )
 }
+
+pub fn is_dynamic(expr: &Expression<'_>) -> bool {
+    use oxc_ast::ast::{ArrayExpressionElement, BinaryOperator, ObjectPropertyKind};
+    match expr.without_parentheses() {
+        Expression::StringLiteral(_)
+        | Expression::NumericLiteral(_)
+        | Expression::BooleanLiteral(_)
+        | Expression::NullLiteral(_)
+        | Expression::BigIntLiteral(_)
+        | Expression::RegExpLiteral(_)
+        | Expression::Identifier(_)
+        | Expression::ThisExpression(_)
+        | Expression::ArrowFunctionExpression(_)
+        | Expression::FunctionExpression(_) => false,
+        Expression::TemplateLiteral(template) => template.expressions.iter().any(is_dynamic),
+        Expression::UnaryExpression(unary) => is_dynamic(&unary.argument),
+        Expression::BinaryExpression(binary) => {
+            binary.operator == BinaryOperator::In
+                || is_dynamic(&binary.left)
+                || is_dynamic(&binary.right)
+        }
+        Expression::LogicalExpression(logical) => {
+            is_dynamic(&logical.left) || is_dynamic(&logical.right)
+        }
+        Expression::ConditionalExpression(conditional) => {
+            is_dynamic(&conditional.test)
+                || is_dynamic(&conditional.consequent)
+                || is_dynamic(&conditional.alternate)
+        }
+        Expression::SequenceExpression(sequence) => sequence.expressions.iter().any(is_dynamic),
+        Expression::ArrayExpression(array) => array.elements.iter().any(|element| match element {
+            ArrayExpressionElement::SpreadElement(_) => true,
+            ArrayExpressionElement::Elision(_) => false,
+            other => other.as_expression().is_none_or(is_dynamic),
+        }),
+        Expression::ObjectExpression(object) => {
+            object.properties.iter().any(|property| match property {
+                ObjectPropertyKind::SpreadProperty(_) => true,
+                ObjectPropertyKind::ObjectProperty(property) => {
+                    property.computed
+                        || (!property.method
+                            && property.kind == oxc_ast::ast::PropertyKind::Init
+                            && is_dynamic(&property.value))
+                }
+            })
+        }
+        _ => true,
+    }
+}
+
+pub fn once(expr: &Expression<'_>, text: String) -> String {
+    match is_dynamic(expr) {
+        true => format!("/*@once*/ {text}"),
+        false => text,
+    }
+}

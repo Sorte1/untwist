@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
-use oxc_ast::ast::{Expression, ImportDeclarationSpecifier};
+use oxc_ast::ast::{
+    ExportDefaultDeclarationKind, Expression, ImportDeclarationSpecifier, Statement,
+};
 use oxc_ast::AstKind;
 use oxc_span::{GetSpan, Span};
 use oxc_syntax::node::NodeId;
@@ -280,6 +282,9 @@ struct Unit {
     bodies: Vec<String>,
     children: Vec<String>,
     outside: Vec<SymbolId>,
+    copied: Vec<SymbolId>,
+    reads: FxHashSet<SymbolId>,
+    spans: Vec<Span>,
     shares: bool,
 }
 
@@ -432,6 +437,7 @@ fn unit(
             deps.children.push(found.name.clone());
         }
     }
+    let copied = state.clone();
     let outside: Vec<SymbolId> = state
         .into_iter()
         .filter(|symbol| {
@@ -484,6 +490,9 @@ fn unit(
         bodies,
         children: deps.children,
         outside,
+        copied,
+        reads: handled,
+        spans: included,
         shares: !shared_names.is_empty(),
     })
 }
@@ -566,6 +575,122 @@ fn shared_unit(
     Ok((assemble(&built.head, built.helpers, main), built.children))
 }
 
+fn is_constant(cx: &Cx<'_, '_>, symbol: SymbolId) -> bool {
+    let declaration = cx.scoping.symbol_declaration(symbol);
+    let AstKind::VariableDeclarator(declarator) = cx.nodes.kind(declaration) else {
+        return false;
+    };
+    let constant = matches!(cx.nodes.parent_kind(declaration), AstKind::VariableDeclaration(list) if list.kind == oxc_ast::ast::VariableDeclarationKind::Const);
+    constant
+        && declarator.init.as_ref().is_some_and(|init| {
+            matches!(
+                init.without_parentheses(),
+                Expression::StringLiteral(_)
+                    | Expression::NumericLiteral(_)
+                    | Expression::BooleanLiteral(_)
+                    | Expression::NullLiteral(_)
+                    | Expression::BigIntLiteral(_)
+            ) || matches!(init.without_parentheses(), Expression::TemplateLiteral(template) if template.expressions.is_empty())
+        })
+}
+
+struct Effect {
+    line: String,
+    symbols: Vec<SymbolId>,
+    owners: Vec<Span>,
+}
+
+impl Effect {
+    fn touches(&self, built: &Unit) -> bool {
+        self.symbols
+            .iter()
+            .any(|symbol| built.reads.contains(symbol))
+            || self
+                .owners
+                .iter()
+                .any(|owner| built.spans.iter().any(|span| inside(*span, *owner)))
+    }
+}
+
+fn is_effect(cx: &Cx<'_, '_>, statement: &Statement<'_>) -> bool {
+    match statement {
+        Statement::ImportDeclaration(_)
+        | Statement::FunctionDeclaration(_)
+        | Statement::ClassDeclaration(_)
+        | Statement::VariableDeclaration(_)
+        | Statement::ExportNamedDeclaration(_)
+        | Statement::ExportAllDeclaration(_)
+        | Statement::EmptyStatement(_) => false,
+        Statement::ExportDefaultDeclaration(export) => !matches!(
+            &export.declaration,
+            ExportDefaultDeclarationKind::FunctionDeclaration(_)
+                | ExportDefaultDeclarationKind::ClassDeclaration(_)
+                | ExportDefaultDeclarationKind::Identifier(_)
+        ),
+        Statement::ExpressionStatement(statement) => {
+            match statement.expression.without_parentheses() {
+                Expression::CallExpression(call) => {
+                    !matches!(cx.rt(&call.callee), Some(Rt::DelegateEvents))
+                        && cx.api_name(&call.callee).as_deref() != Some("render")
+                }
+                Expression::StringLiteral(_) => false,
+                _ => true,
+            }
+        }
+        _ => true,
+    }
+}
+
+fn assigned_property_of(statement: &Statement<'_>, cx: &Cx<'_, '_>) -> Option<SymbolId> {
+    let Statement::ExpressionStatement(statement) = statement else {
+        return None;
+    };
+    let Expression::AssignmentExpression(assign) = statement.expression.without_parentheses()
+    else {
+        return None;
+    };
+    let (object, _) = crate::convert::member_target(&assign.left)?;
+    expr_symbol(object, cx.scoping)
+}
+
+fn module_effects(cx: &Cx<'_, '_>, home: ScopeId, found: &[Found]) -> Vec<Effect> {
+    untwist_restore::region::statements(cx.scoping, cx.nodes, home)
+        .iter()
+        .filter(|statement| is_effect(cx, statement))
+        .filter_map(|statement| {
+            let span = statement.span();
+            let symbols: Vec<SymbolId> = cx
+                .referenced_at(span)
+                .filter(|(at, _)| !found.iter().any(|component| inside(component.span, *at)))
+                .map(|(_, symbol)| symbol)
+                .filter(|symbol| {
+                    cx.scoping.symbol_scope_id(*symbol) == home
+                        && !inside(span, cx.scoping.symbol_span(*symbol))
+                        && !cx.runtime.symbols.contains_key(symbol)
+                        && !cx.library.borrow().contains(symbol)
+                        && (!found
+                            .iter()
+                            .any(|component| component.symbol == Some(*symbol))
+                            || assigned_property_of(statement, cx) == Some(*symbol))
+                })
+                .collect();
+            if symbols.is_empty() {
+                return None;
+            }
+            let owners = symbols
+                .iter()
+                .filter_map(|symbol| helper_owner(cx, *symbol).map(|(owner, _)| owner))
+                .collect();
+            let line = cx.rw.text(span).lines().next().unwrap_or_default();
+            Some(Effect {
+                line: line.chars().take(60).collect(),
+                symbols,
+                owners,
+            })
+        })
+        .collect()
+}
+
 fn library(cx: &Cx<'_, '_>, home: ScopeId) -> FxHashSet<SymbolId> {
     let mut reached: FxHashSet<SymbolId> = FxHashSet::default();
     let mut queue: Vec<SymbolId> = cx.runtime.symbols.keys().copied().collect();
@@ -580,6 +705,37 @@ fn library(cx: &Cx<'_, '_>, home: ScopeId) -> FxHashSet<SymbolId> {
         }
     }
     reached
+}
+
+struct Done {
+    name: String,
+    text: String,
+    children: Vec<String>,
+    reads: FxHashSet<SymbolId>,
+}
+
+fn cascade(done: &mut Vec<Done>, kept: &mut Vec<(String, String)>) {
+    loop {
+        let names: Vec<String> = kept.iter().map(|(name, _)| name.clone()).collect();
+        let Some(at) = done
+            .iter()
+            .position(|entry| entry.children.iter().any(|child| names.contains(child)))
+        else {
+            return;
+        };
+        let entry = done.remove(at);
+        let child = entry
+            .children
+            .into_iter()
+            .find(|child| names.contains(child))
+            .unwrap_or_default();
+        if entry.name != SHARED {
+            kept.push((
+                entry.name,
+                format!("its child component {child} is kept as JS"),
+            ));
+        }
+    }
 }
 
 pub fn restore_all(cx: &Cx<'_, '_>, home: ScopeId, found: &[Found]) -> Restore {
@@ -597,6 +753,7 @@ pub fn restore_all(cx: &Cx<'_, '_>, home: ScopeId, found: &[Found]) -> Restore {
     }
     let none = FxHashSet::default();
     let mut shared: FxHashSet<SymbolId> = FxHashSet::default();
+    let mut copies: rustc_hash::FxHashMap<SymbolId, usize> = Default::default();
     for component in found {
         if let Ok(built) = unit(
             cx,
@@ -607,14 +764,20 @@ pub fn restore_all(cx: &Cx<'_, '_>, home: ScopeId, found: &[Found]) -> Restore {
             false,
         ) {
             shared.extend(built.outside);
+            for symbol in built.copied {
+                *copies.entry(symbol).or_default() += 1;
+            }
         }
     }
+    shared.extend(
+        copies
+            .into_iter()
+            .filter(|(symbol, count)| *count > 1 && !is_constant(cx, *symbol))
+            .map(|(symbol, _)| symbol),
+    );
+    let effects = module_effects(cx, home, found);
     let mut out = Restore::default();
-    let mut done: Vec<(String, String, Vec<String>)> = Vec::new();
-    let shared_file = match shared.is_empty() {
-        true => None,
-        false => Some(shared_unit(cx, home, &shared, found)),
-    };
+    let mut done: Vec<Done> = Vec::new();
     for component in found {
         let built = unit(
             cx,
@@ -624,13 +787,18 @@ pub fn restore_all(cx: &Cx<'_, '_>, home: ScopeId, found: &[Found]) -> Restore {
             &shared,
             false,
         )
-        .and_then(|built| match (&shared_file, built.shares) {
-            (Some(Err(reason)), true) => Err(reason.clone()),
-            _ if !built.outside.is_empty() => fail(format!(
+        .and_then(|built| match built.outside.first() {
+            Some(symbol) => fail(format!(
                 "it shares the module binding `{}` with code outside it",
-                cx.scoping.symbol_name(built.outside[0])
+                cx.scoping.symbol_name(*symbol)
             )),
-            _ => Ok(built),
+            None => match effects.iter().find(|effect| effect.touches(&built)) {
+                Some(effect) => fail(format!(
+                    "the module statement `{}` changes what it reads",
+                    effect.line
+                )),
+                None => Ok(built),
+            },
         });
         match built {
             Ok(built) => {
@@ -644,44 +812,49 @@ pub fn restore_all(cx: &Cx<'_, '_>, home: ScopeId, found: &[Found]) -> Restore {
                     .map(|body| main_text(component, body))
                     .into_iter()
                     .collect();
-                done.push((
-                    component.name.clone(),
-                    assemble(&built.head, built.helpers, main),
+                let reads = built.reads.intersection(&shared).copied().collect();
+                done.push(Done {
+                    name: component.name.clone(),
+                    text: assemble(&built.head, built.helpers, main),
                     children,
-                ));
+                    reads,
+                });
             }
             Err(reason) => out.kept.push((component.name.clone(), reason)),
         }
     }
-    if let Some(Ok((text, children))) = shared_file {
-        if done
-            .iter()
-            .any(|(_, _, children)| children.iter().any(|child| child == SHARED))
-        {
-            done.push((SHARED.to_string(), text, children));
-        }
-    }
-    loop {
-        let kept: Vec<String> = out.kept.iter().map(|(name, _)| name.clone()).collect();
-        let Some(at) = done
-            .iter()
-            .position(|(_, _, children)| children.iter().any(|child| kept.contains(child)))
-        else {
-            break;
-        };
-        let (name, _, children) = done.remove(at);
-        let child = children
-            .into_iter()
-            .find(|child| kept.contains(child))
-            .unwrap_or_default();
-        if name != SHARED {
-            out.kept
-                .push((name, format!("its child component {child} is kept as JS")));
+    cascade(&mut done, &mut out.kept);
+    let used: FxHashSet<SymbolId> = done
+        .iter()
+        .flat_map(|entry| entry.reads.iter().copied())
+        .collect();
+    if !used.is_empty() {
+        match shared_unit(cx, home, &used, found) {
+            Ok((text, children)) => done.push(Done {
+                name: SHARED.to_string(),
+                text,
+                children,
+                reads: FxHashSet::default(),
+            }),
+            Err(reason) => {
+                let (sharing, rest): (Vec<Done>, Vec<Done>) =
+                    done.into_iter().partition(|entry| !entry.reads.is_empty());
+                done = rest;
+                out.kept.extend(
+                    sharing
+                        .into_iter()
+                        .map(|entry| (entry.name, reason.clone())),
+                );
+                cascade(&mut done, &mut out.kept);
+            }
         }
     }
     out.components = done
         .into_iter()
-        .map(|(name, text, _)| Component { name, text })
+        .map(|entry| Component {
+            name: entry.name,
+            text: entry.text,
+        })
         .collect();
     out
 }

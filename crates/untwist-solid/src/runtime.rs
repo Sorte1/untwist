@@ -207,7 +207,15 @@ impl Runtime {
         let Some([template]) = candidates.get("template").map(Vec::as_slice) else {
             return;
         };
-        let home = scoping.symbol_scope_id(*template);
+        let template = *template;
+        let home = scoping.symbol_scope_id(template);
+        let zones = untwist_restore::region::template_zones(scoping, nodes, template, home);
+        for symbols in candidates.values_mut() {
+            symbols.retain(|symbol| {
+                !untwist_restore::region::declared_in(scoping, nodes, *symbol, &zones)
+            });
+        }
+        candidates.retain(|_, symbols| !symbols.is_empty());
         if !candidates.contains_key("insert") && !candidates.contains_key("createComponent") {
             return;
         }
@@ -239,9 +247,17 @@ impl Runtime {
         let Some([template]) = found.get(&Rt::Template).map(Vec::as_slice) else {
             return;
         };
-        let home = scoping.symbol_scope_id(*template);
+        let template = *template;
+        let home = scoping.symbol_scope_id(template);
+        let zones = untwist_restore::region::template_zones(scoping, nodes, template, home);
+        for symbols in found.values_mut() {
+            symbols.retain(|symbol| {
+                !untwist_restore::region::declared_in(scoping, nodes, *symbol, &zones)
+            });
+        }
+        found.retain(|_, symbols| !symbols.is_empty());
         self.minified = true;
-        for (rt, symbol) in loops(&found, scoping, nodes, home) {
+        for (rt, symbol) in loops(&found, scoping, nodes, home, &zones) {
             found.insert(rt, vec![symbol]);
         }
         for (rt, symbols) in found {
@@ -260,6 +276,7 @@ fn loops(
     scoping: &Scoping,
     nodes: &AstNodes<'_>,
     home: ScopeId,
+    zones: &[(u32, u32)],
 ) -> Vec<(Rt, SymbolId)> {
     let only = |name: &str| -> Option<SymbolId> {
         let rt = bundled(name)?;
@@ -275,7 +292,9 @@ fn loops(
     };
     let mut picks: Vec<(Rt, SymbolId)> = Vec::new();
     for symbol in scoping.get_bindings(home).values().copied() {
-        if found.values().any(|symbols| symbols.contains(&symbol)) {
+        if found.values().any(|symbols| symbols.contains(&symbol))
+            || untwist_restore::region::declared_in(scoping, nodes, symbol, zones)
+        {
             continue;
         }
         let AstKind::Function(function) = nodes.kind(scoping.symbol_declaration(symbol)) else {

@@ -819,7 +819,27 @@ impl<'a, 's> Cx<'a, 's> {
             (DKind::Element { name, svg }, fill) => {
                 let children = match fill {
                     Some(Fill::Children(children)) => children.clone(),
-                    None => self.emit_children(body, id)?,
+                    None => {
+                        let mut children = self.emit_children(body, id)?;
+                        let parsed_first = node.children.first().is_some_and(|first| {
+                            matches!(
+                                &body.dom[*first],
+                                DNode {
+                                    kind: DKind::Text(_),
+                                    fill: None,
+                                    ..
+                                }
+                            )
+                        });
+                        if parsed_first && (name == "pre" || name == "textarea") {
+                            if let Some(M::Text(first)) = children.first_mut() {
+                                if let Some(rest) = first.strip_prefix('\n') {
+                                    *first = rest.to_string();
+                                }
+                            }
+                        }
+                        children
+                    }
                     Some(_) => return fail("an element filled as text"),
                 };
                 Ok(vec![M::Element {

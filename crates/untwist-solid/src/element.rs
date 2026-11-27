@@ -120,16 +120,25 @@ enum Marker {
 }
 
 struct Event {
+    seq: usize,
     attr: String,
     handler: String,
     data: Option<String>,
 }
 
+struct Entry {
+    seq: usize,
+    name: String,
+    value: String,
+    fixed: bool,
+    marked: bool,
+}
+
 #[derive(Default)]
 struct Ops {
-    attrs: Vec<(String, String)>,
-    classes: Vec<(String, String)>,
-    styles: Vec<(String, String)>,
+    attrs: Vec<(usize, String, String)>,
+    classes: Vec<Entry>,
+    styles: Vec<Entry>,
     events: Vec<Event>,
     inserts: Vec<(Marker, Vec<Child>)>,
 }
@@ -141,6 +150,8 @@ pub struct Block<'c, 'a, 's> {
     ops: FxHashMap<Path, Ops>,
     root: Option<SymbolId>,
     dropped: Vec<Path>,
+    seq: usize,
+    fixed: bool,
 }
 
 const EVENT_WORDS: &[(&str, &str)] = &[
@@ -260,6 +271,8 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
             ops: FxHashMap::default(),
             root: None,
             dropped: Vec::new(),
+            seq: 0,
+            fixed: false,
         };
         block.build()
     }
@@ -274,6 +287,8 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
             ops: FxHashMap::default(),
             root: Some(root),
             dropped: Vec::new(),
+            seq: 0,
+            fixed: false,
         }
     }
 
@@ -550,8 +565,48 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
         self.ops.entry(path).or_default()
     }
 
+    fn tick(&mut self) -> usize {
+        self.seq += 1;
+        self.seq
+    }
+
     fn push_attr(&mut self, path: Path, name: &str, text: String) {
-        self.ops_at(path).attrs.push((name.to_string(), text));
+        let seq = self.tick();
+        self.ops_at(path).attrs.push((seq, name.to_string(), text));
+    }
+
+    fn push_event(&mut self, path: Path, attr: String, handler: String) {
+        let seq = self.tick();
+        self.ops_at(path).events.push(Event {
+            seq,
+            attr,
+            handler,
+            data: None,
+        });
+    }
+
+    fn entry(&mut self, name: &str, value: &Expression<'_>, text: String) -> Entry {
+        Entry {
+            seq: self.tick(),
+            name: name.to_string(),
+            value: text,
+            fixed: self.fixed,
+            marked: self.fixed && crate::ast::is_dynamic(value),
+        }
+    }
+
+    fn marked(&self, value: &Expression<'_>, text: String) -> String {
+        match self.fixed {
+            true => crate::ast::once(value, text),
+            false => text,
+        }
+    }
+
+    fn fixed_setter(&mut self, expr: &Expression<'_>) -> R<()> {
+        self.fixed = true;
+        let done = self.setter(expr, None, &FxHashMap::default());
+        self.fixed = false;
+        done
     }
 
     fn op(&mut self, expr: &Expression<'_>) -> R<()> {
@@ -563,12 +618,12 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
                 Some(Rt::AddEventListener) => self.listener(call),
                 Some(Rt::Use) => self.use_call(call),
                 Some(Rt::Spread) => self.spread(call),
-                Some(_) => self.setter(expr, None, &FxHashMap::default()),
+                Some(_) => self.fixed_setter(expr),
                 None => {
                     if self.native_listener(call)? {
                         return Ok(());
                     }
-                    self.setter(expr, None, &FxHashMap::default())
+                    self.fixed_setter(expr)
                 }
             },
             Expression::AssignmentExpression(assign) => {
@@ -593,7 +648,7 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
                         }
                     }
                 }
-                self.setter(expr, None, &FxHashMap::default())
+                self.fixed_setter(expr)
             }
             Expression::StaticMemberExpression(_) if self.walk(expr).is_some() => Ok(()),
             Expression::SequenceExpression(sequence) => {
@@ -628,11 +683,15 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
         if !DELEGATED.contains(&event) {
             return fail(format!("the event `{event}` is not delegated"));
         }
-        self.ops_at(path).events.push(Event {
-            attr: event_attr(event),
-            handler: text,
-            data: None,
-        });
+        if self
+            .cx
+            .delegated
+            .as_ref()
+            .is_some_and(|names| !names.iter().any(|name| name == event))
+        {
+            return fail(format!("the event `{event}` is never delegated"));
+        }
+        self.push_event(path, event_attr(event), text);
         Ok(())
     }
 
@@ -665,7 +724,7 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
         if !matches!(self.at(&parent), Some(Node::Element(_))) {
             return fail("insert has a parent that is not an element");
         }
-        let children = self.cx.child(value, Ctx::Insert)?;
+        let children = self.cx.child(value, Ctx::Insert, true)?;
         self.ops_at(parent).inserts.push((marker, children));
         Ok(())
     }
@@ -691,11 +750,7 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
             true => return fail(format!("the delegated event `{name}` has capitals")),
             false => format!("on:{name}"),
         };
-        self.ops_at(path).events.push(Event {
-            attr,
-            handler,
-            data: None,
-        });
+        self.push_event(path, attr, handler);
         Ok(())
     }
 
@@ -729,11 +784,7 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
             false => event_attr(name),
         };
         let handler = self.cx.render(handler)?;
-        self.ops_at(path).events.push(Event {
-            attr,
-            handler,
-            data: None,
-        });
+        self.push_event(path, attr, handler);
         Ok(true)
     }
 
@@ -820,6 +871,9 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
             },
             _ => return fail("an effect takes several parameters"),
         };
+        if !blank_state(arg(call, 1)) {
+            return fail("an effect starts from a state other than undefined");
+        }
         if let Some(body) = arrow.get_expression() {
             return self.setter(body, param, &FxHashMap::default());
         }
@@ -838,9 +892,6 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
                     }
                 }
                 Statement::IfStatement(branch) if branch.alternate.is_none() => {
-                    if !self.guard(&branch.test, param, &values) {
-                        return fail("an effect has an unknown guard");
-                    }
                     let inner = match &branch.consequent {
                         Statement::ExpressionStatement(statement) => &statement.expression,
                         Statement::BlockStatement(block) => match block.body.as_slice() {
@@ -849,14 +900,20 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
                         },
                         _ => return fail("an effect guard holds a statement"),
                     };
+                    if !self.guards(&branch.test, inner, param, &values) {
+                        return fail("an effect has an unknown guard");
+                    }
                     self.setter(inner, param, &values)?;
                 }
                 Statement::ExpressionStatement(statement) => {
                     match statement.expression.without_parentheses() {
                         Expression::LogicalExpression(logical)
                             if logical.operator == LogicalOperator::And
-                                && self.guard(&logical.left, param, &values) =>
+                                && self.guard(&logical.left, param, &values).is_some() =>
                         {
+                            if !self.guards(&logical.left, &logical.right, param, &values) {
+                                return fail("an effect has an unknown guard");
+                            }
                             self.setter(&logical.right, param, &values)?
                         }
                         other => self.setter(other, param, &values)?,
@@ -882,21 +939,61 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
         test: &Expression<'_>,
         param: Option<SymbolId>,
         values: &FxHashMap<SymbolId, &Expression<'_>>,
-    ) -> bool {
+    ) -> Option<(SymbolId, String)> {
         let Expression::BinaryExpression(binary) = test.without_parentheses() else {
-            return false;
+            return None;
         };
-        binary.operator == BinaryOperator::StrictInequality
-            && expr_symbol(&binary.left, self.cx.scoping)
-                .is_some_and(|symbol| values.contains_key(&symbol))
-            && self.is_state(&binary.right, param)
+        if binary.operator != BinaryOperator::StrictInequality {
+            return None;
+        }
+        let symbol = expr_symbol(&binary.left, self.cx.scoping)
+            .filter(|symbol| values.contains_key(symbol))?;
+        Some((symbol, self.state_key(&binary.right, param)?))
     }
 
-    fn is_state(&self, expr: &Expression<'_>, param: Option<SymbolId>) -> bool {
-        let Expression::StaticMemberExpression(member) = expr.without_parentheses() else {
+    fn guards(
+        &self,
+        test: &Expression<'_>,
+        inner: &Expression<'_>,
+        param: Option<SymbolId>,
+        values: &FxHashMap<SymbolId, &Expression<'_>>,
+    ) -> bool {
+        let Some(guarded) = self.guard(test, param, values) else {
             return false;
         };
-        param.is_some() && expr_symbol(&member.object, self.cx.scoping) == param
+        self.stored(inner, param) == Some(guarded)
+    }
+
+    fn stored(&self, expr: &Expression<'_>, param: Option<SymbolId>) -> Option<(SymbolId, String)> {
+        match expr.without_parentheses() {
+            Expression::AssignmentExpression(assign) => {
+                if let Some((object, property)) = member_target(&assign.left) {
+                    if param.is_some() && expr_symbol(object, self.cx.scoping) == param {
+                        let symbol = expr_symbol(&assign.right, self.cx.scoping)?;
+                        return Some((symbol, property.to_string()));
+                    }
+                }
+                self.stored(&assign.right, param)
+            }
+            Expression::CallExpression(call) => {
+                let mut found = call
+                    .arguments
+                    .iter()
+                    .filter_map(|argument| argument.as_expression())
+                    .filter_map(|argument| self.stored(argument, param));
+                let first = found.next();
+                found.next().is_none().then_some(first).flatten()
+            }
+            _ => None,
+        }
+    }
+
+    fn state_key(&self, expr: &Expression<'_>, param: Option<SymbolId>) -> Option<String> {
+        let Expression::StaticMemberExpression(member) = expr.without_parentheses() else {
+            return None;
+        };
+        (param.is_some() && expr_symbol(&member.object, self.cx.scoping) == param)
+            .then(|| member.property.name.to_string())
     }
 
     fn value<'e>(
@@ -941,7 +1038,7 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
                     return fail("an element block assigns to a value outside the template");
                 };
                 let value = self.value(&assign.right, param, values);
-                let text = cx.render(value)?;
+                let text = self.marked(value, cx.render(value)?);
                 if let Some(Node::Text(_)) = self.at(&path) {
                     let parent = path[..path.len().saturating_sub(1)].to_vec();
                     let lone = matches!(self.at(&parent), Some(Node::Element(element)) if element.children.len() == 1);
@@ -1003,7 +1100,8 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
                                 return fail("setStyleProperty has a computed name");
                             };
                             let text = cx.render(value)?;
-                            self.ops_at(path).styles.push((name.to_string(), text));
+                            let entry = self.entry(name, value, text);
+                            self.ops_at(path).styles.push(entry);
                             return Ok(());
                         }
                         _ => return fail("a setter call has no JSX spelling"),
@@ -1011,7 +1109,7 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
                     let Some(value) = value else {
                         return fail("a setter has no value");
                     };
-                    let text = cx.render(value)?;
+                    let text = self.marked(value, cx.render(value)?);
                     self.push_attr(path, &name, format!("{name}={{{text}}}"));
                     return Ok(());
                 }
@@ -1035,7 +1133,8 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
                 };
                 let value = strip_bang(self.value(value, param, values));
                 let text = cx.render(value)?;
-                self.ops_at(path).classes.push((name.to_string(), text));
+                let entry = self.entry(name, value, text);
+                self.ops_at(path).classes.push(entry);
                 Ok(())
             }
             _ => fail("an effect holds an expression with no JSX spelling"),
@@ -1069,51 +1168,52 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
         let ops = self.ops.get(&path).unwrap_or(&empty);
         let mut names: Vec<String> = Vec::new();
         let mut attrs: Vec<String> = Vec::new();
-        let mut styles: Vec<(String, String)> = Vec::new();
+        let mut fixed_styles: Vec<(String, String)> = Vec::new();
         for (name, value) in &element.attrs {
             if name == "style" && !ops.styles.is_empty() {
                 let Some(entries) = value.as_deref().and_then(static_style) else {
                     return fail("a static style does not parse");
                 };
-                styles.extend(entries);
+                fixed_styles.extend(entries);
                 continue;
             }
             names.push(name.clone());
             attrs.push(match value {
-                Some(value) => format!("{name}=\"{}\"", value.replace('"', "&quot;")),
+                Some(value) => format!(
+                    "{name}=\"{}\"",
+                    value
+                        .replace('"', "&quot;")
+                        .replace('\n', &untwist_restore::text::LINE.to_string())
+                ),
                 None => name.clone(),
             });
         }
-        for (name, text) in &ops.attrs {
-            if !name.starts_with("...") {
-                names.push(name.clone());
-            }
-            attrs.push(text.clone());
+        let mut placed: Vec<(usize, String, String)> = Vec::new();
+        for (seq, name, text) in &ops.attrs {
+            placed.push((*seq, name.clone(), text.clone()));
         }
+        if let Some(text) = grouped("classList", &[], &ops.classes)? {
+            placed.push((first_seq(&ops.classes), "classList".to_string(), text));
+        }
+        if let Some(text) = grouped("style", &fixed_styles, &ops.styles)? {
+            placed.push((first_seq(&ops.styles), "style".to_string(), text));
+        }
+        placed.sort_by_key(|(seq, _, _)| *seq);
         for event in &ops.events {
-            names.push(event.attr.clone());
-            attrs.push(match &event.data {
-                Some(data) => format!("{}={{[{}, {}]}}", event.attr, event.handler, data),
-                None => format!("{}={{{}}}", event.attr, event.handler),
-            });
+            placed.push((
+                event.seq,
+                event.attr.clone(),
+                match &event.data {
+                    Some(data) => format!("{}={{[{}, {}]}}", event.attr, event.handler, data),
+                    None => format!("{}={{{}}}", event.attr, event.handler),
+                },
+            ));
         }
-        if !ops.classes.is_empty() {
-            names.push("classList".to_string());
-            let entries: Vec<String> = ops
-                .classes
-                .iter()
-                .map(|(name, value)| format!("{}: {value}", object_key(name)))
-                .collect();
-            attrs.push(format!("classList={{{{ {} }}}}", entries.join(", ")));
-        }
-        styles.extend(ops.styles.iter().cloned());
-        if !styles.is_empty() {
-            names.push("style".to_string());
-            let entries: Vec<String> = styles
-                .iter()
-                .map(|(name, value)| format!("{}: {value}", object_key(name)))
-                .collect();
-            attrs.push(format!("style={{{{ {} }}}}", entries.join(", ")));
+        for (_, name, text) in placed {
+            if !name.starts_with("...") {
+                names.push(name);
+            }
+            attrs.push(text);
         }
         let mut seen: Vec<&String> = Vec::new();
         for name in &names {
@@ -1162,6 +1262,61 @@ impl<'c, 'a, 's> Block<'c, 'a, 's> {
             &children,
         ))))
     }
+}
+
+fn blank_state(state: Option<&Expression<'_>>) -> bool {
+    let blank = |value: &Expression<'_>| match value.without_parentheses() {
+        Expression::Identifier(ident) => ident.name == "undefined",
+        Expression::UnaryExpression(unary) => {
+            unary.operator == oxc_ast::ast::UnaryOperator::Void
+                && matches!(
+                    unary.argument.without_parentheses(),
+                    Expression::NumericLiteral(_)
+                )
+        }
+        _ => false,
+    };
+    match state.map(Expression::without_parentheses) {
+        None => true,
+        Some(Expression::ObjectExpression(object)) => object.properties.iter().all(|property| {
+            matches!(property, oxc_ast::ast::ObjectPropertyKind::ObjectProperty(property) if !property.computed && property.kind == oxc_ast::ast::PropertyKind::Init && blank(&property.value))
+        }),
+        Some(other) => blank(other),
+    }
+}
+
+fn first_seq(entries: &[Entry]) -> usize {
+    entries
+        .iter()
+        .map(|entry| entry.seq)
+        .min()
+        .unwrap_or(usize::MAX)
+}
+
+fn grouped(name: &str, fixed: &[(String, String)], entries: &[Entry]) -> R<Option<String>> {
+    if entries.is_empty() {
+        return Ok(None);
+    }
+    let marked = entries.iter().any(|entry| entry.marked);
+    if marked && entries.iter().any(|entry| !entry.fixed) {
+        return fail(format!(
+            "`{name}` mixes values set once with values kept up to date"
+        ));
+    }
+    let items: Vec<String> = fixed
+        .iter()
+        .map(|(key, value)| format!("{}: {value}", object_key(key)))
+        .chain(
+            entries
+                .iter()
+                .map(|entry| format!("{}: {}", object_key(&entry.name), entry.value)),
+        )
+        .collect();
+    let mark = match marked {
+        true => "/*@once*/ ",
+        false => "",
+    };
+    Ok(Some(format!("{name}={{{mark}{{ {} }}}}", items.join(", "))))
 }
 
 fn template_assign<'a>(

@@ -1,0 +1,6 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/Look3.js
+---
+==== Look3 kept as JS: a memo condition is read as a value

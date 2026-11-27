@@ -1,0 +1,25 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/Space.js
+---
+==== Space.svelte
+<script>
+	let a = 'x';
+</script>
+
+<p>lead x trail</p>
+<p>
+	a  b
+   c
+</p>
+<span>one</span>
+<span>two</span>
+<pre>{'\n'}  first
+    x
+</pre>
+<textarea value={'  text x\n more'}></textarea>
+<p data-x="single&quot;double" title="q&quot;uote &#123; &amp; <">&#123;&#125; &lt;b&gt; &nbsp;| &copy;</p>
+<p>&lt;b>back`tick x&#125;</p>
+<div title="x and x" class="k x">mixed</div>
+<p>{@html '<i>raw</i>'}</p>
