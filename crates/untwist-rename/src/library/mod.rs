@@ -718,7 +718,7 @@ fn sparse_labels(candidates: &[Candidate], accepted: &[(usize, bool)]) -> Exclud
             .filter(|group| group.collection)
         {
             *hits.entry(&group.label).or_default() += 1;
-            if candidate.merged.role == Role::Module {
+            if candidate.merged.role.is_module() {
                 whole.insert(&group.label);
             }
         }
@@ -876,5 +876,39 @@ pub fn unit_records(program: &Program<'_>, scoping: &Scoping) -> Vec<UnitRecord>
             }
         })
         .chain(inlined::expanded_records(&shaped, scoping))
+        .collect()
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WholeModule {
+    pub label: String,
+    pub ranges: Ranges,
+    pub module: String,
+    pub specifier: Option<String>,
+}
+
+pub fn whole_module_matches(program: &Program<'_>, scoping: &Scoping) -> Vec<WholeModule> {
+    let shaped = shape_program(program, scoping);
+    let table = match registry::pending() {
+        true => registry::wanting(&loose_keys(&shaped, scoping)),
+        false => table::current(),
+    };
+    let Some(unit) = shaped
+        .units
+        .iter()
+        .find(|unit| unit.kind == UnitKind::Program)
+    else {
+        return Vec::new();
+    };
+    let exact = table::exact_key(exact_shape(unit, scoping).exact);
+    table
+        .rows_for(exact)
+        .filter(|row| row.role == Role::Complete)
+        .map(|row| WholeModule {
+            label: table.label(row).to_string(),
+            ranges: parse_ranges(table.versions(row)),
+            module: table.module(row).to_string(),
+            specifier: table.own(row).map(str::to_string),
+        })
         .collect()
 }

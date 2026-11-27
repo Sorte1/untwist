@@ -1,5 +1,6 @@
 mod bundle;
 mod diagnostics;
+mod library_imports;
 mod maps;
 mod options;
 mod passes;
@@ -16,6 +17,7 @@ mod wasm_graph;
 mod write;
 
 pub use bundle::{BundleListing, BundleOutput, FileOutput, ModuleOutput};
+pub use library_imports::{ImportsReport, Kept, KeptReason, Replaced, PACKAGE_JSON};
 pub use maps::{MapLink, MAP_SUFFIX};
 pub use options::{Isolation, Options, Progress, ProgressSink, TestHooks, TypesMode, TEST_HOOKS};
 pub use passes::{pass_named, PassInfo, PASSES};

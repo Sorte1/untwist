@@ -95,6 +95,7 @@ pub struct Output {
     pub types: Option<crate::types::TypesReport>,
     pub svelte: Vec<SvelteFile>,
     pub solid: Vec<RestoredFile>,
+    pub library_imports: Option<crate::library_imports::ImportsReport>,
 }
 
 pub(crate) fn admits_reparse(text: &str) -> bool {
@@ -304,6 +305,7 @@ impl OutputParts {
             types: None,
             svelte: Vec::new(),
             solid: Vec::new(),
+            library_imports: None,
         }
     }
 }
@@ -387,8 +389,16 @@ impl Pipeline {
             };
             self.restore_stage(&mut output);
             self.types_stage(&mut output);
+            self.imports_stage(&mut output);
             output
         })
+    }
+
+    fn imports_stage(&self, output: &mut Output) {
+        if !self.options.library_imports {
+            return;
+        }
+        output.library_imports = output.bundle.as_mut().map(crate::library_imports::apply);
     }
 
     fn limits(&self) -> Limits {

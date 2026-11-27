@@ -216,3 +216,10 @@ fn modern_without_core_js_fingerprints_stops_with_a_hint() {
         String::from_utf8_lossy(&out.stderr)
     );
 }
+
+#[test]
+fn library_imports_needs_an_output_directory() {
+    let out = stdin_output("a;", &["--library-imports"]);
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("--library-imports needs --output"));
+}

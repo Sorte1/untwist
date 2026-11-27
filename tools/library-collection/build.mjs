@@ -176,13 +176,56 @@ async function bundleWebpack(entry, production) {
   const optimization = production
     ? { minimize: true, concatenateModules: true, minimizer: [new TerserPlugin({ extractComments: false, terserOptions: { mangle: false } })] }
     : { minimize: false, moduleIds: "named", concatenateModules: false };
-  await new Promise((done, fail) =>
+  const stats = await new Promise((done, fail) =>
     webpack(
       { mode: "production", context: INSTALL, entry, target: "web", devtool: "source-map", output: { path: out, filename: "out.js" }, optimization, performance: { hints: false }, resolve: { fallback } },
-      (error, stats) => (error || stats.hasErrors() ? fail(error ?? new Error(stats.toString("errors-only"))) : done()),
+      (error, stats) => (error || stats.hasErrors() ? fail(error ?? new Error(stats.toString("errors-only"))) : done(stats)),
     ),
   );
-  return { code: readFileSync(join(out, "out.js"), "utf8"), map: readFileSync(join(out, "out.js.map"), "utf8") };
+  const complete = production ? {} : completeModules(stats.toJson({ all: false, modules: true, usedExports: true, providedExports: true, nestedModules: false }).modules ?? []);
+  return { code: readFileSync(join(out, "out.js"), "utf8"), map: readFileSync(join(out, "out.js.map"), "utf8"), complete };
+}
+
+function exportTarget(value) {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  for (const condition of ["require", "node", "default"]) {
+    const found = exportTarget(value[condition]);
+    if (found) return found;
+  }
+  return null;
+}
+
+function importSpecifier(packageName, file) {
+  let data;
+  try {
+    data = JSON.parse(readFileSync(join(INSTALL, "node_modules", packageName, "package.json"), "utf8"));
+  } catch {
+    return null;
+  }
+  if (data.exports === undefined) return `${packageName}/${file}`;
+  const exports = typeof data.exports === "string" || Array.isArray(data.exports) || Object.keys(data.exports).some((key) => !key.startsWith(".")) ? { ".": data.exports } : data.exports;
+  for (const [key, value] of Object.entries(exports)) {
+    if (key.includes("*") || exportTarget(value) !== `./${file}`) continue;
+    return key === "." ? packageName : `${packageName}/${key.slice(2)}`;
+  }
+  return null;
+}
+
+function completeModules(modules) {
+  const complete = {};
+  for (const module of modules) {
+    const name = module.name ?? "";
+    const found = /^\.\/node_modules\/((?:@[^/]+\/)?[^/]+)\/(.+\.c?js)$/.exec(name);
+    if (!found || found[2].includes("node_modules/") || module.moduleType?.startsWith("javascript/esm")) continue;
+    const provided = module.providedExports;
+    const used = module.usedExports;
+    const whole = used === true || (Array.isArray(used) && Array.isArray(provided) && provided.every((key) => used.includes(key)));
+    if (!whole) continue;
+    const specifier = importSpecifier(found[1], found[2]);
+    if (specifier) complete[name] = specifier;
+  }
+  return complete;
 }
 
 async function bundleVite(entry) {
@@ -249,7 +292,7 @@ for (const bundler of bundlers) {
     }
     const file = `${safe}.${bundler}.${minifier}.js`;
     writeFileSync(join(OUT, file), code.replace(/\n\/\/# sourceMappingURL=[^\n]*\s*$/, "\n"));
-    builds.push({ file, version, dir: "", bundler, minifier, obfuscator: "none", names, sha: sha(code) });
+    builds.push({ file, version, dir: "", bundler, minifier, obfuscator: "none", names, complete: bundled.complete ?? {}, sha: sha(code) });
   }
 }
 rmSync(scratch, { recursive: true, force: true });

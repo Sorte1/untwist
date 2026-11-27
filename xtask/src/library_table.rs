@@ -21,6 +21,8 @@ use untwist_rename::library::table::{
 use crate::library_order::{first_lane_per_file, order_family, order_rows};
 use untwist_rename::library::{unit_records, version_key, UnitRecord};
 
+use crate::library_whole::{lane_stable, nested_module_rows, whole_files};
+
 #[derive(clap::Args, Debug)]
 pub struct Request {
     pub id: String,
@@ -46,27 +48,28 @@ pub struct Request {
     pub only: Option<String>,
 }
 
-const MIN_UNIT_TOKENS: u32 = 12;
+pub(crate) const MIN_UNIT_TOKENS: u32 = 12;
 const LANES: [(&str, &[&str]); 2] = [("default", &[]), ("unsafe", &["--unsafe"])];
 
 pub(crate) struct Build {
     file: String,
-    version: String,
-    dir: String,
+    pub(crate) version: String,
+    pub(crate) dir: String,
     bundler: String,
     minifier: String,
-    obfuscated: bool,
+    pub(crate) obfuscated: bool,
     minified: bool,
     names: BTreeMap<String, String>,
+    pub(crate) complete: BTreeMap<String, String>,
 }
 
 pub(crate) struct Manifest {
-    label: String,
+    pub(crate) label: String,
     group: String,
     versions: Vec<String>,
     packages: BTreeMap<String, BTreeMap<String, String>>,
     builds: Vec<Build>,
-    npm: bool,
+    pub(crate) npm: bool,
     owners: BTreeMap<String, String>,
 }
 
@@ -95,7 +98,7 @@ pub(crate) fn parse_npm_key(key: &str) -> Option<Owner> {
     })
 }
 
-fn npm_key(path: &str, owners: &BTreeMap<String, String>) -> Option<String> {
+pub(crate) fn npm_key(path: &str, owners: &BTreeMap<String, String>) -> Option<String> {
     let path = path.replace('\\', "/");
     let start = path.find(NODE_MODULES)?;
     let path = &path[start..];
@@ -158,6 +161,7 @@ pub(crate) fn read_manifest(path: &Path) -> Result<Manifest> {
             obfuscated: text(&build["obfuscator"]) != "none",
             minified: text(&build["minifier"]) != "none",
             names: string_map(&build["names"]),
+            complete: string_map(&build["complete"]),
         })
         .collect();
     let packages = value["packages"]
@@ -472,8 +476,8 @@ fn literal_modules(
 pub(crate) type BuildFindings = (Vec<Observed>, Vec<(String, String)>);
 
 pub(crate) struct Observed {
-    row: Row,
-    known: bool,
+    pub(crate) row: Row,
+    pub(crate) known: bool,
 }
 
 fn attribute(
@@ -670,27 +674,9 @@ fn bundle_modules(
     attributor_files: &BTreeMap<String, String>,
     owners: Option<&BTreeMap<String, String>>,
 ) -> BTreeMap<PathBuf, String> {
-    let Ok(text) = std::fs::read_to_string(out.join("bundle.json")) else {
-        return BTreeMap::new();
-    };
-    let Ok(value) = serde_json::from_str::<Value>(&text) else {
-        return BTreeMap::new();
-    };
-    let marker = format!("{}/", build.dir);
-    value["modules"]
-        .as_array()
+    whole_files(out, build, attributor_files, owners)
         .into_iter()
-        .flatten()
-        .filter_map(|module| {
-            let id = module["id"].as_str()?;
-            let path = module["path"].as_str()?;
-            if let Some(owners) = owners {
-                return Some((out.join(path), npm_key(id, owners)?));
-            }
-            let at = id.find(&marker)?;
-            let library_module = attributor_files.get(&id[at + marker.len()..])?;
-            Some((out.join(path), library_module.clone()))
-        })
+        .map(|(path, file)| (path, file.key))
         .collect()
 }
 
@@ -706,6 +692,7 @@ pub(crate) fn process_build(
     let files = manifest.packages.get(&build.dir).unwrap_or(&empty);
     let words = source_words(&std::fs::read_to_string(work.join(&build.file))?);
     let mut order_lanes = Vec::new();
+    let mut whole_rows = Vec::new();
     for (lane, flags) in LANES {
         let mut order = Vec::new();
         let out = work.join("out").join(format!("{}.{lane}", build.file));
@@ -724,6 +711,9 @@ pub(crate) fn process_build(
             continue;
         }
         let modules = bundle_modules(&out, build, files, manifest.npm.then_some(&manifest.owners));
+        let wholes = whole_files(&out, build, files, manifest.npm.then_some(&manifest.owners));
+        let nested = nested_module_rows(&out, build, manifest, &wholes)?;
+        whole_rows.extend(nested);
         for entry in std::fs::read_dir(&out)? {
             let path = entry?.path();
             if path.extension().is_none_or(|ext| ext != "js") {
@@ -745,6 +735,7 @@ pub(crate) fn process_build(
     observed.extend(first_lane_per_file(order_lanes, |item: &Observed| {
         (item.row.label.clone(), item.row.module.clone())
     }));
+    observed.extend(lane_stable(whole_rows));
     Ok((observed, keys))
 }
 
@@ -855,6 +846,14 @@ pub(crate) fn aggregate(observed: Vec<Observed>, manifest: &Manifest) -> Vec<Row
             merge_list(&mut group.outer, row.outer);
         }
     }
+    let complete: BTreeSet<(u64, String, String)> = groups
+        .keys()
+        .filter(|(_, _, _, role)| *role == Role::Complete)
+        .map(|(exact, label, module, _)| (*exact, label.clone(), module.clone()))
+        .collect();
+    groups.retain(|(exact, label, module, role), _| {
+        *role != Role::Module || !complete.contains(&(*exact, label.clone(), module.clone()))
+    });
     groups
         .into_iter()
         .map(|((exact, label, module, role, _), group)| Row {

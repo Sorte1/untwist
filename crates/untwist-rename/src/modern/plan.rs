@@ -117,7 +117,7 @@ pub fn module_hits(hits: &[Hit]) -> Vec<&Hit> {
     hits.iter()
         .filter(|hit| hit.label == LABEL && hit.kind == UnitKind::Function)
         .filter(|hit| !hit.span.is_empty())
-        .filter(|hit| matches!(hit.role, Role::Wrapper | Role::Module))
+        .filter(|hit| matches!(hit.role, Role::Wrapper | Role::Module | Role::Complete))
         .filter(|hit| seen.insert(hit.span))
         .collect()
 }

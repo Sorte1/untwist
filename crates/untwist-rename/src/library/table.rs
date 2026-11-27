@@ -9,6 +9,7 @@ const UNKNOWN: &str = "-";
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Role {
     Module,
+    Complete,
     Wrapper,
     Export,
     Function,
@@ -16,6 +17,10 @@ pub enum Role {
 }
 
 impl Role {
+    pub fn is_module(self) -> bool {
+        matches!(self, Role::Module | Role::Complete)
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Role::Module => "module",
@@ -23,6 +28,7 @@ impl Role {
             Role::Export => "export",
             Role::Function => "function",
             Role::Order => "order",
+            Role::Complete => "complete",
         }
     }
 
@@ -33,6 +39,7 @@ impl Role {
             Role::Export => 'e',
             Role::Function => 'f',
             Role::Order => 'o',
+            Role::Complete => 'c',
         }
     }
 
@@ -43,6 +50,7 @@ impl Role {
             "e" => Some(Role::Export),
             "f" => Some(Role::Function),
             "o" => Some(Role::Order),
+            "c" => Some(Role::Complete),
             _ => None,
         }
     }

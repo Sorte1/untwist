@@ -11,6 +11,7 @@ use untwist_unpack::path::{is_unsafe_path, MAX_PATH_BYTES, MAX_SEGMENT_BYTES};
 pub(crate) enum Role {
     Output,
     Listing,
+    Manifest,
     Module(usize),
     Declarations,
     Svelte,
@@ -170,6 +171,7 @@ fn mirrored_name(result: &Output, index: usize) -> Option<&str> {
 const OWNER_OUTPUT: &str = "the deobfuscated output is already planned at that path";
 const OWNER_MODULE: &str = "an earlier module is already planned at that path";
 const OWNER_LISTING: &str = "the bundle listing is written at that path";
+const OWNER_MANIFEST: &str = "the package.json of the library imports is written at that path";
 const OWNER_WASM: &str = "a wasm module is already planned at that path";
 const OWNER_SVELTE: &str = "an earlier restored component is already planned at that path";
 const OWNER_MAP: &str = "a source map is already planned at that path";
@@ -424,6 +426,22 @@ impl Planner<'_> {
         )
     }
 
+    fn manifest(&mut self, dir: &Path, result: &Output) -> Option<PlannedFile> {
+        let manifest = result
+            .library_imports
+            .as_ref()
+            .and_then(crate::library_imports::ImportsReport::package_json)?;
+        self.admit(
+            dir,
+            Candidate {
+                relative: crate::library_imports::PACKAGE_JSON.to_string(),
+                contents: manifest.into_bytes(),
+                role: Role::Manifest,
+                owner: OWNER_MANIFEST,
+            },
+        )
+    }
+
     fn wasm(&mut self, dir: &Path, result: &Output) -> Vec<PlannedFile> {
         let mut planned = Vec::with_capacity(result.wasm.len());
         for file in &result.wasm {
@@ -537,6 +555,7 @@ fn single_file_plan(dir: &Path, result: &Output, inputs: &[PathBuf]) -> Plan {
         };
         files.extend(planner.admit(dir, listing));
     }
+    files.extend(planner.manifest(dir, result));
     files.extend(planner.wasm(dir, result));
     files.extend(planner.restored(dir, result));
     Plan {
@@ -566,6 +585,7 @@ fn plan_per_module(dir: &Path, result: &Output, inputs: &[PathBuf]) -> Plan {
     };
     let outputs = planner.outputs(dir, result, inputs);
     let listing = planner.listing(dir, result);
+    let manifest = planner.manifest(dir, result);
     let wasm = planner.wasm(dir, result);
     let modules = planner.modules(dir, result);
     let svelte = planner.restored(dir, result);
@@ -577,6 +597,7 @@ fn plan_per_module(dir: &Path, result: &Output, inputs: &[PathBuf]) -> Plan {
         files: outputs
             .into_iter()
             .chain(listing)
+            .chain(manifest)
             .chain(modules)
             .chain(wasm)
             .chain(svelte)
@@ -625,6 +646,7 @@ mod tests {
             types: None,
             svelte: Vec::new(),
             solid: Vec::new(),
+            library_imports: None,
         }
     }
 
