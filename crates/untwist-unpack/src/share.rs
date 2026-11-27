@@ -9,6 +9,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::ast_util::respan::SYNTHETIC_BASE;
 use untwist_core::semantic::build_scoping;
 
+use crate::canon::statement_shape;
 use crate::esbuild::mentions::{mentioned, names_anywhere};
 use crate::model::{Bundle, BundleKind, Module};
 use crate::rename::{rename_binding, rename_parameters};
@@ -285,4 +286,178 @@ pub fn fold_runtime<'a>(
     append(alloc, keep.modules.get_mut(key)?, copied)?;
     rename_free(alloc, drop, &fresh);
     Some(())
+}
+
+struct Uses<'s, 'n> {
+    scoping: &'s Scoping,
+    names: &'n FxHashSet<String>,
+    runtime: bool,
+    otherwise: bool,
+}
+
+impl Uses<'_, '_> {
+    fn target(&self, id: &IdentifierReference<'_>) -> bool {
+        if !self.names.contains(id.name.as_str()) {
+            return false;
+        }
+        let symbol = id
+            .reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id());
+        match symbol {
+            None => true,
+            Some(symbol) => {
+                self.runtime && self.scoping.symbol_scope_id(symbol) == self.scoping.root_scope_id()
+            }
+        }
+    }
+}
+
+impl<'a> VisitJs<'a> for Uses<'_, '_> {
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        let direct = !it.optional
+            && matches!(&it.callee, Expression::Identifier(callee) if self.target(callee));
+        if !direct {
+            walk_js::walk_call_expression(self, it);
+            return;
+        }
+        for argument in &it.arguments {
+            self.visit_argument(argument);
+        }
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.otherwise |= self.target(it);
+    }
+}
+
+fn only_called(program: &Program<'_>, names: &FxHashSet<String>, runtime: bool) -> bool {
+    let scoping = build_scoping(program).scoping;
+    let mut uses = Uses {
+        scoping: &scoping,
+        names,
+        runtime,
+        otherwise: false,
+    };
+    for statement in &program.body {
+        let declares = single_name(statement).is_some_and(|name| names.contains(&name));
+        match (runtime, declares || synthetic(statement)) {
+            (true, true) => {}
+            (true, false) => {
+                let mut any = Mentions {
+                    uses: &uses,
+                    found: false,
+                };
+                any.visit_statement(statement);
+                uses.otherwise |= any.found;
+            }
+            (false, _) => uses.visit_statement(statement),
+        }
+    }
+    !uses.otherwise
+}
+
+struct Mentions<'u, 's, 'n> {
+    uses: &'u Uses<'s, 'n>,
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for Mentions<'_, '_, '_> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.found |= self.uses.target(it);
+    }
+}
+
+fn single_name(statement: &Statement<'_>) -> Option<String> {
+    match declared_names(std::slice::from_ref(statement)).as_slice() {
+        [name] => Some(name.clone()),
+        _ => None,
+    }
+}
+
+fn closed_shapes(runtime: &Module<'_>) -> Vec<(String, String)> {
+    let program = runtime.program();
+    let scoping = build_scoping(program).scoping;
+    own_statements(runtime)
+        .filter(|statement| closed(&scoping, statement))
+        .filter_map(|statement| {
+            let name = single_name(statement)?;
+            Some((name, statement_shape(statement, program.source_text)))
+        })
+        .collect()
+}
+
+fn equal_helpers(kept: &Module<'_>, later: &Module<'_>) -> Vec<(String, String)> {
+    let kept_names: FxHashSet<String> = declared_names(&kept.program().body).into_iter().collect();
+    let mut by_shape: FxHashMap<String, Option<String>> = FxHashMap::default();
+    for (name, shape) in closed_shapes(kept) {
+        by_shape
+            .entry(shape)
+            .and_modify(|seen| *seen = None)
+            .or_insert(Some(name));
+    }
+    closed_shapes(later)
+        .into_iter()
+        .filter(|(name, _)| !kept_names.contains(name))
+        .filter_map(|(name, shape)| Some((name, by_shape.get(&shape)?.clone()?)))
+        .collect()
+}
+
+fn without_helpers<'a>(
+    alloc: &'a Allocator,
+    runtime: &mut Module<'a>,
+    names: &FxHashSet<String>,
+) -> Option<()> {
+    let program = runtime.program_mut();
+    let mut body: AVec<'a, Statement<'a>> = AVec::with_capacity_in(program.body.len(), &alloc);
+    body.extend(program.body.drain(..).filter(|statement| {
+        !synthetic(statement) && single_name(statement).is_none_or(|name| !names.contains(&name))
+    }));
+    let exports = format!(
+        "module.exports = {{ {} }};",
+        declared_names(&body).join(", ")
+    );
+    body.extend(synthetic_statements(alloc, exports)?);
+    program.body = body;
+    Some(())
+}
+
+pub fn unify_helpers<'a>(
+    alloc: &'a Allocator,
+    keep: &Bundle<'a>,
+    drop: &mut Bundle<'a>,
+    key: &str,
+) -> Option<()> {
+    let pairs = equal_helpers(keep.modules.get(key)?, drop.modules.get(key)?);
+    if pairs.is_empty() {
+        return Some(());
+    }
+    let names: FxHashSet<String> = pairs.iter().map(|(name, _)| name.clone()).collect();
+    let later = drop.modules.get(key)?;
+    let called_only = drop
+        .modules
+        .iter()
+        .all(|(id, module)| id == key || only_called(module.program(), &names, false));
+    if !called_only || !only_called(later.program(), &names, true) {
+        return None;
+    }
+    let clashes = drop.modules.iter().any(|(id, module)| {
+        id != key
+            && pairs
+                .iter()
+                .any(|(_, to)| names_anywhere(module.program(), to))
+    });
+    if clashes {
+        return None;
+    }
+    let from: Vec<&str> = pairs.iter().map(|(name, _)| name.as_str()).collect();
+    let to: Vec<&str> = pairs.iter().map(|(_, name)| name.as_str()).collect();
+    let wanted: FxHashMap<String, usize> = names.iter().map(|name| (name.clone(), 0)).collect();
+    for (id, module) in drop.modules.iter_mut() {
+        let named = !mentioned(&wanted, module.program().body.iter()).is_empty();
+        if id != key && named && rename_parameters(alloc, module.program_mut(), &from, &to) == 0 {
+            return None;
+        }
+    }
+    without_helpers(alloc, drop.modules.get_mut(key)?, &names)
 }

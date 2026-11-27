@@ -14,6 +14,14 @@ amd/rollup-amd.js	rollup@4.66.0	amd	--format=amd commonjs(strictRequires, extern
 rollup/vite-iife.js	vite@8.3.5	node	build.lib formats=[iife] build.ssr ssr.noExternal ssr.external=[path] minify=false	cdccfdf40a086af95784fa566fc862ec5de1f8a5865e9b462dba91b0a24bc52e
 parcel/hoist/index.js	parcel@2.16.4	node	context=node outputFormat=commonjs optimize=false scopeHoist=true	010fa057a6497a7f649c87973a07b2e7d298db69ac4accfc7d66cb1d38d5d0c9
 parcel/hoist/lazy.58e54a87.js	parcel@2.16.4	chunk	context=node outputFormat=commonjs optimize=false scopeHoist=true	ca5c09a04a7f0bc01532ed62660987c42745c0bb56d7930201e83c3736f68fed
+parcel/hoist-2.9/index.js	parcel@2.9.3	node	context=node outputFormat=commonjs optimize=false scopeHoist=true	75d4bf76a7ca6b2b2e7db3b537c72d13f3f7daf6714b03360896413f7e60e74f
+parcel/hoist-2.9/lazy.85926ab9.js	parcel@2.9.3	chunk	context=node outputFormat=commonjs optimize=false scopeHoist=true	6f86c2c807d8e140ce6a273e47be9bf1ef9a2580855a7c2dfa38fa98506e8818
+parcel/hoist-2.9-min/index.js	parcel@2.9.3	node	context=node outputFormat=commonjs optimize=true scopeHoist=true	3cc7a407efd987c932d98c5c7629a517d41e86ee7c24840ec285da66ac11ed2a
+parcel/hoist-2.9-min/lazy.3d3c1412.js	parcel@2.9.3	chunk	context=node outputFormat=commonjs optimize=true scopeHoist=true	132a0fc84f4cbea5aee520b8eee88314f8fab14f9f156ab8b4c0fcb1b1abf701
+parcel/hoist-2.12/index.js	parcel@2.12.0	node	context=node outputFormat=commonjs optimize=false scopeHoist=true	1e3f614b5aa6a7c93b1c321a94f2a35cf08baf9b683738d3412677dc3a9f88b1
+parcel/hoist-2.12/lazy.d8ea770b.js	parcel@2.12.0	chunk	context=node outputFormat=commonjs optimize=false scopeHoist=true	494c1a497c28749437080ffb2f901f90e8785696b413bc5f3b35b70f8e010f9b
+parcel/hoist-2.12-min/index.js	parcel@2.12.0	node	context=node outputFormat=commonjs optimize=true scopeHoist=true	ed010318ec065595c62232776778b3b4eef8165ad4cd7fa1fc9c0862ec0744ec
+parcel/hoist-2.12-min/lazy.7ef30964.js	parcel@2.12.0	chunk	context=node outputFormat=commonjs optimize=true scopeHoist=true	112cb6afa33889767e57d83c0d6158044d91d96b2fa1c7b2618cf0edf32b1cfd
 parcel/nohoist/index.js	parcel@2.16.4	node	context=node outputFormat=commonjs optimize=false scopeHoist=false	72be0272ea5be2959200275814fa0b1ca601cef4295638ffdacc951e59a9dbb3
 parcel/nohoist/lazy.99d34c29.js	parcel@2.16.4	chunk	context=node outputFormat=commonjs optimize=false scopeHoist=false	f48aae574095e1b62542ce0791eaa74f131a1a4c2da002a7890d87de34cad77b
 parcel/single-hoist.js	parcel@2.16.4	node	context=node outputFormat=commonjs optimize=false scopeHoist=true app=no-lazy-chunk	27eef2b5d0b0b38c9c49edb505b44ba5c4416333b4a89ba4eff48fa3f736c6dc

@@ -680,3 +680,76 @@ fn the_copy_takes_a_name_no_module_uses() {
     let run = in_lazy("var kept = $parcel$export;\nvar $parcel$export$1 = 0;");
     kept_apart(&run, "$parcel$export$2");
 }
+
+const LEGACY_HOISTS: [(&str, &str, &str, &str); 4] = [
+    ("hoist-2.9", "lazy.85926ab9.js", "losIJ", "aiLzh"),
+    ("hoist-2.9-min", "lazy.3d3c1412.js", "cMGia", "cNEMd"),
+    ("hoist-2.12", "lazy.d8ea770b.js", "bk2F1", "aiLzh"),
+    ("hoist-2.12-min", "lazy.7ef30964.js", "4Qpjj", "cNEMd"),
+];
+
+fn legacy_inputs(dir_name: &str, lazy: &str) -> Vec<String> {
+    dir(&[
+        &format!("parcel/{dir_name}/index.js"),
+        &format!("parcel/{dir_name}/{lazy}"),
+    ])
+}
+
+#[test]
+fn parcel_2_9_and_2_12_hoisted_builds_and_their_chunks_unpack_as_one_bundle() {
+    for (dir_name, lazy, loader, target) in LEGACY_HOISTS {
+        let run = run(&legacy_inputs(dir_name, lazy));
+        assert_eq!(
+            run.kind,
+            Some(BundleKind::Parcel),
+            "{dir_name}: {:?}",
+            run.notes
+        );
+        assert_eq!(run.entry.as_deref(), Some("index"), "{dir_name}");
+        let code = run.code(&format!("{loader}.js"));
+        let wanted = format!("Promise.resolve().then(() => require(\"./{target}.js\"))");
+        assert!(code.contains(&wanted), "{dir_name}: {code}");
+        assert!(!run.code("index.js").contains(".register(\""), "{dir_name}");
+    }
+}
+
+#[test]
+fn a_legacy_hoisted_store_read_outside_the_runtime_keeps_the_bundle_whole() {
+    for (dir_name, lazy, _, _) in LEGACY_HOISTS {
+        let mut inputs = legacy_inputs(dir_name, lazy);
+        let store = if dir_name.ends_with("-min") {
+            let head = &inputs[0];
+            let at = head.find("={},").expect("a store");
+            let start = head[..at].rfind(',').expect("a declarator") + 1;
+            head[start..at].to_string()
+        } else {
+            "$parcel$inits".to_string()
+        };
+        inputs[0].push_str(&format!("\nconsole.log(typeof {store});\n"));
+        let run = run(&inputs);
+        assert_eq!(run.kind, None, "{dir_name}: {:?}", run.paths());
+    }
+}
+
+#[test]
+fn a_legacy_hoisted_chunk_with_a_bound_global_name_is_not_a_parcel_chunk() {
+    let mut inputs = legacy_inputs("hoist-2.9-min", "lazy.3d3c1412.js");
+    inputs[1].push_str("\nvar self = { parcelRequirecfe7: null };\n");
+    let run = run(&inputs);
+    assert_eq!(run.kind, None, "{:?}", run.paths());
+}
+
+#[test]
+fn a_chunk_helper_named_like_an_entry_binding_is_not_imported_into_the_entry() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/bundle-matrix/base/parcel2.12-hoist-min");
+    let read = |name: &str| std::fs::read_to_string(root.join(name)).expect("read cell");
+    let run = run(&[read("index.js"), read("lazy.e244ca98.js")]);
+    assert_eq!(run.kind, Some(BundleKind::Parcel), "{:?}", run.notes);
+    let entry = run.code("index.js");
+    assert!(entry.starts_with("let e;"), "{entry}");
+    assert!(!entry.contains("var { e }"), "{entry}");
+    assert!(run
+        .code("736rF.js")
+        .contains("var { e } = require(\"./_runtime/parcel.js\")"));
+}

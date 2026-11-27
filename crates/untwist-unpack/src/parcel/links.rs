@@ -195,7 +195,7 @@ fn inert_chunk_statement(statement: &Statement<'_>) -> bool {
                             | Expression::NullLiteral(_)
                             | Expression::FunctionExpression(_)
                             | Expression::ArrowFunctionExpression(_)
-                    ) || named(init, "globalThis")
+                    ) || super::callee::global_object(init)
                 })
             })
         }
@@ -223,7 +223,7 @@ pub fn effect_free_chunk(top: &[Statement<'_>], layout: &Hoisted<'_, '_>) -> boo
 }
 
 fn hoisted_part(input: usize, top: &[Statement<'_>], layout: &Hoisted<'_, '_>) -> Part {
-    let require = layout.require.name.as_str();
+    let require = layout.require_name();
     let loads = layout
         .defs
         .iter()

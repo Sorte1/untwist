@@ -11,7 +11,9 @@ use crate::esbuild::mentions::names_anywhere;
 use crate::matcher::{expression_statement, param_names};
 use crate::model::{module_from_body_with, Bodies, Bundle, BundleKind, Module, Runtime};
 use crate::rename::{rename_factory_parameters, rename_wrapper_bindings};
-use crate::runtime::{js_string, runtime_module, synthetic_statements};
+use crate::runtime::{js_string, runtime_id, runtime_module, synthetic_statements};
+
+const HOISTED_REQUIRE: &str = "parcelRequire";
 
 fn prepend<'a>(program: &mut Program<'a>, statements: AVec<'a, Statement<'a>>) {
     let tail: Vec<Statement<'a>> = program.body.drain(..).collect();
@@ -327,8 +329,16 @@ fn hoisted<'a>(
             .modules
             .insert(def.id.clone(), Module::new(def.id.clone(), program, false));
     }
+    let require = layout.require_name();
+    bundle.fresh_requires.extend(
+        bundle
+            .modules
+            .keys()
+            .filter(|id| **id != runtime_id(BundleKind::Parcel))
+            .map(|id| (id.clone(), require.to_string())),
+    );
     bundle.runtime = Some(Runtime {
-        require_name: layout.require.name.to_string(),
+        require_name: HOISTED_REQUIRE.to_string(),
         helpers: Vec::new(),
     });
     Some(bundle)

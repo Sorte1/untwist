@@ -1,7 +1,5 @@
+use crate::canon::{expression_shape, function_shape, statement_shape_renamed};
 use oxc_ast::ast::*;
-use oxc_ast_visit::VisitJs;
-
-use crate::canon::{function_shape, statement_shape};
 
 const KNOWN: [&str; 9] = [
     include_str!("runtimes/dev.txt"),
@@ -49,64 +47,56 @@ pub fn proven(function: &Function<'_>, source_text: &str) -> Option<Generation> 
         .then_some(Generation::Legacy)
 }
 
-const STORES: [&str; 2] = ["$parcel$inits", "$parcel$modules"];
+pub const STORES: [&str; 2] = ["$parcel$modules", "$parcel$inits"];
+const REQUIRE: &str = "parcelRequire";
+const GLOBAL: &str = "$parcel$global";
+const ERROR: &str = "Error";
 
-#[derive(Default)]
-struct Stores {
-    bound: usize,
-    read: usize,
-}
-
-impl<'a> VisitJs<'a> for Stores {
-    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        self.read += usize::from(STORES.contains(&it.name.as_str()));
+fn shape(
+    statement: &Statement<'_>,
+    head: Option<&Expression<'_>>,
+    source_text: &str,
+    renames: &[(&str, &str)],
+) -> (String, Vec<String>) {
+    match head {
+        Some(head) => expression_shape(head, source_text, renames),
+        None => statement_shape_renamed(statement, source_text, renames),
     }
+}
 
-    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
-        self.bound += usize::from(STORES.contains(&it.name.as_str()));
+pub fn defined(
+    statement: &Statement<'_>,
+    head: Option<&Expression<'_>>,
+    [require, object]: [&str; 2],
+    key: &str,
+    source_text: &str,
+) -> Option<[String; 2]> {
+    if require == object || require == ERROR || object == ERROR {
+        return None;
     }
-}
-
-fn empty_object(declarator: &VariableDeclarator<'_>) -> bool {
-    matches!(
-        &declarator.init,
-        Some(Expression::ObjectExpression(object)) if object.properties.is_empty()
-    )
-}
-
-fn empty_stores<'k>(top: &'k [Statement<'_>]) -> Vec<&'k str> {
-    let mut names: Vec<&str> = top
+    let (_, free) = shape(statement, head, source_text, &[]);
+    let others: Vec<&str> = free
         .iter()
-        .filter_map(|statement| match statement {
-            Statement::VariableDeclaration(declaration) => Some(&declaration.declarations),
-            _ => None,
-        })
-        .flatten()
-        .filter(|declarator| empty_object(declarator))
-        .filter_map(|declarator| match &declarator.id {
-            BindingPattern::BindingIdentifier(id) => Some(id.name.as_str()),
-            _ => None,
-        })
-        .filter(|name| STORES.contains(name))
+        .map(String::as_str)
+        .filter(|name| ![require, object, ERROR].contains(name))
         .collect();
-    names.sort_unstable();
-    names
-}
-
-fn stores_untouched(top: &[Statement<'_>], definition: usize) -> bool {
-    let mut stores = Stores::default();
-    for (index, statement) in top.iter().enumerate() {
-        if index != definition {
-            stores.visit_statement(statement);
-        }
-    }
-    stores.read == 0 && stores.bound == STORES.len() && empty_stores(top) == STORES
-}
-
-pub fn defined(top: &[Statement<'_>], definition: usize, key: &str, source_text: &str) -> bool {
-    let text = statement_shape(&top[definition], source_text);
-    let known = KNOWN_DEFINITIONS
-        .iter()
-        .any(|known| known.replace(KEY, key) == text);
-    known && stores_untouched(top, definition)
+    let [first, second] = others.as_slice() else {
+        return None;
+    };
+    let found = [(*first, *second), (*second, *first)]
+        .into_iter()
+        .find_map(|(modules, inits)| {
+            let renames = [
+                (require, REQUIRE),
+                (object, GLOBAL),
+                (modules, STORES[0]),
+                (inits, STORES[1]),
+            ];
+            let (text, _) = shape(statement, head, source_text, &renames);
+            KNOWN_DEFINITIONS
+                .iter()
+                .any(|known| known.replace(KEY, key) == text)
+                .then(|| [modules.to_string(), inits.to_string()])
+        });
+    found
 }
