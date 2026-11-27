@@ -16,6 +16,7 @@ pub mod library_collection;
 pub mod library_false_positives;
 pub mod library_gz;
 pub mod library_order;
+pub mod library_owners;
 pub mod library_scan;
 pub mod library_table;
 pub mod modern_table;

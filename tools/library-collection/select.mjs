@@ -16,6 +16,7 @@ const MAJOR_SHARE = 0.02;
 const options = parseArgs(process.argv.slice(2), { top: "200", "max-versions": "5" });
 if (!options.out) {
   console.error("usage: node select.mjs --out <dir> [--top 200] [--max-versions 5] [--wanted <file>] [--snapshot <file>]");
+  console.error("--wanted: every name in the file is sent to api.npmjs.org and registry.npmjs.org; give only public package names, never a list taken from a private bundle");
   process.exit(2);
 }
 const overrides = JSON.parse(readFileSync(join(HERE, "overrides.json"), "utf8"));
@@ -41,11 +42,14 @@ async function downloads(names) {
   const plain = names.filter((name) => !name.startsWith("@"));
   for (let at = 0; at < plain.length; at += BULK) {
     const chunk = plain.slice(at, at + BULK);
-    const data = (await fetchJson(DOWNLOADS + chunk.join(","))) ?? {};
-    for (const name of chunk) out[name] = data[name]?.downloads ?? 0;
+    const data = await fetchJson(DOWNLOADS + chunk.join(","));
+    if (data === null) continue;
+    if (chunk.length === 1) out[chunk[0]] = data.downloads ?? 0;
+    else for (const name of chunk) out[name] = data[name]?.downloads ?? 0;
   }
   for (const name of names.filter((name) => name.startsWith("@"))) {
-    out[name] = (await fetchJson(DOWNLOADS + name))?.downloads ?? 0;
+    const data = await fetchJson(DOWNLOADS + name);
+    if (data !== null) out[name] = data.downloads ?? 0;
     await new Promise((done) => setTimeout(done, PAUSE));
   }
   return out;
@@ -74,7 +78,8 @@ async function snapshot(names) {
     console.error(`${name}: ${counts[name]}`);
     await new Promise((done) => setTimeout(done, PAUSE));
   }
-  return { taken: new Date().toISOString().slice(0, 10), packages };
+  const missing = names.filter((name) => counts[name] === 0);
+  return { taken: new Date().toISOString().slice(0, 10), packages, missing };
 }
 
 function pickVersions(name, info, rank, limit) {
@@ -124,11 +129,10 @@ if (existsSync(snapshotFile)) {
   if (missing.length) {
     const extra = await snapshot(missing);
     Object.assign(data.packages, extra.packages);
-    data.missing = [...(data.missing ?? []), ...missing.filter((name) => !(name in extra.packages))];
+    data.missing = [...(data.missing ?? []), ...extra.missing];
   }
 } else {
   data = await snapshot(names);
-  data.missing = names.filter((name) => !(name in data.packages));
 }
 writeFileSync(snapshotFile, JSON.stringify(data, null, 1) + "\n");
 

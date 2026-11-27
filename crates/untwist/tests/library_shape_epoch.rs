@@ -11,6 +11,10 @@ use untwist_rename::library::table::{exact_key, loose_key};
 use untwist_rename::library::{unit_records, SHAPE_EPOCH};
 
 const DIR: &str = "fixtures/libraries";
+const BUILD_DIRS: [&str; 2] = [
+    "fixtures/library-collection/inputs",
+    "fixtures/library-collection/canary",
+];
 const SHAPES: &str = "fixtures/libraries/SHAPES";
 const WRITE_SHAPES: &str = "UNTWIST_WRITE_SHAPE_EPOCH";
 const EPOCH_TAG: &str = "#shape-epoch\t";
@@ -23,6 +27,31 @@ fn repo() -> &'static Path {
         .expect("the crate sits two levels below the repository")
 }
 
+fn scripts_in(dir: &Path) -> Vec<PathBuf> {
+    std::fs::read_dir(dir)
+        .expect("reading a fixture folder")
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|ext| ext == "js"))
+        .collect()
+}
+
+fn builds() -> Vec<(String, PathBuf)> {
+    BUILD_DIRS
+        .iter()
+        .flat_map(|dir| {
+            scripts_in(&repo().join(dir)).into_iter().map(|file| {
+                let name = file
+                    .strip_prefix(repo().join("fixtures"))
+                    .unwrap_or(&file)
+                    .display()
+                    .to_string();
+                (name, file)
+            })
+        })
+        .collect()
+}
+
 fn fixtures() -> Vec<(String, PathBuf)> {
     let root = repo().join(DIR);
     let mut found: Vec<(String, PathBuf)> = std::fs::read_dir(&root)
@@ -30,14 +59,7 @@ fn fixtures() -> Vec<(String, PathBuf)> {
         .filter_map(Result::ok)
         .map(|entry| entry.path())
         .filter(|path| path.is_dir())
-        .flat_map(|library| {
-            std::fs::read_dir(&library)
-                .expect("reading a library folder")
-                .filter_map(Result::ok)
-                .map(|entry| entry.path())
-                .filter(|path| path.extension().is_some_and(|ext| ext == "js"))
-                .collect::<Vec<_>>()
-        })
+        .flat_map(|library| scripts_in(&library))
         .map(|file| {
             let name = file
                 .strip_prefix(&root)
@@ -47,6 +69,7 @@ fn fixtures() -> Vec<(String, PathBuf)> {
             (name, file)
         })
         .collect();
+    found.extend(builds());
     found.sort();
     found
 }
@@ -134,7 +157,21 @@ fn library_fingerprints_change_only_with_a_new_shape_epoch() {
     let path = repo().join(SHAPES);
     let recorded = std::fs::read_to_string(&path).unwrap_or_default();
     let (epoch, body) = split(&recorded);
-    let moved = body != computed;
+    let known: std::collections::BTreeMap<&str, &str> = body
+        .lines()
+        .filter_map(|line| line.split_once('\t'))
+        .collect();
+    let now: std::collections::BTreeMap<&str, &str> = computed
+        .lines()
+        .filter_map(|line| line.split_once('\t'))
+        .collect();
+    let moved = known
+        .iter()
+        .any(|(name, digests)| now.get(name) != Some(digests));
+    let added: Vec<&&str> = now
+        .keys()
+        .filter(|name| !known.contains_key(*name))
+        .collect();
     if std::env::var_os(WRITE_SHAPES).is_some() {
         assert!(
             !moved || epoch != Some(SHAPE_EPOCH),
@@ -151,5 +188,9 @@ fn library_fingerprints_change_only_with_a_new_shape_epoch() {
     assert!(
         !moved,
         "library fingerprints moved: untwist's output on library code changed, so every published collection loses matches. Bump SHAPE_EPOCH in crates/untwist-rename/src/library/mod.rs and rerun with {WRITE_SHAPES}=1"
+    );
+    assert!(
+        added.is_empty(),
+        "canary inputs without a recorded row: {added:?}; rerun with {WRITE_SHAPES}=1"
     );
 }

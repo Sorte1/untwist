@@ -276,6 +276,7 @@ struct Origin {
     span: Span,
     module: String,
     root: Option<Span>,
+    nested: bool,
 }
 
 struct Attributor<'m> {
@@ -333,6 +334,7 @@ impl Attributor<'_> {
                     span: statement.span(),
                     module: module.clone(),
                     root,
+                    nested: false,
                 });
                 return;
             }
@@ -341,32 +343,43 @@ impl Attributor<'_> {
 }
 
 impl Attributor<'_> {
-    fn nested(&mut self, name: &str, span: Span, root: Option<Span>) {
+    fn nested(&mut self, name: &str, span: Span) {
         if self.owners.is_none() {
             return;
         }
-        if let Some(module) = self.names.get(name) {
-            self.contexts.push(Origin {
-                span,
-                module: module.clone(),
-                root,
-            });
+        let Some(module) = self.names.get(name) else {
+            return;
+        };
+        let enclosing = self
+            .contexts
+            .iter()
+            .filter(|context| context.span.start <= span.start && span.end <= context.span.end)
+            .min_by_key(|context| context.span.size());
+        let package = |key: &str| parse_npm_key(key).map(|owner| owner.label);
+        if enclosing.is_some_and(|context| package(&context.module) != package(module)) {
+            return;
         }
+        self.contexts.push(Origin {
+            span,
+            module: module.clone(),
+            root: None,
+            nested: true,
+        });
     }
 }
 
 impl<'a> Visit<'a> for Attributor<'_> {
     fn visit_function(&mut self, it: &Function<'a>, flags: oxc_syntax::scope::ScopeFlags) {
         if let Some(id) = &it.id {
-            self.nested(&id.name, it.span, Some(it.span));
+            self.nested(&id.name, it.span);
         }
         walk::walk_function(self, it, flags);
     }
 
     fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
         if let (BindingPattern::BindingIdentifier(id), Some(init)) = (&it.id, &it.init) {
-            if let Some(root) = function_root(init) {
-                self.nested(&id.name, it.span, Some(root));
+            if function_root(init).is_some() {
+                self.nested(&id.name, it.span);
             }
         }
         walk::walk_variable_declarator(self, it);
@@ -391,6 +404,7 @@ impl<'a> Visit<'a> for Attributor<'_> {
                 span: it.span,
                 module,
                 root: function_root(&it.value),
+                nested: false,
             });
         }
         walk::walk_object_property(self, it);
@@ -434,7 +448,9 @@ fn literal_modules(
             text.chars().count() >= KEY_MIN_LENGTH && !text.chars().all(|ch| ch.is_ascii_digit())
         })
         .filter(|(_, text)| {
-            !text.contains(dir) && !text.contains("node_modules") && !is_module_path(text)
+            (dir.is_empty() || !text.contains(dir))
+                && !text.contains("node_modules")
+                && !is_module_path(text)
         })
         .filter_map(|(span, text)| {
             let module = match file_module {
@@ -485,6 +501,7 @@ fn attribute(
                 })
                 .min_by_key(|context| context.span.size())?;
             let role = match context.root {
+                _ if context.nested => Role::Function,
                 Some(root) if root == record.span => Role::Wrapper,
                 None if context.span == record.span => Role::Wrapper,
                 _ => Role::Function,

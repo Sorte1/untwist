@@ -699,20 +699,28 @@ fn pack(
     let builtin = builtin_exact();
     let runtimes = read_runtime_keys(work)?;
     let helpers = builtin_helper_names();
+    let copies = crate::library_owners::vendored_copies(&rows);
+    let total = rows.len();
+    let rows: Vec<Row> = rows
+        .into_iter()
+        .filter(|row| !copies.contains(&(row.label.clone(), row.exact)))
+        .collect();
+    let vendored = total - rows.len();
     let shared = shared_exact(&rows, SHARED_LABELS);
     let mut rows = rows;
     rows.retain(|row| !curated_labels.contains(row.label.as_str()));
-    let total = rows.len();
     let known = |row: &Row| {
         row.role != Role::Order
             && (builtin.contains(&row.exact)
                 || runtimes.contains(&row.exact)
-                || helper_like(row, &helpers))
+                || helper_like(row, &helpers)
+                || crate::library_owners::runtime_named(row))
     };
     let (kept, dropped): (Vec<Row>, Vec<Row>) = rows
         .into_iter()
         .partition(|row| !known(row) && !shared.contains(&row.exact));
     let dropped_builtin = dropped.iter().filter(|row| known(row)).count();
+    let kept_rows = kept.len();
     let mut by_label: BTreeMap<String, Vec<Row>> = BTreeMap::new();
     for row in kept {
         by_label.entry(row.label.clone()).or_default().push(row);
@@ -774,11 +782,15 @@ fn pack(
         out.join(INDEX),
         serde_json::to_string_pretty(&index)? + "\n",
     )?;
+    let generated = index.packages.iter().filter(|package| !package.curated);
+    if generated.clone().count() > 0 && generated.clone().all(|package| package.keys.is_empty()) {
+        bail!("no package has string keys: the tables were built without literal keys");
+    }
     eprintln!(
-        "{} packages ({} curated, unfiltered), {} of {total} generated rows kept ({dropped_builtin} helper or bundler runtime shapes, {} in {SHARED_LABELS}+ packages)",
+        "{} packages ({} curated, unfiltered), {} of {total} generated rows kept ({vendored} vendored copies, {dropped_builtin} helper or bundler runtime shapes, {} in {SHARED_LABELS}+ packages)",
         index.packages.len(),
         curated.len(),
-        total - dropped.len(),
+        kept_rows,
         dropped.len() - dropped_builtin
     );
     Ok(())

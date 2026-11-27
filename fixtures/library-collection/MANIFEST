@@ -1,3 +1,6 @@
 # Test collection for the loader (cargo xtask library-collection pack writes the same layout).
 # shards: library-table v2 tables of eventemitter3 4.0.7-5.0.4, events 3.3.0, punycode 2.3.1 (spike builds, 2026-11-26)
 # inputs/eventemitter3.rollup-cjs.terser.js: eventemitter3 5.0.4, rollup 4.66.0 + @rollup/plugin-commonjs 29.0.3, then terser 5.51.2
+# canary/: shape-epoch canary inputs, cargo xtask library-collection build outputs of p-queue 6.6.2 (esbuild, webpack 5 production + terser, vite 8, rollup + terser),
+#   eventsource 5.1.5 (vite 8), p-limit 7.3.3 and lru-cache 6.0.0 (esbuild); rollup 4.66.0, esbuild 0.28.2, webpack 5.112.2, terser 5.51.2, vite 8.3.5.
+#   The packages are MIT (p-queue, eventsource, p-limit, eventemitter3, p-timeout, yocto-queue) or ISC (lru-cache, yallist).
