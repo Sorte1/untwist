@@ -19,9 +19,10 @@ path = "src/main.rs"
 [features]
 peak-probe = []
 test-hooks = ["untwist/test-hooks"]
+libraries-corejs = ["untwist/libraries-all"]
 
 [dependencies]
-untwist = { path = "../untwist", version = "0.6.0", features = ["libraries-all"] }
+untwist = { path = "../untwist", version = "0.6.0" }
 clap.workspace = true
 anyhow.workspace = true
 serde.workspace = true
@@ -38,7 +39,7 @@ harness = false
 required-features = ["peak-probe"]
 
 [dev-dependencies]
-untwist = { path = "../untwist", features = ["test-hooks"] }
+untwist = { path = "../untwist", features = ["test-hooks", "libraries-all"] }
 untwist-testing = { path = "../untwist-testing" }
 untwist-rename = { path = "../untwist-rename" }
 tempfile.workspace = true

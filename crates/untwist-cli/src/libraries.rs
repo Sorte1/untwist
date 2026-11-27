@@ -6,6 +6,7 @@ use untwist::libraries::{self, Collection, Shard, ShardSource, INDEX};
 
 const BUILTIN: &str = "builtin";
 const NONE: &str = "none";
+const CORE_JS: &str = "core-js";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Source {
@@ -112,6 +113,15 @@ pub fn configure(sources: &[Source], err: &mut dyn Write) -> Result<()> {
             bail!("--libraries takes one collection directory");
         }
         attach_collection(path, err)?;
+    }
+    Ok(())
+}
+
+pub fn require_core_js(modern: bool) -> Result<()> {
+    if modern && !libraries::provides(CORE_JS) {
+        bail!(
+            "core-js fingerprints are not available: pass `--libraries DIR` with a collection that has core-js, or build with `libraries-corejs`"
+        );
     }
     Ok(())
 }

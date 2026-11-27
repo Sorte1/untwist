@@ -119,3 +119,100 @@ fn a_url_is_refused_since_the_cli_reads_only_local_collections() {
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("local path"));
 }
+
+fn core_js_table() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../untwist-libraries-corejs/data/core-js.table.gz")
+}
+
+fn curated_core_js(dir: &Path) {
+    use untwist_rename::library::collection::{sha256_hex, Index, Package, Shard, SCHEMA};
+    let bytes = std::fs::read(core_js_table()).expect("the core-js table");
+    let sha256 = sha256_hex(&bytes);
+    let file = format!("shards/{sha256}.utl");
+    std::fs::create_dir_all(dir.join("shards")).expect("the shard dir");
+    std::fs::write(dir.join(&file), &bytes).expect("writing the shard");
+    let index = Index {
+        schema: SCHEMA.to_string(),
+        version: "2026.11.0-curated".to_string(),
+        shape_epoch: untwist::libraries::SHAPE_EPOCH,
+        untwist: String::new(),
+        packages: vec![Package {
+            id: "core-js".to_string(),
+            label: "core-js".to_string(),
+            versions: Vec::new(),
+            shards: vec![Shard {
+                file,
+                bytes: bytes.len() as u64,
+                sha256,
+                versions: String::new(),
+                rows: 0,
+            }],
+            keys: Vec::new(),
+            curated: true,
+        }],
+        filters: None,
+    };
+    std::fs::write(
+        dir.join("collection.json"),
+        serde_json::to_string(&index).expect("the index"),
+    )
+    .expect("writing the index");
+}
+
+fn core_js_input() -> String {
+    std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/libraries/core-js/rollup-cjs.terser.js"),
+    )
+    .expect("the core-js fixture")
+}
+
+#[test]
+fn a_curated_core_js_package_matches_like_the_built_in_table() {
+    let dir = tempfile::tempdir().expect("a temp dir");
+    curated_core_js(dir.path());
+    let table = core_js_table().display().to_string();
+    let collection = dir.path().display().to_string();
+    for lane in [&[][..], &["--unsafe"][..]] {
+        let run = |source: &str| {
+            let mut args = lane.to_vec();
+            args.extend(["--libraries", "none", "--libraries", source]);
+            stdin_output(&core_js_input(), &args)
+        };
+        let built_in = run(&table);
+        let curated = run(&collection);
+        assert!(curated.status.success());
+        assert!(String::from_utf8_lossy(&built_in.stdout).contains("// core-js 3."));
+        assert_eq!(built_in.stdout, curated.stdout, "{lane:?}");
+    }
+}
+
+#[test]
+fn modern_without_core_js_fingerprints_stops_with_a_hint() {
+    let out = stdin_output("a;", &["--modern", "chrome 120", "--libraries", "none"]);
+    assert!(!out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("core-js fingerprints are not available"),
+        "{stderr}"
+    );
+    let dir = tempfile::tempdir().expect("a temp dir");
+    curated_core_js(dir.path());
+    let collection = dir.path().display().to_string();
+    let out = stdin_output(
+        "a;",
+        &[
+            "--modern",
+            "chrome 120",
+            "--libraries",
+            "none",
+            "--libraries",
+            &collection,
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
