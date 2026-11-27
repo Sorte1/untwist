@@ -39,6 +39,7 @@ static RELIED_ON: Reliance = Reliance {
 #[derive(Default)]
 pub struct UndoCff {
     settled: bool,
+    inert: bool,
 }
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
@@ -68,6 +69,19 @@ fn used_names(scoping: &Scoping, refs: &Refs<'_>) -> FxHashSet<String> {
         .collect()
 }
 
+fn sum_shaped(statement: &Statement<'_>) -> bool {
+    let Statement::FunctionDeclaration(function) = statement else {
+        return false;
+    };
+    function.params.items.len() == 1
+        && function.body.as_ref().is_some_and(|body| {
+            matches!(
+                body.statements.as_slice(),
+                [Statement::ForStatement(_), Statement::ReturnStatement(_)]
+            )
+        })
+}
+
 fn analyse(program: &Program<'_>, scoping: &Scoping, nested_root: bool) -> Analysis {
     let mut analysis = Analysis {
         spans: Spans::default(),
@@ -78,7 +92,10 @@ fn analyse(program: &Program<'_>, scoping: &Scoping, nested_root: bool) -> Analy
         skip: Vec::new(),
         used: FxHashSet::default(),
     };
-    if has_module_syntax(program) || !HINTS.iter().any(|h| program.source_text.contains(h)) {
+    if has_module_syntax(program)
+        || !HINTS.iter().any(|h| program.source_text.contains(h))
+        || !program.body.iter().any(sum_shaped)
+    {
         return analysis;
     }
     let refs = scan(program, scoping);
@@ -211,7 +228,7 @@ impl<'a> Pass<'a> for UndoCff {
     }
 
     fn reset(&mut self) {
-        self.settled = false;
+        self.settled = self.inert;
     }
 
     fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
@@ -224,6 +241,7 @@ impl<'a> Pass<'a> for UndoCff {
             cx.note(note.clone(), None);
         }
         let Some(helpers) = &analysis.helpers else {
+            self.inert = true;
             return;
         };
         if analysis.plans.is_empty() {
