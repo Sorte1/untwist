@@ -1,0 +1,13 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/ZCssI2.js
+---
+==== ZCssI2.svelte
+<p class="q">t</p>
+
+<style>
+	p:has(> :global(.x)) {
+		color: teal;
+	}
+</style>

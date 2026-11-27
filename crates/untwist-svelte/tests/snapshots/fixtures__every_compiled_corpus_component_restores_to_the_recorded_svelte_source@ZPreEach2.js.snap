@@ -1,0 +1,18 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/ZPreEach2.js
+---
+==== ZPreEach2.svelte
+<script>
+	let items = $state([1, 2]);
+	let on = true;
+</script>
+
+<pre>a {#if on}yes{/if} b</pre>
+<pre>{#each items as i}<b>{i}</b>{/each}</pre>
+<div>
+	k {#each items as i}
+		{i},
+	{/each}
+</div>

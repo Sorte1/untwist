@@ -1,0 +1,23 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/ZPre2.js
+---
+==== ZPre2.svelte
+<script>
+	let a = 'x';
+</script>
+
+<pre>{'\n'}
+two x</pre>
+<pre>x
+</pre>
+<pre>{'\n'}x</pre>
+<pre>&#10;lit</pre>
+<textarea>&#10;lit</textarea>
+<textarea value={'\nlit'}></textarea>
+<div>
+	<pre>  in
+    deep x
+  </pre>
+</div>

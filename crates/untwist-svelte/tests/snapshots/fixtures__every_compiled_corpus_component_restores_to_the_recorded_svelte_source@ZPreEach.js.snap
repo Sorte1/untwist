@@ -1,0 +1,13 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/ZPreEach.js
+---
+==== ZPreEach.svelte
+<script>
+	let items = $state([1, 2]);
+</script>
+
+<pre>  {#each items as i}{i}
+{/each}</pre>
+<p>after</p>

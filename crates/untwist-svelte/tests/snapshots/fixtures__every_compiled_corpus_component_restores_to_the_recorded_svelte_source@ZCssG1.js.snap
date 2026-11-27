@@ -1,0 +1,13 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/ZCssG1.js
+---
+==== ZCssG1.svelte
+<div class="b">t</div>
+
+<style>
+	:global(.dyn).b {
+		color: teal;
+	}
+</style>

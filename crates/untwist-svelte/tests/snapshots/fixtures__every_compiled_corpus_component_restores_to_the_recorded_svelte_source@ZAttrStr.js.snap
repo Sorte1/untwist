@@ -1,0 +1,19 @@
+---
+source: crates/untwist-svelte/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-svelte/tests/fixtures/ZAttrStr.js
+---
+==== ZAttrStr.svelte
+<script>
+	const a = 'x';
+	const q = '"';
+	const amp = '&amp;';
+	const br = '{';
+	const nl = '\r\n\t';
+	const bt = '`${';
+	const lt = '<b>';
+</script>
+
+<p title={'1 x " &amp; {y} \r\n	| `${ <b> < {'} data-e={'x'} alt={'""'} class={'c x  d'} style={'color: red; x'}>t</p>
+<input value={'x "&amp;'} placeholder=" x " />
+<a href="?a=1&amp;b=x&amp;c">l</a>
