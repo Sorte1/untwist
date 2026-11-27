@@ -24,6 +24,8 @@ struct OutputJson<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     collection: Option<CollectionJson>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    library_imports: Option<&'a untwist::ImportsReport>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     types: Option<&'a untwist::TypesReport>,
     parse_diagnostics: &'a [String],
     parse_errors: usize,
@@ -163,6 +165,7 @@ pub fn to_json(output: &Output, written: &Written, limits: Limits) -> serde_json
         notes,
         libraries: libraries_json(output),
         collection: collection_json(),
+        library_imports: output.library_imports.as_ref(),
         types: output.types.as_ref(),
         parse_diagnostics: &output.parse_diagnostics,
         parse_errors: output.parse_errors,

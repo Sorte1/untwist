@@ -124,6 +124,15 @@ pub struct Args {
                 the packages whose bloom filter the program's shapes hit, and never uses the network"
     )]
     pub libraries: Vec<crate::libraries::Source>,
+    #[arg(
+        long = "library-imports",
+        help = "opt-in, with -o: replace a CommonJS module that is a whole, unpatched file of a \
+                library package (an exact whole-module fingerprint match from a collection) by \
+                `module.exports = require(\"pkg/file\")` and write the pinned versions to \
+                package.json; a module whose requires, bundler state or version window do not \
+                allow it is kept and listed in the report"
+    )]
+    pub library_imports: bool,
     #[cfg(feature = "test-hooks")]
     #[arg(long = "conservative", hide = true)]
     pub conservative: bool,
@@ -455,6 +464,7 @@ impl Args {
             types: self.types.map(TypesArg::mode),
             svelte: self.restore.contains(&RestoreArg::Svelte),
             solid: self.restore.contains(&RestoreArg::Solid),
+            library_imports: self.library_imports,
             ..untwist::Options::default()
         }
     }

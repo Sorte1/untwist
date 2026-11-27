@@ -119,6 +119,7 @@ pub struct Options {
     pub script_goal: bool,
     pub svelte: bool,
     pub solid: bool,
+    pub library_imports: bool,
 }
 
 impl Default for Options {
@@ -162,6 +163,7 @@ impl Default for Options {
             script_goal: false,
             svelte: false,
             solid: false,
+            library_imports: false,
         }
     }
 }
