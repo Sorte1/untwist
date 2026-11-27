@@ -67,7 +67,8 @@ pub mod libraries {
         Collection, CollectionError, Index, Package, Shard, INDEX, SCHEMA,
     };
     pub use untwist_rename::library::registry::{
-        attach, collection_status, load_shard, use_builtin, wanted, CollectionStatus, ShardSource,
+        attach, collection_status, load_shard, provides, use_builtin, wanted, CollectionStatus,
+        ShardSource,
     };
     pub use untwist_rename::library::table::{load, loaded_ids, LibraryTables};
     pub use untwist_rename::library::SHAPE_EPOCH;

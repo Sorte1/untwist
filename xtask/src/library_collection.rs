@@ -27,6 +27,10 @@ const BABEL_6_HELPERS: [&str; 3] = [
 const SHARDS: &str = "shards";
 const SHARED_LABELS: usize = 3;
 const KEY_LIMIT: usize = 300;
+const CURATED_DIRS: [&str; 2] = [
+    "crates/untwist-libraries-core/data",
+    "crates/untwist-libraries-corejs/data",
+];
 
 #[derive(clap::Args, Debug)]
 pub struct Request {
@@ -69,6 +73,8 @@ pub enum Action {
         version: String,
         #[arg(long)]
         only: Option<String>,
+        #[arg(long)]
+        no_curated: bool,
     },
     Hints {
         files: Vec<PathBuf>,
@@ -113,7 +119,14 @@ pub fn run(root: &Path, request: &Request) -> Result<()> {
             out,
             version,
             only,
-        } => pack(work, out, version, only.as_deref()),
+            no_curated,
+        } => {
+            let curated = match no_curated {
+                true => Vec::new(),
+                false => curated_tables(root, only.as_deref())?,
+            };
+            pack(work, out, version, only.as_deref(), &curated)
+        }
         Action::Hints {
             files,
             collection,
@@ -560,7 +573,100 @@ fn versions_of(rows: &[Row]) -> Vec<String> {
     versions
 }
 
-fn pack(work: &Path, out: &Path, version: &str, only: Option<&str>) -> Result<()> {
+struct Curated {
+    id: String,
+    bytes: Vec<u8>,
+    rows: Vec<Row>,
+    keys: Vec<String>,
+}
+
+fn curated_tables(root: &Path, only: Option<&str>) -> Result<Vec<Curated>> {
+    let wanted: Option<BTreeSet<&str>> = only.map(|only| only.split(',').collect());
+    let mut paths: Vec<PathBuf> = CURATED_DIRS
+        .iter()
+        .flat_map(|dir| std::fs::read_dir(root.join(dir)).into_iter().flatten())
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .filter(|path| path.to_string_lossy().ends_with(".table.gz"))
+        .collect();
+    paths.sort();
+    let mut curated = Vec::new();
+    for path in paths {
+        let text = crate::library_gz::read(&path)?;
+        let id = text
+            .lines()
+            .next()
+            .and_then(|line| line.split('\t').nth(2))
+            .with_context(|| format!("{} has no table id", path.display()))?
+            .to_string();
+        let rows = table_rows(&path)?;
+        let named = |wanted: &BTreeSet<&str>| {
+            wanted.contains(id.as_str())
+                || rows.iter().any(|row| wanted.contains(row.label.as_str()))
+        };
+        if wanted.as_ref().is_some_and(|wanted| !named(wanted)) {
+            continue;
+        }
+        let keys_path = path.with_file_name(format!("{id}.keys.json"));
+        let keys = match std::fs::read_to_string(&keys_path) {
+            Ok(text) => serde_json::from_str::<Value>(&text)?["keys"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|key| key.as_str().map(str::to_string))
+                .collect(),
+            Err(_) => Vec::new(),
+        };
+        curated.push(Curated {
+            id,
+            bytes: std::fs::read(&path)?,
+            rows,
+            keys,
+        });
+    }
+    Ok(curated)
+}
+
+fn range_of(versions: &[String]) -> String {
+    match (versions.first(), versions.last()) {
+        (Some(low), Some(high)) if low != high => format!("{low}~{high}"),
+        (Some(low), _) => low.clone(),
+        _ => String::new(),
+    }
+}
+
+fn curated_package(out: &Path, curated: &Curated) -> Result<(Package, Bloom)> {
+    let (file, sha256) = write_content(out, &curated.bytes, "utl")?;
+    let versions = versions_of(&curated.rows);
+    let label = curated
+        .rows
+        .first()
+        .map_or_else(|| curated.id.clone(), |row| row.label.clone());
+    let loose: Vec<u32> = curated.rows.iter().map(|row| row.loose).collect();
+    let package = Package {
+        id: curated.id.clone(),
+        label,
+        shards: vec![Shard {
+            file,
+            bytes: curated.bytes.len() as u64,
+            sha256,
+            versions: range_of(&versions),
+            rows: curated.rows.len() as u64,
+        }],
+        versions,
+        keys: curated.keys.clone(),
+        curated: true,
+    };
+    Ok((package, Bloom::with_keys(&loose)))
+}
+
+fn pack(
+    work: &Path,
+    out: &Path,
+    version: &str,
+    only: Option<&str>,
+    curated: &[Curated],
+) -> Result<()> {
     let mut rows = Vec::new();
     let mut tables: Vec<PathBuf> = std::fs::read_dir(work.join("tables"))
         .context("no tables: run build first")?
@@ -576,11 +682,18 @@ fn pack(work: &Path, out: &Path, version: &str, only: Option<&str>) -> Result<()
         let wanted: BTreeSet<&str> = only.split(',').collect();
         rows.retain(|row| wanted.contains(row.label.as_str()));
     }
+    let curated_labels: BTreeSet<&str> = curated
+        .iter()
+        .flat_map(|table| &table.rows)
+        .map(|row| row.label.as_str())
+        .collect();
     let rows = merged_rows(rows);
     let builtin = builtin_exact();
     let runtimes = read_runtime_keys(work)?;
     let helpers = builtin_helper_names();
     let shared = shared_exact(&rows, SHARED_LABELS);
+    let mut rows = rows;
+    rows.retain(|row| !curated_labels.contains(row.label.as_str()));
     let total = rows.len();
     let known = |row: &Row| {
         builtin.contains(&row.exact) || runtimes.contains(&row.exact) || helper_like(row, &helpers)
@@ -602,11 +715,7 @@ fn pack(work: &Path, out: &Path, version: &str, only: Option<&str>) -> Result<()
         let bytes = crate::library_gz::bytes(&text);
         let (file, sha256) = write_content(out, &bytes, "utl")?;
         let versions = versions_of(rows);
-        let range = match (versions.first(), versions.last()) {
-            (Some(low), Some(high)) if low != high => format!("{low}~{high}"),
-            (Some(low), _) => low.clone(),
-            _ => String::new(),
-        };
+        let range = range_of(&versions);
         packages.push(Package {
             id: label.clone(),
             label: label.clone(),
@@ -622,9 +731,15 @@ fn pack(work: &Path, out: &Path, version: &str, only: Option<&str>) -> Result<()
                 .get(label)
                 .map(|set| set.iter().cloned().collect())
                 .unwrap_or_default(),
+            curated: false,
         });
         let loose: Vec<u32> = rows.iter().map(|row| row.loose).collect();
         blooms.push((label.clone(), Bloom::with_keys(&loose)));
+    }
+    for table in curated {
+        let (package, bloom) = curated_package(out, table)?;
+        blooms.push((package.id.clone(), bloom));
+        packages.push(package);
     }
     let bloom = bloom_file(&blooms);
     let (file, sha256) = write_content(out, &bloom, "bloom")?;
@@ -645,8 +760,9 @@ fn pack(work: &Path, out: &Path, version: &str, only: Option<&str>) -> Result<()
         serde_json::to_string_pretty(&index)? + "\n",
     )?;
     eprintln!(
-        "{} packages, {} of {total} rows kept ({dropped_builtin} helper or bundler runtime shapes, {} in {SHARED_LABELS}+ packages)",
+        "{} packages ({} curated, unfiltered), {} of {total} generated rows kept ({dropped_builtin} helper or bundler runtime shapes, {} in {SHARED_LABELS}+ packages)",
         index.packages.len(),
+        curated.len(),
         total - dropped.len(),
         dropped.len() - dropped_builtin
     );

@@ -42,6 +42,8 @@ pub struct Package {
     pub shards: Vec<Shard>,
     #[serde(default)]
     pub keys: Vec<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub curated: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

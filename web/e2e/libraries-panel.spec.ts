@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import type { Page } from '@playwright/test';
-import { expect, openApp, openDiagnostics, readRepo, repoPath, runAndWait, test } from './fixtures';
+import { expect, openApp, openDiagnostics, readRepo, repoPath, runAndWait, test, CORE_JS_TABLE } from './fixtures';
 
 const CORE_JS = 'fixtures/libraries/core-js/rollup-cjs.terser.js';
 const SCREENSHOTS = process.env['UNTWIST_PROGRESS_SHOTS'];
@@ -13,7 +13,7 @@ interface LibraryRow {
 
 function cliLibraries(fixture: string): LibraryRow[] {
   const bin = process.env['UNTWIST_BIN'] ?? repoPath('target/release/untwist');
-  const json = execFileSync(bin, ['--report', 'json', repoPath(fixture)], {
+  const json = execFileSync(bin, [...CORE_JS_TABLE, '--report', 'json', repoPath(fixture)], {
     encoding: 'utf8',
     maxBuffer: 1 << 28,
     env: { ...process.env, UNTWIST_TEST_SUPERVISOR: 'off' },

@@ -71,6 +71,11 @@ All notable changes to this project are documented in this file. The format is b
   them. Generated fixtures for each encoder are in `fixtures/encoders/`
   (`tools/encoders/matrix.mjs`), with an EXPECT ratchet for `cargo xtask obf-options`.
 
+### Changed
+
+- The CLI binary no longer carries the core-js fingerprint table (4 MB): core-js (and core-js-pure) is named only with a library collection that holds the `core-js` package (`--libraries DIR`), or in a binary built with `--features libraries-corejs`. Without either, core-js code is no longer annotated or named, its unpacked modules are not placed under `node_modules/core-js/`, the report lists no core-js, and `--modern` stops with "core-js fingerprints are not available". With the package in the collection the output is the same as before. The Babel, swc, tslib and regenerator-runtime helper tables stay built in. The Rust library and the wasm build are unchanged.
+- `cargo xtask library-collection pack` adds the hand-written core-js and helper tables as curated packages (`"curated": true` in `collection.json`, the table bytes and string keys unchanged, none of the generated-row filters). A curated shard matches like a built-in table (no cluster or shared-shape rule) and is skipped when the same table is already built in; `--no-curated` leaves them out.
+
 ### Fixed
 
 - Loader layers keep an `eval` text that declares a name the prefix or the hand-off names (its

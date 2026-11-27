@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { Page } from '@playwright/test';
 import { strFromU8, unzipSync } from 'fflate';
-import { expect, openApp, paste, readRepo, repoPath, runAndWait, saved, test } from './fixtures';
+import { expect, openApp, paste, readRepo, repoPath, runAndWait, saved, test, CORE_JS_TABLE } from './fixtures';
 
 const CORE_JS = 'fixtures/libraries/core-js/rollup-cjs.terser.js';
 const PLAIN = 'fixtures/webpack-strict/w5-dev.js';
@@ -15,7 +15,7 @@ interface BundleJson {
 
 function cliTree(dir: string): Map<string, string> {
   const bin = process.env['UNTWIST_BIN'] ?? repoPath('target/release/untwist');
-  execFileSync(bin, ['-f', '--unsafe', '--split-hoisted', '--split-assume-modules', '-o', dir, repoPath(CORE_JS)], {
+  execFileSync(bin, [...CORE_JS_TABLE, '-f', '--unsafe', '--split-hoisted', '--split-assume-modules', '-o', dir, repoPath(CORE_JS)], {
     env: { ...process.env, UNTWIST_TEST_SUPERVISOR: 'off' },
     maxBuffer: 1 << 28,
   });

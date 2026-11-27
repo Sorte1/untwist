@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Arc, OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use rustc_hash::FxHashSet;
@@ -14,6 +14,7 @@ struct Attached {
     collection: Collection,
     source: Option<Box<dyn ShardSource>>,
     loaded: BTreeMap<(usize, usize), Table>,
+    curated: BTreeSet<(usize, usize)>,
     tried: FxHashSet<usize>,
     failures: Vec<String>,
 }
@@ -24,21 +25,38 @@ impl Attached {
     }
 
     fn loaded_packages(&self) -> Vec<String> {
-        let mut ids: Vec<String> = self
+        let mut packages: Vec<usize> = self
             .loaded
             .keys()
-            .map(|(package, _)| self.collection.packages()[*package].id.clone())
+            .map(|(package, _)| *package)
+            .chain(self.curated.iter().map(|(package, _)| *package))
             .collect();
-        ids.dedup();
-        ids
+        packages.sort_unstable();
+        packages.dedup();
+        packages
+            .into_iter()
+            .map(|package| self.collection.packages()[package].id.clone())
+            .collect()
     }
 
-    fn fetch(&mut self, package: usize, base: &Table) {
+    fn has_loaded(&self, package: usize) -> bool {
+        self.loaded
+            .keys()
+            .chain(&self.curated)
+            .any(|(known, _)| *known == package)
+    }
+
+    fn fetch(&mut self, package: usize, base: &Table, built_in: &[String]) -> Vec<Table> {
         self.tried.insert(package);
         let Some(source) = &self.source else {
-            return;
+            return Vec::new();
         };
+        let curated = self.collection.packages()[package].curated;
+        if curated && built_in.contains(&self.collection.packages()[package].id) {
+            return Vec::new();
+        }
         let shards = self.collection.packages()[package].shards.clone();
+        let mut adopted = Vec::new();
         for (index, shard) in shards.iter().enumerate() {
             let table = source
                 .read(shard)
@@ -47,14 +65,19 @@ impl Attached {
                     reason,
                 })
                 .and_then(|bytes| shard_table(shard, &bytes));
-            match table {
-                Ok(table) => {
+            match (table, curated) {
+                (Ok(table), true) => {
+                    self.curated.insert((package, index));
+                    adopted.push(table);
+                }
+                (Ok(table), false) => {
                     self.loaded
                         .insert((package, index), table.into_collection(base));
                 }
-                Err(error) => self.failures.push(error.to_string()),
+                (Err(error), _) => self.failures.push(error.to_string()),
             }
         }
+        adopted
     }
 }
 
@@ -73,6 +96,20 @@ impl Loaded {
             table: Arc::clone(&base),
             base,
             attached: None,
+        }
+    }
+
+    fn adopt(&mut self, id: String, tables: Vec<Table>) {
+        if tables.is_empty() {
+            return;
+        }
+        self.base = Arc::new(Table::merge(
+            std::iter::once((*self.base).clone())
+                .chain(tables)
+                .collect(),
+        ));
+        if !self.ids.contains(&id) {
+            self.ids.push(id);
         }
     }
 
@@ -166,6 +203,7 @@ pub fn attach(collection: Collection, source: Option<Box<dyn ShardSource>>) {
             collection,
             source,
             loaded: BTreeMap::new(),
+            curated: BTreeSet::new(),
             tried: FxHashSet::default(),
             failures: Vec::new(),
         });
@@ -195,10 +233,18 @@ pub fn wanting(loose: &FxHashSet<u32>) -> Arc<Table> {
             return Arc::clone(&loaded.table);
         }
         let before = attached.loaded.len();
+        let mut adopted = Vec::new();
         for package in wanted {
-            attached.fetch(package, &loaded.base);
+            let tables = attached.fetch(package, &loaded.base, &loaded.ids);
+            let id = attached.collection.packages()[package].id.clone();
+            adopted.push((id, tables));
         }
-        if attached.loaded.len() != before {
+        let changed =
+            attached.loaded.len() != before || adopted.iter().any(|(_, tables)| !tables.is_empty());
+        for (id, tables) in adopted {
+            loaded.adopt(id, tables);
+        }
+        if changed {
             loaded.rebuild();
         }
         Arc::clone(&loaded.table)
@@ -217,8 +263,9 @@ pub fn wanted(text: &str, loose: &FxHashSet<u32>) -> Vec<String> {
         packages.dedup();
         packages
             .into_iter()
-            .filter(|package| !attached.loaded.keys().any(|(known, _)| known == package))
+            .filter(|&package| !attached.has_loaded(package))
             .map(|package| collection.packages()[package].id.clone())
+            .filter(|id| !loaded.ids.contains(id))
             .collect()
     })
 }
@@ -239,8 +286,18 @@ pub fn load_shard(bytes: &[u8]) -> Result<String, CollectionError> {
             .iter()
             .position(|known| known == shard)
             .unwrap_or_default();
-        let table = shard_table(shard, bytes)?.into_collection(&loaded.base);
+        let table = shard_table(shard, bytes)?;
         let id = attached.collection.packages()[package].id.clone();
+        if attached.collection.packages()[package].curated {
+            let built_in = loaded.ids.contains(&id) && !attached.has_loaded(package);
+            if built_in || !attached.curated.insert((package, index)) {
+                return Ok(id);
+            }
+            loaded.adopt(id.clone(), vec![table]);
+            loaded.rebuild();
+            return Ok(id);
+        }
+        let table = table.into_collection(&loaded.base);
         let fresh = attached.loaded.insert((package, index), table).is_none();
         if fresh {
             loaded.rebuild();
@@ -269,4 +326,18 @@ pub fn collection_status() -> Option<CollectionStatus> {
             shards_loaded: attached.loaded_packages(),
             failures: attached.failures.clone(),
         })
+}
+
+pub fn provides(id: &str) -> bool {
+    with_loaded(|loaded| {
+        loaded.ids.iter().any(|known| known == id)
+            || loaded.attached.as_ref().is_some_and(|attached| {
+                attached.source.is_some()
+                    && attached
+                        .collection
+                        .packages()
+                        .iter()
+                        .any(|package| package.id == id)
+            })
+    })
 }

@@ -375,6 +375,7 @@ fn check_source_map_target(args: &Args) -> Result<()> {
 fn run(args: &Args, session: &mut Session<'_>) -> Result<u8> {
     check_source_map_target(args)?;
     libraries::configure(&args.libraries, session.err)?;
+    libraries::require_core_js(args.modern.is_some())?;
     if session.preflight {
         preflight_warning(args, session.err)?;
     }

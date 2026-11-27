@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import type { Page } from '@playwright/test';
-import { expect, openApp, paste, readRepo, repoPath, runAndWait, sha256, test, skipWithoutGame } from './fixtures';
+import { expect, openApp, paste, readRepo, repoPath, runAndWait, sha256, test, skipWithoutGame, CORE_JS_TABLE } from './fixtures';
 
 interface Case {
   readonly file: string;
@@ -35,7 +35,7 @@ const PLAYGROUND_DEFAULT = ['--disable', 'library-names,library-rename'];
 
 function cli(flags: string, file: string): string {
   const bin = process.env['UNTWIST_BIN'] ?? repoPath('target/release/untwist');
-  return execFileSync(bin, [...flags.split(' ').filter((word) => word !== ''), ...PLAYGROUND_DEFAULT, repoPath(file)], {
+  return execFileSync(bin, [...CORE_JS_TABLE, ...flags.split(' ').filter((word) => word !== ''), ...PLAYGROUND_DEFAULT, repoPath(file)], {
     encoding: 'utf8',
     maxBuffer: 1 << 28,
     env: { ...process.env, UNTWIST_TEST_SUPERVISOR: 'off' },

@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import type { Page } from '@playwright/test';
 import { strFromU8, unzipSync } from 'fflate';
-import { expect, openApp, openDiagnostics, readRepo, repoPath, runAndWait, saved, sha256, test } from './fixtures';
+import { expect, openApp, openDiagnostics, readRepo, repoPath, runAndWait, saved, sha256, test, CORE_JS_TABLE } from './fixtures';
 
 const MODERN = 'fixtures/modern/babel-usage.core-js-3.39.0.rollup-cjs.js';
 const BOUNDARIES = 'fixtures/unpack-rollup-boundaries/synthetic-rollup3-wrapped/index.js';
@@ -12,7 +12,7 @@ const MAP_COMMENT = '//# sourceMappingURL=data:application/json;';
 
 function cli(args: readonly string[], fixture: string): string {
   const bin = process.env['UNTWIST_BIN'] ?? repoPath('target/release/untwist');
-  return execFileSync(bin, [...args, repoPath(fixture)], {
+  return execFileSync(bin, [...CORE_JS_TABLE, ...args, repoPath(fixture)], {
     encoding: 'utf8',
     maxBuffer: 1 << 28,
     env: { ...process.env, UNTWIST_TEST_SUPERVISOR: 'off' },
@@ -21,7 +21,7 @@ function cli(args: readonly string[], fixture: string): string {
 
 function cliStdin(args: readonly string[], fixture: string): string {
   const bin = process.env['UNTWIST_BIN'] ?? repoPath('target/release/untwist');
-  return execFileSync(bin, args, {
+  return execFileSync(bin, [...CORE_JS_TABLE, ...args], {
     input: readRepo(fixture),
     encoding: 'utf8',
     maxBuffer: 1 << 28,
