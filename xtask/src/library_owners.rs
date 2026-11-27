@@ -79,7 +79,7 @@ mod tests {
         let mut rows: Vec<Row> = (1..=4).map(|exact| row(exact, "eventemitter3")).collect();
         rows.extend((1..=3).map(|exact| row(exact, "phaser")));
         rows.extend((10..=40).map(|exact| row(exact, "phaser")));
-        rows.push(row(10, "other"));
+        rows.extend([row(10, "other"), row(50, "other"), row(51, "other")]);
         let copies = vendored_copies(&rows);
         let expected: BTreeSet<(String, u64)> =
             (1..=3).map(|exact| ("phaser".to_string(), exact)).collect();
