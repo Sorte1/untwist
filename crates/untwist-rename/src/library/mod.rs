@@ -20,7 +20,7 @@ use std::sync::Arc;
 use shape::{exact_shape, shape_program, ExactShape, Unit, UnitKind};
 use table::{Role, Table};
 
-pub const SHAPE_EPOCH: u32 = 2;
+pub const SHAPE_EPOCH: u32 = 3;
 pub const STRONG_LENGTH: u32 = 60;
 pub const STRONG_SPECIFIC: u32 = 2;
 pub const CLUSTER_HITS: usize = 3;
