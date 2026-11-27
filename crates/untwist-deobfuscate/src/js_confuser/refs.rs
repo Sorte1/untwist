@@ -373,14 +373,14 @@ pub(super) fn judge_replaced<'a>(
     }
     stripped.apply(&mut clone, alloc, &mut scoping);
     let mut scoping = SemanticBuilder::new().build(&clone).semantic.into_scoping();
+    if let Some((inlined, restored)) = super::dispatcher::undone(&clone, &scoping, cx) {
+        clone = inlined;
+        scoping = restored;
+    }
     let declared = var_initialisers(&clone, &scoping, cx);
     if !declared.is_empty() {
         declared.apply(&mut clone, alloc, &mut scoping);
         scoping = SemanticBuilder::new().build(&clone).semantic.into_scoping();
-    }
-    if let Some((inlined, restored)) = super::dispatcher::undone(&clone, &scoping, cx) {
-        clone = inlined;
-        scoping = restored;
     }
     let names: Vec<&str> = symbols
         .iter()
