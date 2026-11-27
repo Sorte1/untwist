@@ -56,6 +56,13 @@ pub fn parameter_at(position: usize, shift: isize) -> Option<usize> {
     usize::try_from(position as isize - shift).ok()
 }
 
+pub fn first_spread(arguments: &[Argument<'_>]) -> usize {
+    arguments
+        .iter()
+        .position(|argument| matches!(argument, Argument::SpreadElement(_)))
+        .unwrap_or(usize::MAX)
+}
+
 struct Params {
     items: Vec<Option<SymbolId>>,
     rest: bool,
@@ -99,7 +106,7 @@ impl CalleeParams {
         let Some(params) = self.functions.get(&callee) else {
             return false;
         };
-        if params.reads_arguments || hands > MAX_HANDS {
+        if params.reads_arguments || hands > MAX_HANDS || scoping.symbol_is_mutated(callee) {
             return true;
         }
         match params.items.get(position) {
@@ -143,6 +150,10 @@ impl CalleeParams {
             return;
         }
         for (position, argument) in arguments.iter().enumerate() {
+            if matches!(argument, Argument::SpreadElement(_)) && matches!(callee, Callee::Local(..))
+            {
+                return;
+            }
             let Argument::Identifier(id) = argument else {
                 continue;
             };
@@ -173,12 +184,13 @@ impl CalleeParams {
                 _ => None,
             })
             .collect();
+        let declared_again = self.functions.contains_key(&symbol);
         self.functions.insert(
             symbol,
             Params {
                 items,
                 rest: params.rest.is_some(),
-                reads_arguments: false,
+                reads_arguments: declared_again,
             },
         );
         Some(symbol)

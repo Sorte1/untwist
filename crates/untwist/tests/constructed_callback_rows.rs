@@ -23,7 +23,7 @@ fn a_callback_a_local_callee_may_construct_prints_what_node_prints_in_both_lanes
         return;
     };
     let programs = rows(ROWS);
-    assert_eq!(programs.len(), 11);
+    assert_eq!(programs.len(), 14);
     let safe = Options::default();
     let unsafe_transforms = Options {
         unsafe_transforms: true,
