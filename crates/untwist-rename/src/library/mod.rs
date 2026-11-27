@@ -908,7 +908,7 @@ pub struct WholeModule {
 pub fn whole_module_matches(program: &Program<'_>, scoping: &Scoping) -> Vec<WholeModule> {
     let shaped = shape_program(program, scoping);
     let table = match registry::pending() {
-        true => registry::wanting(&loose_keys(&shaped, scoping)),
+        true => registry::wanting(&program_keys_of(&shaped, scoping)),
         false => table::current(),
     };
     let Some(unit) = shaped
