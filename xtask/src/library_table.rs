@@ -44,7 +44,7 @@ pub struct Request {
 const MIN_UNIT_TOKENS: u32 = 12;
 const LANES: [(&str, &[&str]); 2] = [("default", &[]), ("unsafe", &["--unsafe"])];
 
-struct Build {
+pub(crate) struct Build {
     file: String,
     version: String,
     dir: String,
@@ -54,12 +54,65 @@ struct Build {
     names: BTreeMap<String, String>,
 }
 
-struct Manifest {
+pub(crate) struct Manifest {
     label: String,
     group: String,
     versions: Vec<String>,
     packages: BTreeMap<String, BTreeMap<String, String>>,
     builds: Vec<Build>,
+    npm: bool,
+    owners: BTreeMap<String, String>,
+}
+
+const NPM_KEY: &str = "npm:";
+const NODE_MODULES: &str = "node_modules/";
+const SCRIPT_EXTENSIONS: [&str; 3] = [".js", ".mjs", ".cjs"];
+
+pub(crate) struct Owner {
+    pub(crate) label: String,
+    pub(crate) version: String,
+    pub(crate) module: String,
+}
+
+pub(crate) fn parse_npm_key(key: &str) -> Option<Owner> {
+    let rest = key.strip_prefix(NPM_KEY)?;
+    let (pinned, file) = rest.split_once(':')?;
+    let (label, version) = pinned.rsplit_once('@')?;
+    let module = SCRIPT_EXTENSIONS
+        .iter()
+        .find_map(|extension| file.strip_suffix(extension))
+        .unwrap_or(file);
+    (!label.is_empty() && !version.is_empty() && !module.is_empty()).then(|| Owner {
+        label: label.to_string(),
+        version: version.to_string(),
+        module: module.to_string(),
+    })
+}
+
+fn npm_key(path: &str, owners: &BTreeMap<String, String>) -> Option<String> {
+    let path = path.replace('\\', "/");
+    let start = path.find(NODE_MODULES)?;
+    let path = &path[start..];
+    let last = path.rfind(NODE_MODULES)?;
+    let after = &path[last + NODE_MODULES.len()..];
+    let mut parts = after.splitn(3, '/');
+    let first = parts.next()?;
+    let (name_len, file) = match first.starts_with('@') {
+        true => {
+            let second = parts.next()?;
+            (first.len() + 1 + second.len(), parts.next()?)
+        }
+        false => {
+            let rest = after.get(first.len() + 1..)?;
+            (first.len(), rest)
+        }
+    };
+    let chain = &path[..last + NODE_MODULES.len() + name_len];
+    let pinned = owners.get(chain)?;
+    let scripted = SCRIPT_EXTENSIONS
+        .iter()
+        .any(|extension| file.ends_with(extension));
+    (scripted && !file.is_empty()).then(|| format!("{NPM_KEY}{pinned}:{file}"))
 }
 
 fn string_map(value: &Value) -> BTreeMap<String, String> {
@@ -73,7 +126,17 @@ fn string_map(value: &Value) -> BTreeMap<String, String> {
         .unwrap_or_default()
 }
 
-fn read_manifest(path: &Path) -> Result<Manifest> {
+impl Manifest {
+    pub(crate) fn builds_len(&self) -> usize {
+        self.builds.len()
+    }
+
+    pub(crate) fn build(&self, index: usize) -> &Build {
+        &self.builds[index]
+    }
+}
+
+pub(crate) fn read_manifest(path: &Path) -> Result<Manifest> {
     let value: Value = serde_json::from_str(&std::fs::read_to_string(path)?)?;
     let text = |value: &Value| value.as_str().unwrap_or_default().to_string();
     let builds = value["builds"]
@@ -99,6 +162,8 @@ fn read_manifest(path: &Path) -> Result<Manifest> {
         })
         .unwrap_or_default();
     Ok(Manifest {
+        npm: value["layout"].as_str() == Some("node_modules"),
+        owners: string_map(&value["owners"]),
         label: text(&value["label"]),
         group: value["group"].as_str().unwrap_or("core").to_string(),
         versions: value["versions"]
@@ -210,6 +275,7 @@ struct Attributor<'m> {
     dir: &'m str,
     files: &'m BTreeMap<String, String>,
     names: &'m BTreeMap<String, String>,
+    owners: Option<&'m BTreeMap<String, String>>,
     contexts: Vec<Origin>,
 }
 
@@ -223,6 +289,9 @@ fn function_root(expr: &Expression<'_>) -> Option<Span> {
 
 impl Attributor<'_> {
     fn module_of_path(&self, path: &str) -> Option<String> {
+        if let Some(owners) = self.owners {
+            return npm_key(path, owners);
+        }
         let marker = format!("{}/", self.dir);
         let at = path.find(&marker)?;
         self.files.get(&path[at + marker.len()..]).cloned()
@@ -264,7 +333,38 @@ impl Attributor<'_> {
     }
 }
 
+impl Attributor<'_> {
+    fn nested(&mut self, name: &str, span: Span, root: Option<Span>) {
+        if self.owners.is_none() {
+            return;
+        }
+        if let Some(module) = self.names.get(name) {
+            self.contexts.push(Origin {
+                span,
+                module: module.clone(),
+                root,
+            });
+        }
+    }
+}
+
 impl<'a> Visit<'a> for Attributor<'_> {
+    fn visit_function(&mut self, it: &Function<'a>, flags: oxc_syntax::scope::ScopeFlags) {
+        if let Some(id) = &it.id {
+            self.nested(&id.name, it.span, Some(it.span));
+        }
+        walk::walk_function(self, it, flags);
+    }
+
+    fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        if let (BindingPattern::BindingIdentifier(id), Some(init)) = (&it.id, &it.init) {
+            if let Some(root) = function_root(init) {
+                self.nested(&id.name, it.span, Some(root));
+            }
+        }
+        walk::walk_variable_declarator(self, it);
+    }
+
     fn visit_program(&mut self, it: &Program<'a>) {
         for statement in &it.body {
             self.top_level(statement);
@@ -346,9 +446,9 @@ fn literal_modules(
         .collect()
 }
 
-type BuildFindings = (Vec<Observed>, Vec<(String, String)>);
+pub(crate) type BuildFindings = (Vec<Observed>, Vec<(String, String)>);
 
-struct Observed {
+pub(crate) struct Observed {
     row: Row,
     known: bool,
 }
@@ -429,6 +529,7 @@ fn observe_file(
         dir: &build.dir,
         files: manifest.packages.get(&build.dir).unwrap_or(&empty),
         names: &build.names,
+        owners: manifest.npm.then_some(&manifest.owners),
         contexts: Vec::new(),
     };
     if file_module.is_none() {
@@ -445,18 +546,25 @@ fn observe_file(
         .into_iter()
         .filter(|(record, _, _)| record.loose.0 >= MIN_UNIT_TOKENS)
         .filter(|(record, _, _)| is_strong(record) || record.binding.is_some())
-        .map(|(record, module, role)| {
+        .filter_map(|(record, module, role)| {
+            let (label, versions, module) = match manifest.npm {
+                true => {
+                    let owner = parse_npm_key(&module)?;
+                    (owner.label, owner.version, owner.module)
+                }
+                false => (manifest.label.clone(), build.version.clone(), module),
+            };
             let known = !build.obfuscated;
             let own_known = known || role == Role::Wrapper;
             let real =
                 |name: Option<String>| name.filter(|name| !build.minified || !generated(name));
-            Observed {
+            Some(Observed {
                 known,
                 row: Row {
                     loose: loose_key(record.loose),
                     exact: exact_key(record.exact),
-                    label: manifest.label.clone(),
-                    versions: build.version.clone(),
+                    label,
+                    versions,
                     module,
                     role,
                     own: record
@@ -474,7 +582,7 @@ fn observe_file(
                         .collect(),
                     specific: record.specific,
                 },
-            }
+            })
         })
         .collect();
     (observed, keys)
@@ -484,6 +592,7 @@ fn bundle_modules(
     out: &Path,
     build: &Build,
     attributor_files: &BTreeMap<String, String>,
+    owners: Option<&BTreeMap<String, String>>,
 ) -> BTreeMap<PathBuf, String> {
     let Ok(text) = std::fs::read_to_string(out.join("bundle.json")) else {
         return BTreeMap::new();
@@ -499,6 +608,9 @@ fn bundle_modules(
         .filter_map(|module| {
             let id = module["id"].as_str()?;
             let path = module["path"].as_str()?;
+            if let Some(owners) = owners {
+                return Some((out.join(path), npm_key(id, owners)?));
+            }
             let at = id.find(&marker)?;
             let library_module = attributor_files.get(&id[at + marker.len()..])?;
             Some((out.join(path), library_module.clone()))
@@ -506,7 +618,7 @@ fn bundle_modules(
         .collect()
 }
 
-fn process_build(
+pub(crate) fn process_build(
     untwist: &Path,
     work: &Path,
     build: &Build,
@@ -533,7 +645,7 @@ fn process_build(
             eprintln!("untwist failed on {} ({lane})", build.file);
             continue;
         }
-        let modules = bundle_modules(&out, build, files);
+        let modules = bundle_modules(&out, build, files, manifest.npm.then_some(&manifest.owners));
         for entry in std::fs::read_dir(&out)? {
             let path = entry?.path();
             if path.extension().is_none_or(|ext| ext != "js") {
@@ -623,13 +735,18 @@ fn version_ranges(present: &BTreeSet<String>, order: &[String]) -> String {
         .join(",")
 }
 
-fn aggregate(observed: Vec<Observed>, manifest: &Manifest) -> Vec<Row> {
-    let mut groups: BTreeMap<(u64, String, Role), Aggregate> = BTreeMap::new();
+pub(crate) fn aggregate(observed: Vec<Observed>, manifest: &Manifest) -> Vec<Row> {
+    let mut groups: BTreeMap<(u64, String, String, Role), Aggregate> = BTreeMap::new();
+    let mut orders: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut sorted = observed;
     sorted.sort_by_key(|item| !item.known);
     for Observed { row, known } in sorted {
+        orders
+            .entry(row.label.clone())
+            .or_default()
+            .insert(row.versions.clone());
         let group = groups
-            .entry((row.exact, row.module.clone(), row.role))
+            .entry((row.exact, row.label.clone(), row.module.clone(), row.role))
             .or_default();
         group.loose = row.loose;
         group.specific = row.specific;
@@ -642,11 +759,17 @@ fn aggregate(observed: Vec<Observed>, manifest: &Manifest) -> Vec<Row> {
     }
     groups
         .into_iter()
-        .map(|((exact, module, role), group)| Row {
+        .map(|((exact, label, module, role), group)| Row {
             loose: group.loose,
             exact,
-            label: manifest.label.clone(),
-            versions: version_ranges(&group.versions, &manifest.versions),
+            versions: match manifest.npm {
+                true => version_ranges(
+                    &group.versions,
+                    &orders[&label].iter().cloned().collect::<Vec<_>>(),
+                ),
+                false => version_ranges(&group.versions, &manifest.versions),
+            },
+            label,
             module,
             role,
             own: group.own.flatten().filter(|name| !name.is_empty()),
@@ -765,6 +888,52 @@ mod tests {
         assert_eq!(
             version_ranges(&present(&["1.9.2", "1.10.0"]), &listed),
             "1.9.2~1.10.0"
+        );
+    }
+
+    #[test]
+    fn a_bundled_path_is_credited_to_the_package_that_owns_it() {
+        let owners: BTreeMap<String, String> = [
+            ("node_modules/react-dom", "react-dom@19.3.1"),
+            (
+                "node_modules/react-dom/node_modules/scheduler",
+                "scheduler@0.23.2",
+            ),
+            ("node_modules/@vue/shared", "@vue/shared@3.5.46"),
+        ]
+        .into_iter()
+        .map(|(chain, pinned)| (chain.to_string(), pinned.to_string()))
+        .collect();
+        assert_eq!(
+            npm_key(
+                "./node_modules/react-dom/node_modules/scheduler/cjs/scheduler.production.js",
+                &owners
+            )
+            .as_deref(),
+            Some("npm:scheduler@0.23.2:cjs/scheduler.production.js")
+        );
+        assert_eq!(
+            npm_key(
+                "/abs/pkgs/x/node_modules/@vue/shared/dist/shared.esm-bundler.js",
+                &owners
+            )
+            .as_deref(),
+            Some("npm:@vue/shared@3.5.46:dist/shared.esm-bundler.js")
+        );
+        assert_eq!(
+            npm_key("./node_modules/react-dom/package.json", &owners),
+            None
+        );
+        assert_eq!(npm_key("./src/app.js", &owners), None);
+        let owner =
+            parse_npm_key("npm:@vue/shared@3.5.46:dist/shared.esm-bundler.js").expect("a key");
+        assert_eq!(
+            (
+                owner.label.as_str(),
+                owner.version.as_str(),
+                owner.module.as_str()
+            ),
+            ("@vue/shared", "3.5.46", "dist/shared.esm-bundler")
         );
     }
 }

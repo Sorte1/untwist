@@ -1,0 +1,57 @@
+{
+ "skip": [
+  "tslib",
+  "@babel/runtime",
+  "core-js",
+  "core-js-pure",
+  "core-js-bundle",
+  "regenerator-runtime",
+  "@swc/helpers",
+  "ws",
+  "monaco-editor",
+  "plotly.js-dist-min",
+  "pdfjs-dist",
+  "firebase",
+  "aws-sdk",
+  "typescript",
+  "angular",
+  "ethers",
+  "web3",
+  "@solana/web3.js",
+  "ammo.js",
+  "box2d-wasm",
+  "draco3d",
+  "@dimforge/rapier3d-compat",
+  "xlsx",
+  "exceljs",
+  "babylonjs",
+  "@babylonjs/core",
+  "@babylonjs/loaders",
+  "echarts",
+  "mapbox-gl",
+  "core-js-compat"
+ ],
+ "always": [
+  "three",
+  "jquery",
+  "moment",
+  "vue",
+  "pixi.js",
+  "phaser",
+  "howler",
+  "gl-matrix",
+  "socket.io-client"
+ ],
+ "versions": {
+  "three": [
+   "0.120.1",
+   "0.130.1",
+   "0.140.2",
+   "0.150.1",
+   "0.160.1",
+   "0.170.0",
+   "0.187.0"
+  ]
+ },
+ "entries": {}
+}
