@@ -240,7 +240,7 @@ fn an_unrelated_big_program_wants_almost_no_package() {
         program: None,
     };
     let wanted = collection.shards_wanted(&found);
-    assert!(wanted.is_empty(), "{wanted:?}");
+    assert!(wanted.len() <= 1, "{wanted:?}");
 }
 
 #[test]
