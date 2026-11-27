@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import type { Plugin } from 'vite';
-import { bloomFile, bloomWithKeys, type Bloom } from '../src/libraries/bloom.ts';
+import { bloomFile, bloomParams, bloomWithKeys, type Bloom, type BloomParams } from '../src/libraries/bloom.ts';
 import {
   COLLECTION_FILE,
   COLLECTION_SCHEMA,
@@ -23,6 +23,7 @@ const REPO = resolve(HERE, '../..');
 const CURATED_DIRS = ['crates/untwist-libraries-core/data', 'crates/untwist-libraries-corejs/data'];
 const COMPILED_IN = new Set(['crates/untwist-libraries-core/data']);
 const EPOCH_SOURCE = 'crates/untwist-rename/src/library/mod.rs';
+const BLOOM_SOURCE = 'crates/untwist-rename/src/library/collection.rs';
 const TABLE_SUFFIX = '.table.gz';
 const KEYS_SUFFIX = '.keys.json';
 const COLLECTION_ENV = 'UNTWIST_LIBRARY_COLLECTION';
@@ -135,7 +136,7 @@ function rangeOf(versions: readonly string[]): string {
   return low === high ? low : `${low}~${high}`;
 }
 
-function curatedPackage(table: Curated, keys: readonly string[], files: Map<string, Buffer>): { readonly pkg: CollectionPackage; readonly bloom: Bloom } {
+function curatedPackage(table: Curated, keys: readonly string[], params: BloomParams, files: Map<string, Buffer>): { readonly pkg: CollectionPackage; readonly bloom: Bloom } {
   const sha = sha256(table.bytes);
   const file = `${SHARDS_DIR}/${sha}.utl`;
   files.set(file, table.bytes);
@@ -148,14 +149,15 @@ function curatedPackage(table: Curated, keys: readonly string[], files: Map<stri
     keys,
     curated: true,
   };
-  return { pkg, bloom: bloomWithKeys(summary.loose) };
+  return { pkg, bloom: bloomWithKeys(summary.loose, params) };
 }
 
 export function builtCollection(): LibraryFiles {
   const tables = curatedTables();
   const distinct = new Map(distinctKeys(tables.map((table) => ({ id: table.summary.id, keys: table.keys })), genericNames()).map((table) => [table.id, table.keys]));
+  const params = bloomParams(readFileSync(join(REPO, BLOOM_SOURCE), 'utf8'));
   const files = new Map<string, Buffer>();
-  const built = tables.filter((table) => !table.compiledIn).map((table) => curatedPackage(table, (distinct.get(table.summary.id) ?? []).filter(strongKey), files));
+  const built = tables.filter((table) => !table.compiledIn).map((table) => curatedPackage(table, (distinct.get(table.summary.id) ?? []).filter(strongKey), params, files));
   const packages = built.map(({ pkg }) => pkg);
   const bloom = Buffer.from(bloomFile(built.map(({ pkg, bloom }) => [pkg.id, bloom] as const)));
   const bloomSha = sha256(bloom);
