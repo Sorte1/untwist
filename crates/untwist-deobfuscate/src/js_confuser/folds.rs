@@ -157,7 +157,11 @@ fn calculator_cases(
         .collect()
 }
 
-fn calculator(statement: &Statement<'_>, refs: &Refs<'_>, scoping: &Scoping) -> Option<Helper> {
+fn calculator(
+    statement: &Statement<'_>,
+    (refs, scoping): (&Refs<'_>, &Scoping),
+    array: Option<(SymbolId, &[Const])>,
+) -> Option<Helper> {
     let (symbol, function) = declared_function(statement)?;
     let cases = calculator_cases(function, scoping)?;
     let calls = refs.calls_of(symbol);
@@ -168,8 +172,9 @@ fn calculator(statement: &Statement<'_>, refs: &Refs<'_>, scoping: &Scoping) -> 
         .iter()
         .filter(|call| !call.spread)
         .filter_map(|call| {
+            let args = call.resolved(array);
             let [Some(Const::Str(key)), Some(left @ Const::Num(_)), Some(right @ Const::Num(_))] =
-                call.args.as_slice()
+                args.as_slice()
             else {
                 return None;
             };
@@ -249,10 +254,41 @@ struct Plan {
     notes: Vec<String>,
 }
 
+fn literal_values(statement: &Statement<'_>) -> Option<Vec<Const>> {
+    let Statement::VariableDeclaration(declaration) = statement else {
+        return None;
+    };
+    let [declarator] = declaration.declarations.as_slice() else {
+        return None;
+    };
+    let Some(Expression::ArrayExpression(array)) = &declarator.init else {
+        return None;
+    };
+    array
+        .elements
+        .iter()
+        .map(|element| element.as_expression().and_then(literal_value))
+        .collect()
+}
+
 fn helpers(program: &Program<'_>, refs: &Refs<'_>, scoping: &Scoping) -> Vec<Helper> {
     let mut found = Vec::new();
+    let arrays: Vec<(SymbolId, Vec<Const>)> = program
+        .body
+        .iter()
+        .enumerate()
+        .filter_map(|(index, statement)| {
+            let helper = literal_array(statement, refs, scoping)?;
+            let usable = program.body[..index].iter().all(runs_no_code) && repeats_a_read(&helper);
+            usable.then(|| Some((helper.symbol, literal_values(statement)?)))?
+        })
+        .collect();
+    let array = match arrays.as_slice() {
+        [(symbol, values)] => Some((*symbol, values.as_slice())),
+        _ => None,
+    };
     for (index, statement) in program.body.iter().enumerate() {
-        if let Some(helper) = calculator(statement, refs, scoping) {
+        if let Some(helper) = calculator(statement, (refs, scoping), array) {
             found.push(helper);
             continue;
         }
@@ -438,13 +474,20 @@ fn analyse(
         }
         plan.folds.extend(helper.folds);
     }
+    let outer: Vec<Span> = plan.folds.iter().map(|(span, _)| *span).collect();
+    plan.folds
+        .retain(|(span, _)| !outer.iter().any(|o| o != span && inside(*o, *span)));
     plan
 }
 
 fn apply<'a>(plan: Plan, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
     let mut folds = ExprEdits::new();
     for (span, value) in &plan.folds {
-        let Some(replacement) = const_to_expression(value, *span, &*cx) else {
+        let replacement = match value {
+            Const::Undefined => Some(Expression::new_void_0(*span, &*cx)),
+            other => const_to_expression(other, *span, &*cx),
+        };
+        let Some(replacement) = replacement else {
             return;
         };
         if !folds.insert(*span, replacement) {

@@ -1,0 +1,1 @@
+function $0 ( $1 ) { return typeof $2 !== "undefined" && $2 ? ( new $2 ) . decode ( new $3 ( $1 ) ) : typeof $4 !== "undefined" && $4 ? $4 . from ( $1 ) . toString ( "utf-8" ) : $5 ( $1 ) }
