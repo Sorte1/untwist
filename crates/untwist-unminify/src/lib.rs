@@ -2,6 +2,7 @@ pub mod block_statements;
 pub mod callee_params;
 pub mod computed_properties;
 pub mod default_parameters;
+pub mod exponentiation;
 pub mod for_to_while;
 pub mod function_to_arrow;
 pub mod infinity;

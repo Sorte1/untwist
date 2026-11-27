@@ -1,4 +1,4 @@
-#shape-epoch	1
+#shape-epoch	2
 # fixture	default lane	unsafe lane (units of 12+ tokens: count:sha256; when this moves, bump untwist_rename::library::SHAPE_EPOCH and rerun with UNTWIST_WRITE_SHAPE_EPOCH=1)
 babel-helpers/inline.rollup-cjs.esbuild.js	68:d2a1742d8a717cd5883688f5	64:41169c686eeb1c27cfd0ca9b
 babel-helpers/inline.rollup-cjs.js	68:da12fa1d004742565614ef1e	63:d4024563959148bfa199f3ad
@@ -86,7 +86,7 @@ swc-helpers/rollup-cjs.swc.js	43:5eeed52be79bb840f7cce6d1	43:1ff4b5507191de23733
 swc-helpers/rollup-cjs.terser.js	46:0f8322b2c60b4eea7c5c21a2	39:175bde81077e9778bdc592f9
 swc-helpers/rollup-cjs.terser.obf.js	49:8dc430ca1b81450840aeae13	39:175bde81077e9778bdc592f9
 swc-helpers/vite.none.js	50:90b59577e1ecef90695e6551	30:ac6b328b439eecdd983d321a
-swc-helpers/vite.terser.js	46:404d7e0efccc9cd3f36338a2	39:71dd113c4bc4a061ebabe652
+swc-helpers/vite.terser.js	46:404d7e0efccc9cd3f36338a2	39:5f77c7542fd70f632b647505
 swc-helpers/webpack4.none.js	81:7d2bfa31fa0ae6dda5a9e33f	76:7117c4bc8bf168fc4939021e
 swc-helpers/webpack4.prod.js	56:c906e7629da8d3143d689b93	39:703adfafa78ae2252c9e6d6a
 swc-helpers/webpack5.none.js	77:2cde0325b32440cf06ab6fa3	76:a3c03c1984c777a4ea4558fd
@@ -103,7 +103,7 @@ swc-inline/inline.rollup-cjs.swc.js	43:e4b21766d2be03de8450f64c	43:1571ca92ae3ae
 swc-inline/inline.rollup-cjs.terser.js	46:ceb4b90d2e36d2f0a24045bc	39:f758d7bd92e83ea9a1ec86f4
 swc-inline/inline.rollup-cjs.terser.obf.js	49:6000f99e404d9935c34b9915	39:f758d7bd92e83ea9a1ec86f4
 swc-inline/inline.vite.none.js	50:c6bb4e923badbabfa284178b	30:54276ba862c121ea7380730f
-swc-inline/inline.vite.terser.js	46:eda58e3e90c030b409d25d1a	39:b1e4d6f59517258a2e0a9969
+swc-inline/inline.vite.terser.js	46:eda58e3e90c030b409d25d1a	39:276a64f295dfc565e232478a
 swc-inline/inline.webpack4.none.js	59:3d7b9f8435486f211f2df19b	14:cc840f5223b4af9766c3c7e8
 swc-inline/inline.webpack4.prod.js	54:38f4b00863c691757b83190a	37:20dd4a74ef9e5a4bf70f4700
 swc-inline/inline.webpack5.none.js	50:25d0ef9a391e02eb6bac2dfb	44:fa2a39c845b81f37459605ff

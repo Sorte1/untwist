@@ -47,6 +47,31 @@
   that **built-ins are never replaced**. A `!!` in a test position (`if`, loops, `?:`, under `!`) is removed in every
   program, since no built-in is involved there. The reference deobfuscator rewrites all of
   these and changes what a program that patches the built-in prints.
+- **`exponentiation` relies on `Math.pow` and on one plain operand.** `Math.pow(a, b)` (also
+  `Math["pow"]` and a `const`/`var` copy of `Math.pow` declared before any code of its function or
+  module runs and used only as a two-argument callee) becomes `a ** b` only when `a` or `b` is a
+  number, string, boolean, `null`, template or a result that is never a BigInt (`+x`, `typeof x`, a
+  comparison, `x >>> y`, arithmetic with such a side, a `Math` call or constant). Then a BigInt in
+  the other operand throws a `TypeError` in both forms after the same coercions; only the engine
+  text of the message differs. Two operands that may both be BigInts stay a call, since
+  `Math.pow(2n, 3n)` throws and `2n ** 3n` does not. By default the rewrite is made only when the program names
+  neither the global object (`globalThis`, `window`, `self`, `global`, `top`, `parent`, `frames`) nor
+  a code runner (`eval`, `Function`, `Reflect`, a timer) and the built-in scan shows that no input
+  replaces anything on `Math`; the name check keeps the scan, which costs a whole-program walk, off
+  the many programs it would refuse anyway. `--unsafe` assumes `Math` is not replaced.
+  `x = x ** e` and `o.p = o.p ** e` (with `o` a plain name) then become `x **= e` and `o.p **= e`.
+- **Babel's array loops become `for...of` only with `--unsafe`.** `for (var _i = 0, _a = s; _i <
+  _a.length; _i++) { var v = _a[_i]; … }` and loose mode's `for (var _it =
+  _createForOfIteratorHelperLoose(s), _step; !(_step = _it()).done;) { var v = _step.value; … }`
+  skip the iterator's `return` on `break`, `return` and `throw`, which `for...of` calls. The rewrite
+  is made only when `s` is a fresh array (`[…]`, `Object.keys/values/entries/getOwnPropertyNames`,
+  `Array.from/of`, `Array(…)`, a literal string's `split`), or, for the helper, a literal string or a
+  `new Map`/`new Set`, or a name declared earlier in the same statement list with such an array that
+  is never written, handed to a call, or given a computed key that is not a number literal. The
+  iterators of those values have no `return`, so the loops agree under the unsafe lane's premise that
+  `Array.prototype[Symbol.iterator]` and the array iterator are the built-ins. Babel's `_loop`
+  closure called alone from such a loop is inlined first. Values that may carry another iterator
+  (parameters, calls, generators) keep the helper.
 - Class members named `constructor` (and static members named `prototype`) and object properties named `__proto__` are never un-computed by `computed-properties`; doing so would change semantics or be a syntax error.
 - **A negated `if` whose consequent is a lone nested `if` is inverted by default so the chain can
   merge.** `if (!c) { if (d) {…} else {…} } else {…}` becomes `if (c) {…} else if (d) {…} else {…}`.
