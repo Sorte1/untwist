@@ -5,7 +5,7 @@ use untwist_testing::node::assert_node_agrees;
 
 fn read(name: &str) -> String {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../fixtures/untranspile/hand")
+        .join("../../fixtures/loose-for-of")
         .join(name);
     std::fs::read_to_string(&path).unwrap_or_else(|err| panic!("read {}: {err}", path.display()))
 }
