@@ -26,9 +26,16 @@ pub struct Rewriter<'s> {
     pub forbidden: RefCell<FxHashSet<SymbolId>>,
     renames: RefCell<FxHashMap<SymbolId, String>>,
     pub seen: RefCell<FxHashSet<SymbolId>>,
+    verbatim: Vec<Span>,
 }
 
 pub type Reason = String;
+
+pub const LINE: char = '\u{FDD0}';
+
+pub fn restore_lines(text: &str) -> String {
+    text.replace(LINE, "\n")
+}
 
 impl<'s> Rewriter<'s> {
     pub fn new(
@@ -50,6 +57,33 @@ impl<'s> Rewriter<'s> {
             forbidden: RefCell::new(FxHashSet::default()),
             renames: RefCell::new(FxHashMap::default()),
             seen: RefCell::new(FxHashSet::default()),
+            verbatim: Vec::new(),
+        }
+    }
+
+    pub fn keep_lines(&mut self, mut spans: Vec<Span>) {
+        if self.source.contains(LINE) {
+            return;
+        }
+        spans.sort_by_key(|span| span.start);
+        self.verbatim = spans;
+    }
+
+    fn push(&self, out: &mut String, start: u32, end: u32) {
+        let text = &self.source[start as usize..end as usize];
+        if self.verbatim.is_empty() || !text.contains('\n') {
+            out.push_str(text);
+            return;
+        }
+        for (at, c) in text.char_indices() {
+            let offset = start + at as u32;
+            let first = self.verbatim.partition_point(|span| span.end <= offset);
+            let kept = c == '\n'
+                && self
+                    .verbatim
+                    .get(first)
+                    .is_some_and(|span| span.start <= offset);
+            out.push(if kept { LINE } else { c });
         }
     }
 
@@ -89,7 +123,7 @@ impl<'s> Rewriter<'s> {
                 ));
             }
             if let Some(name) = renames.get(symbol) {
-                out.push_str(&self.source[cursor as usize..span.start as usize]);
+                self.push(out, cursor, span.start);
                 if self.shorthands.binary_search(&span.start).is_ok() {
                     out.push_str(span.source_text(self.source));
                     out.push_str(": ");
@@ -98,7 +132,7 @@ impl<'s> Rewriter<'s> {
                 cursor = span.end;
             }
         }
-        out.push_str(&self.source[cursor as usize..end as usize]);
+        self.push(out, cursor, end);
         Ok(())
     }
 
