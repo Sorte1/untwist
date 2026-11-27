@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import type { Page } from '@playwright/test';
-import { expect, openApp, paste, repoPath, runAndWait, test } from './fixtures';
+import { expect, openApp, paste, repoPath, runAndWait, test, CORE_JS_TABLE } from './fixtures';
 
 const INPUT = '#input-editor';
 const OUTPUT = '#output-editor';
@@ -19,7 +19,7 @@ outer([1]);
 
 function cliFormat(text: string): string {
   const bin = process.env['UNTWIST_BIN'] ?? repoPath('target/release/untwist');
-  return execFileSync(bin, FORMAT_FLAGS, { input: text, encoding: 'utf8' });
+  return execFileSync(bin, [...CORE_JS_TABLE, ...FORMAT_FLAGS], { input: text, encoding: 'utf8' });
 }
 
 async function editorText(page: Page, editor: string): Promise<string> {
