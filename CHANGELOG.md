@@ -9,6 +9,7 @@ All notable changes to this project are documented in this file. The format is b
 ### Added
 
 - `--libraries <builtin|none|DIR|FILE.table.gz>` (repeatable) reads an external library collection: `collection.json` (schema `untwist.library-collection/1`, shape epoch), one SHA-256-named shard per package and one bloom file. Only the shards whose bloom filter the program's shapes hit are read, each checked against its size and SHA-256; a collection for another shape epoch is refused with a warning and the built-in tables are used. `--report json` gains `collection {version, epoch, packages, shards_loaded}`. The wasm API gains `load_library_collection`, `library_wanted` and `load_library_shard`. Nothing is fetched over the network.
+- Collection rows are held to a stricter rule than the built-in tables: a package from a collection is named in a file only with at least 3 distinct hits there (or one whole-module hit), a shape that 3 or more collection packages share is not evidence for any of them, and collection rows whose shape the built-in tables already hold (vendored babel / tslib helpers) are dropped when a shard loads. The built-in tables match as before.
 - js-confuser 2.x support (`fixtures/js-confuser`, `cargo xtask obf-options --dir fixtures/js-confuser`).
   String concealing decodes: each `STR(start, length)` getter call whose decoder, getter and the
   `getGlobal`/`bufferToString` prelude match js-confuser's templates (up to names, layout and its
