@@ -1,0 +1,18 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/PShared.js
+---
+==== shared.jsx
+import { createSignal, createContext } from "solid-js";
+
+const [g, setG] = createSignal((console.log("init g"), 1));
+
+const Ctx = createContext((console.log("init ctx"), "d"));
+
+const table = {};
+
+export { g, setG, Ctx, table };
+==== Component kept as JS: the module statement `table.k = (console.log("fill table"), "v");` changes what it reads
+==== Component2 kept as JS: the module statement `table.k = (console.log("fill table"), "v");` changes what it reads
+==== PShared kept as JS: its child component Component is kept as JS

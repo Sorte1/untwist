@@ -1,0 +1,50 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/F7Cache.js
+---
+==== Alpha.jsx
+import { seen } from "./shared.jsx";
+
+function remember(k) {
+  seen.push(k);
+  return seen.length;
+}
+
+export default function Alpha() {
+  return <b>{remember("a")}</b>;
+}
+==== Beta.jsx
+import { seen } from "./shared.jsx";
+
+function remember(k) {
+  seen.push(k);
+  return seen.length;
+}
+
+export default function Beta() {
+  return <i>{remember("b")}</i>;
+}
+==== F7Cache.jsx
+import { seen } from "./shared.jsx";
+import Alpha from "./Alpha.jsx";
+import Beta from "./Beta.jsx";
+
+function remember(k) {
+  seen.push(k);
+  return seen.length;
+}
+
+export default function F7Cache() {
+  return (
+    <div>
+      <Alpha />
+      <Beta />
+      {remember("root")}
+    </div>
+  );
+}
+==== shared.jsx
+const seen = [];
+
+export { seen };

@@ -1,0 +1,24 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/F1Once.js
+---
+==== Kid.jsx
+export default function Kid(props) {
+  return <i>{props.a}</i>;
+}
+==== F1Once.jsx
+import { createSignal } from "solid-js";
+import Kid from "./Kid.jsx";
+
+export default function F1Once() {
+  const [n, setN] = createSignal(1);
+  const f = k => n() * k;
+  return (
+    <div>
+      <p title={/*@once*/ f(1)}>{/*@once*/ f(2)}</p>
+      <Kid a={/*@once*/ f(3)} />
+      <button onClick={() => setN(n() + 1)}>inc</button>
+    </div>
+  );
+}

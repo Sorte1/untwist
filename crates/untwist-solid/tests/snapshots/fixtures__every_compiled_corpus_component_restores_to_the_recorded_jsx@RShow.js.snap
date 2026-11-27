@@ -1,0 +1,25 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/RShow.js
+---
+==== Show.jsx
+export default function Show(props) {
+  return <b class="mine">custom:{props.when ? "T" : "F"}:{props.children}</b>;
+}
+==== For.jsx
+export default function For(props) {
+  return <ol>{props.each.length} items</ol>;
+}
+==== RShow.jsx
+import Show from "./Show.jsx";
+import For from "./For.jsx";
+
+export default function RShow(props) {
+  return (
+    <div>
+      <Show when={props.flag}>kid</Show>
+      <For each={[1, 2, 3]}>{x => <li>{x}</li>}</For>
+    </div>
+  );
+}

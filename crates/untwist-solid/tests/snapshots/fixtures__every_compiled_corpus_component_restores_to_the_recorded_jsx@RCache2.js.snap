@@ -1,0 +1,57 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/RCache2.js
+---
+==== Alpha.jsx
+import { store, ids } from "./shared.jsx";
+
+const idOf = k => {
+  if (!ids.has(k)) ids.set(k, ids.size + 1);
+  return ids.get(k);
+};
+
+export default function Alpha() {
+  return <b onClick={store.bump}>{store.v()}:{idOf("alpha")}</b>;
+}
+==== Beta.jsx
+import { store, ids } from "./shared.jsx";
+
+const idOf = k => {
+  if (!ids.has(k)) ids.set(k, ids.size + 1);
+  return ids.get(k);
+};
+
+export default function Beta() {
+  return <i>{store.v()}:{idOf("beta")}:{idOf("alpha")}</i>;
+}
+==== RCache2.jsx
+import { store } from "./shared.jsx";
+import Alpha from "./Alpha.jsx";
+import Beta from "./Beta.jsx";
+
+export default function RCache2() {
+  return (
+    <div>
+      <Alpha />
+      <Beta />
+      <button onClick={() => store.bump()}>inc</button>
+    </div>
+  );
+}
+==== shared.jsx
+import { createSignal } from "solid-js";
+
+const makeStore = () => {
+  const [v, set] = createSignal(0);
+  return {
+    v,
+    bump: () => set(v() + 1)
+  };
+};
+
+const store = makeStore();
+
+const ids = new Map();
+
+export { store, ids };

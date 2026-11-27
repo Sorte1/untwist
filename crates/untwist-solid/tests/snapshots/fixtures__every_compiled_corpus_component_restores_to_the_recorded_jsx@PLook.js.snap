@@ -1,0 +1,25 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/PLook.js
+---
+==== Kid.jsx
+export default function Kid(props) {
+  return [props.a, "|", props.b];
+}
+==== PLook.jsx
+import { createSignal } from "solid-js";
+import Kid from "./Kid.jsx";
+
+export default function PLook() {
+  const [n, setN] = createSignal(1);
+  const f = k => (console.log("f", k), n() * k);
+  return (
+    <div>
+      <p>{/*@once*/ f(2)}</p>
+      <p>{f(3)}</p>
+      <p><Kid a={/*@once*/ f(4)} b={f(5)} /></p>
+      <i title={/*@once*/ f(6)} textContent={/*@once*/ f(7)} onClick={() => setN(n() + 1)} />
+    </div>
+  );
+}

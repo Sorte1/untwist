@@ -1,0 +1,19 @@
+import { createSignal } from "solid-js";
+export default function PCond() {
+  const [n, setN] = createSignal(0);
+  const log = (k, v) => (console.log(k, v), v);
+  return (
+    <div>
+      {log("a", n() > 0) ? <b>yes{n()}</b> : <i>no</i>}
+      {log("b", n() > 1) && <u>two</u>}
+      {n() > 0 ? (n() > 1 ? <s>big</s> : "one") : null}
+      {log("c", n()) || <em>zero</em>}
+      {n() > 1 ? "x" : "y"}
+      <p>{n() ? <b>t</b> : "f"}</p>
+      <p title={n() ? "a" : "b"}>{n() && "lit"}</p>
+      {n() ?? <q>never</q>}
+      {/*@once*/ n() > 0 ? <b>once</b> : <i>once-no</i>}
+      <button onClick={() => setN(n() + 1)}>inc</button>
+    </div>
+  );
+}
