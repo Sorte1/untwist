@@ -50,7 +50,7 @@ fn unsafe_lane(source: &str) -> String {
 
 fn fixtures() -> Vec<(String, String)> {
     let fixtures = js_files_in("fixtures/js-confuser-decode");
-    assert_eq!(fixtures.len(), 34);
+    assert_eq!(fixtures.len(), 36);
     fixtures
 }
 
