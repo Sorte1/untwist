@@ -28,6 +28,17 @@ pub(super) fn expanded_probes<'s>(
         .filter(|(_, shape)| table.has_loose(table::loose_key(shape.loose)))
 }
 
+pub(super) fn expanded_loose<'s>(
+    shaped: &'s Shaped<'_, '_>,
+    scoping: &'s Scoping,
+) -> impl Iterator<Item = u32> + 's {
+    shaped
+        .units
+        .iter()
+        .filter(|unit| holds_inlined(unit.span, &shaped.inlined))
+        .map(move |unit| table::loose_key(expanded_shape(unit, scoping).loose))
+}
+
 pub(super) fn expanded_records<'s>(
     shaped: &'s Shaped<'_, '_>,
     scoping: &'s Scoping,

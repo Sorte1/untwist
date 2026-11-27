@@ -63,7 +63,27 @@ pub mod modern_report {
 pub use untwist_rename::RenameMode;
 
 pub mod libraries {
+    pub use untwist_rename::library::collection::{
+        Collection, CollectionError, Index, Package, Shard, INDEX, SCHEMA,
+    };
+    pub use untwist_rename::library::registry::{
+        attach, collection_status, load_shard, use_builtin, wanted, CollectionStatus, ShardSource,
+    };
     pub use untwist_rename::library::table::{load, loaded_ids, LibraryTables};
+    pub use untwist_rename::library::SHAPE_EPOCH;
+
+    pub fn wanted_for(text: &str) -> Vec<String> {
+        let alloc = oxc_allocator::Allocator::default();
+        let parsed = untwist_core::parse::parse_program(&alloc, text);
+        let loose = match untwist_core::parse::has_error(&parsed.diagnostics) {
+            true => Default::default(),
+            false => {
+                let sem = untwist_core::semantic::build_scoping(&parsed.program);
+                untwist_rename::library::program_loose_keys(&parsed.program, &sem.scoping)
+            }
+        };
+        wanted(text, &loose)
+    }
 }
 pub use untwist_unpack::{Mapping, MappingMatcher};
 pub use wasm::{

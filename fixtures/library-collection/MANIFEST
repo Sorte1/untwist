@@ -1,0 +1,3 @@
+# Test collection for the loader (cargo xtask library-collection pack writes the same layout).
+# shards: library-table v2 tables of eventemitter3 4.0.7-5.0.4, events 3.3.0, punycode 2.3.1 (spike builds, 2026-11-26)
+# inputs/eventemitter3.rollup-cjs.terser.js: eventemitter3 5.0.4, rollup 4.66.0 + @rollup/plugin-commonjs 29.0.3, then terser 5.51.2

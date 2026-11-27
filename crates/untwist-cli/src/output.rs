@@ -22,6 +22,8 @@ struct OutputJson<'a> {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     libraries: Vec<LibraryJson>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    collection: Option<CollectionJson>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     types: Option<&'a untwist::TypesReport>,
     parse_diagnostics: &'a [String],
     parse_errors: usize,
@@ -64,6 +66,23 @@ fn libraries_json(output: &Output) -> Vec<LibraryJson> {
             modules: summary.modules,
         })
         .collect()
+}
+
+#[derive(Serialize)]
+struct CollectionJson {
+    version: String,
+    epoch: u32,
+    packages: usize,
+    shards_loaded: Vec<String>,
+}
+
+fn collection_json() -> Option<CollectionJson> {
+    untwist::libraries::collection_status().map(|status| CollectionJson {
+        version: status.version,
+        epoch: status.epoch,
+        packages: status.packages,
+        shards_loaded: status.shards_loaded,
+    })
 }
 
 #[derive(Serialize)]
@@ -143,6 +162,7 @@ pub fn to_json(output: &Output, written: &Written, limits: Limits) -> serde_json
         stages,
         notes,
         libraries: libraries_json(output),
+        collection: collection_json(),
         types: output.types.as_ref(),
         parse_diagnostics: &output.parse_diagnostics,
         parse_errors: output.parse_errors,

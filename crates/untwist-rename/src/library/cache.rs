@@ -135,7 +135,20 @@ pub(super) fn matched(
     if table.is_empty() {
         return Arc::new(LibraryNames::default());
     }
+    matched_with(|_| Arc::clone(table), program, scoping, compute)
+}
+
+pub(super) fn matched_with(
+    table_for: impl FnOnce(&Shaped<'_, '_>) -> Arc<Table>,
+    program: &Program<'_>,
+    scoping: &Scoping,
+    compute: impl FnOnce(&Table, &Shaped<'_, '_>, &Scoping) -> LibraryNames,
+) -> Arc<LibraryNames> {
     let shaped = shape_program(program, scoping);
+    let table = &table_for(&shaped);
+    if table.is_empty() {
+        return Arc::new(LibraryNames::default());
+    }
     let key = key_of(&shaped, scoping);
     let cached = last()
         .as_ref()

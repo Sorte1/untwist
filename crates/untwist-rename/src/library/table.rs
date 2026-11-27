@@ -1,5 +1,3 @@
-use std::sync::{Arc, OnceLock, RwLock};
-
 use rustc_hash::FxHashMap;
 
 use super::hash::mix;
@@ -409,19 +407,13 @@ impl LibraryTables {
     pub fn ids(&self) -> &[String] {
         &self.ids
     }
+
+    pub(super) fn into_parts(self) -> (Vec<String>, Table) {
+        (self.ids, self.table)
+    }
 }
 
-struct Loaded {
-    ids: Vec<String>,
-    table: Arc<Table>,
-}
-
-fn registry() -> &'static RwLock<Option<Loaded>> {
-    static REGISTRY: OnceLock<RwLock<Option<Loaded>>> = OnceLock::new();
-    REGISTRY.get_or_init(|| RwLock::new(None))
-}
-
-fn builtin_loaded() -> Loaded {
+pub(super) fn builtin_tables() -> (Vec<String>, Table) {
     let mut ids = Vec::new();
     let mut tables = Vec::new();
     for (id, data) in builtin_sources() {
@@ -435,48 +427,7 @@ fn builtin_loaded() -> Loaded {
         1 => tables.into_iter().next().unwrap_or_default(),
         _ => Table::merge(tables),
     };
-    Loaded {
-        ids,
-        table: Arc::new(table),
-    }
+    (ids, table)
 }
 
-pub fn current() -> Arc<Table> {
-    if let Some(loaded) = registry()
-        .read()
-        .ok()
-        .and_then(|guard| guard.as_ref().map(|loaded| Arc::clone(&loaded.table)))
-    {
-        return loaded;
-    }
-    let mut guard = match registry().write() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    Arc::clone(&guard.get_or_insert_with(builtin_loaded).table)
-}
-
-pub fn load(extra: LibraryTables) -> bool {
-    current();
-    let mut guard = match registry().write() {
-        Ok(guard) => guard,
-        Err(poisoned) => poisoned.into_inner(),
-    };
-    let loaded = guard.get_or_insert_with(builtin_loaded);
-    if extra.ids.iter().all(|id| loaded.ids.contains(id)) {
-        return false;
-    }
-    let merged = Table::merge(vec![(*loaded.table).clone(), extra.table]);
-    loaded.ids.extend(extra.ids);
-    loaded.table = Arc::new(merged);
-    true
-}
-
-pub fn loaded_ids() -> Vec<String> {
-    current();
-    registry()
-        .read()
-        .ok()
-        .and_then(|guard| guard.as_ref().map(|loaded| loaded.ids.clone()))
-        .unwrap_or_default()
-}
+pub use super::registry::{current, load, loaded_ids};
