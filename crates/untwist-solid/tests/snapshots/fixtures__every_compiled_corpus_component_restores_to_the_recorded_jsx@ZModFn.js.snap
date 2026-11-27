@@ -1,0 +1,6 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/ZModFn.js
+---
+==== ZModFn kept as JS: the module statement `add(1);` changes what it reads

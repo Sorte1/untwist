@@ -1,0 +1,10 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/PLook.vite.untwisted.js
+---
+==== Component.jsx
+export default function Component(e) {
+  return [e.a, "|", e.b];
+}
+==== Component2 kept as JS: the event `click` is never delegated

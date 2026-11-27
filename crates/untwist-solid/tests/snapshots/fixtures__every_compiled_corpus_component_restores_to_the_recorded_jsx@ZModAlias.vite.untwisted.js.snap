@@ -1,0 +1,6 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/ZModAlias.vite.untwisted.js
+---
+==== Component kept as JS: the module statement `te.push(1, 2);` changes what it reads

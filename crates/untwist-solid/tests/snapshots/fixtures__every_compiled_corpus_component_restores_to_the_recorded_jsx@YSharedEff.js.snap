@@ -1,0 +1,8 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/YSharedEff.js
+---
+==== Alpha kept as JS: the module statement `a.push(1, 2);` changes what it reads
+==== Beta kept as JS: the module statement `a.push(1, 2);` changes what it reads
+==== YSharedEff kept as JS: its child component Alpha is kept as JS

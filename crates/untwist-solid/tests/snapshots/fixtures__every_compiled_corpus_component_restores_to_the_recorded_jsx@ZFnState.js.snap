@@ -1,0 +1,38 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/ZFnState.js
+---
+==== Alpha.jsx
+import { next } from "./shared.jsx";
+
+export default function Alpha() {
+  return <b>{next}</b>;
+}
+==== Beta.jsx
+import { next } from "./shared.jsx";
+
+export default function Beta() {
+  return <i>{next}</i>;
+}
+==== ZFnState.jsx
+import { next } from "./shared.jsx";
+import Alpha from "./Alpha.jsx";
+import Beta from "./Beta.jsx";
+
+export default function ZFnState() {
+  return (
+    <div>
+      <Alpha />
+      <Beta />
+      {next}
+    </div>
+  );
+}
+==== shared.jsx
+function next() {
+  next.n = (next.n || 0) + 1;
+  return next.n;
+}
+
+export { next };

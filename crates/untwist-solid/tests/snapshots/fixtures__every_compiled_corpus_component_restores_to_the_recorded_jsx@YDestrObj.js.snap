@@ -1,0 +1,45 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/YDestrObj.js
+---
+==== Alpha.jsx
+import { inc } from "./shared.jsx";
+
+export default function Alpha() {
+  inc();
+  return <b>a</b>;
+}
+==== Beta.jsx
+import { get } from "./shared.jsx";
+
+export default function Beta() {
+  return <i>{get}</i>;
+}
+==== YDestrObj.jsx
+import Alpha from "./Alpha.jsx";
+import Beta from "./Beta.jsx";
+
+export default function YDestrObj() {
+  return (
+    <div>
+      <Alpha />
+      <Beta />
+    </div>
+  );
+}
+==== shared.jsx
+function makeCounter() {
+  let n = 0;
+  return {
+    get: () => n,
+    inc: () => ++n
+  };
+}
+
+const {
+  get,
+  inc
+} = makeCounter();
+
+export { get, inc };

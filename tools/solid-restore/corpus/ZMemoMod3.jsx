@@ -1,0 +1,6 @@
+import { createSignal } from "solid-js";
+import { wrap } from "./ZWrapMod.jsx";
+export default function ZMemoMod3() {
+  const [n, setN] = createSignal(1);
+  return <div><p>{wrap(() => n() > 1)() ? "big" : "small"}</p><button onClick={() => setN(n() + 1)}>inc</button></div>;
+}

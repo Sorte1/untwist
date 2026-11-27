@@ -1,0 +1,26 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/ZMtprop.js
+---
+==== Kid.jsx
+export default function Kid(props) {
+  return <i>{props.children}{props.x}</i>;
+}
+==== ZMtprop.jsx
+import { createSignal } from "solid-js";
+import Kid from "./Kid.jsx";
+
+export default function ZMtprop() {
+  const [n, setN] = createSignal(0);
+  const a = () => {
+    console.log("a");
+    return n() + "a";
+  };
+  return (
+    <div>
+      <Kid x={n() ? a() : "zero"} />
+      <button onClick={() => setN(n() + 1)}>inc</button>
+    </div>
+  );
+}

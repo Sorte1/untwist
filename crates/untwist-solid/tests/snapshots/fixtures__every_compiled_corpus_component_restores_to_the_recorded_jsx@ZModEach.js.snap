@@ -1,0 +1,6 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/ZModEach.js
+---
+==== ZModEach kept as JS: the module statement `[1, 2, 3].forEach(add);` changes what it reads

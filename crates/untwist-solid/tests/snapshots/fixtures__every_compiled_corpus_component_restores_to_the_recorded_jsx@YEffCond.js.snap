@@ -1,0 +1,6 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/YEffCond.js
+---
+==== YEffCond kept as JS: an effect sets a value the compiler would set once

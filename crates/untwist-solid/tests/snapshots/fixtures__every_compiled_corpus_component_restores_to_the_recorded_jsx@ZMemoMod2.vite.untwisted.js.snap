@@ -1,0 +1,25 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/ZMemoMod2.vite.untwisted.js
+---
+==== Component.jsx
+import { createSignal } from "solid-js";
+
+const oe = (e) => {
+  console.log("wrapped");
+  return e;
+};
+
+const re = (e) => oe(() => e());
+
+export default function Component() {
+  const [e, t] = createSignal(1);
+  const s = re(() => e() * 2);
+  return (
+    <div>
+      <p>{s}</p>
+      <button onClick={() => t(e() + 1)}>inc</button>
+    </div>
+  );
+}

@@ -1,0 +1,27 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/YMount.vite.untwisted.js
+---
+==== Component.jsx
+import { createSignal } from "solid-js";
+
+const ne = (e) => {
+  console.log("safe");
+  return e();
+};
+
+const le = (e) => {
+  console.log("sched");
+  e();
+};
+
+function ie(e) {
+  le(() => ne(e));
+}
+
+export default function Component() {
+  const [e] = createSignal(1);
+  ie(() => console.log("later ran", e()));
+  return <div><p>{e()}</p></div>;
+}

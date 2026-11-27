@@ -1,0 +1,31 @@
+---
+source: crates/untwist-solid/tests/fixtures.rs
+expression: restored(path)
+input_file: crates/untwist-solid/tests/fixtures/ZSigMod.bundle.js
+---
+==== Show.jsx
+export default function Show(props) {
+  return "custom:" + (props.when ? "T" : "F");
+}
+==== ZSigMod.jsx
+import Show from "./Show.jsx";
+
+function createSignal(v) {
+  console.log("mine");
+  return [() => "mine:" + v, () => {}];
+}
+
+function onMount(f) {
+  console.log("my-mount");
+}
+
+export default function ZSigMod(props) {
+  const [n] = createSignal(4);
+  onMount();
+  return (
+    <div>
+      <p>{n}</p>
+      <Show when={props.flag}>kid</Show>
+    </div>
+  );
+}
