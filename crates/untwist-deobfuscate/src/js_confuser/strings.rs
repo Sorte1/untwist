@@ -306,7 +306,10 @@ fn self_contained(refs: &Refs<'_>, scoping: &Scoping, region: Span) -> bool {
     refs.all
         .iter()
         .filter(|(r, _)| inside(region, r.span))
-        .all(|(r, _)| r.symbol.is_some_and(|symbol| inside(region, scoping.symbol_span(symbol))))
+        .all(|(r, _)| {
+            r.symbol
+                .is_some_and(|symbol| inside(region, scoping.symbol_span(symbol)))
+        })
 }
 
 fn stable(symbol: SymbolId, refs: &Refs<'_>, scoping: &Scoping) -> bool {
