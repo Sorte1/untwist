@@ -129,14 +129,14 @@ test('a run without library code fetches no shard and sends nothing of the code'
   expect(seen.every((path) => /\/libraries\/(collection\.json|shards\/[0-9a-f]{64}\.(utl|bloom))$/.test(path))).toBe(true);
 });
 
-test('core-js hidden by a string array is found in the output and run again with its shard', async ({ page }) => {
+test('core-js hidden by a string array fetches its shard once and matches the CLI report', async ({ page }) => {
   const requests = tableRequests(page);
   await openApp(page, LIBS);
   await load(page, CORE_JS_OBFUSCATED);
   await runAndWait(page);
   expect(requests).toHaveLength(1);
   await openDetails(page);
-  await expect(librariesSection(page)).toContainText('core-js (found in the output, run again)');
+  await expect(librariesSection(page)).toContainText(/Tables loaded\s*core-js/);
   expect(await downloadedLibraries(page)).toEqual(cliLibraries(CORE_JS_OBFUSCATED));
 });
 
