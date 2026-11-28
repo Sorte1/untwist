@@ -104,7 +104,7 @@ test('Details shows the fuel used, the peak call depth, the collision reasons an
   await page.locator('#details-tab').click();
   const pair = (label: string) => page.locator('#details .details-pairs dt', { hasText: new RegExp(`^\\s*${label}$`) }).locator('xpath=following-sibling::dd[1]');
   const cli = JSON.parse(
-    execFileSync(process.env['UNTWIST_BIN'] ?? repoPath('target/release/untwist'), ['--rename', 'simple', '--report', 'json', repoPath(FIXTURE)], {
+    execFileSync(process.env['UNTWIST_BIN'] ?? repoPath('target/release/untwist'), [...LIBRARY_ARGS, '--rename', 'simple', '--report', 'json', repoPath(FIXTURE)], {
       encoding: 'utf8',
       maxBuffer: 1 << 28,
       env: { ...process.env, UNTWIST_TEST_SUPERVISOR: 'off' },
