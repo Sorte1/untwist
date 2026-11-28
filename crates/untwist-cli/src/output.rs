@@ -5,8 +5,11 @@ use untwist::{printable, Output, StopReason};
 
 use crate::budget::{bytes_text, Limits};
 
+const REPORT_SCHEMA_VERSION: u32 = 1;
+
 #[derive(Serialize)]
 struct OutputJson<'a> {
+    schema_version: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     code: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -151,6 +154,7 @@ pub fn to_json(output: &Output, written: &Written, limits: Limits) -> serde_json
         .collect();
     let single_file = output.single_file.then(|| output.concatenated());
     let json = OutputJson {
+        schema_version: REPORT_SCHEMA_VERSION,
         code: output_path
             .is_none()
             .then(|| single_file.as_deref().unwrap_or(output.code())),

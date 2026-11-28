@@ -43,3 +43,4 @@ untwist = { path = "../untwist", features = ["test-hooks", "libraries-all"] }
 untwist-testing = { path = "../untwist-testing" }
 untwist-rename = { path = "../untwist-rename" }
 tempfile.workspace = true
+jsonschema = { version = "0.63", default-features = false }
