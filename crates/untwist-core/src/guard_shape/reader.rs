@@ -159,21 +159,25 @@ impl<'a> VisitJs<'a> for SelfText<'_, '_> {
     }
 }
 
-fn tests_its_own_text(body: &FunctionBody<'_>, name: &str) -> bool {
+fn tests_its_own_text(function: &Function<'_>, name: &str) -> bool {
     let mut test = SelfChain {
         name,
         found: false,
         by_pattern: true,
+        shadowed: false,
     };
-    test.visit_function_body(body);
-    test.found
+    test.visit_formal_parameters(&function.params);
+    if let Some(body) = &function.body {
+        test.visit_function_body(body);
+    }
+    test.found && !test.shadowed
 }
 
 fn reads_its_own_text(function: &Function<'_>, name: &str, printed: Printed<'_>) -> bool {
     let Some(body) = &function.body else {
         return false;
     };
-    if tests_its_own_text(body, name) {
+    if tests_its_own_text(function, name) {
         return true;
     }
     let mut text = SelfText {
@@ -266,6 +270,7 @@ fn reader_controller<'k, 'a>(init: &'k Expression<'a>, own: &str) -> Option<&'k 
         name: own,
         found: false,
         by_pattern: false,
+        shadowed: false,
     };
     callback.visit_with(&mut chain);
     chain.found.then_some(controller)
@@ -353,6 +358,7 @@ struct SelfChain<'n> {
     name: &'n str,
     found: bool,
     by_pattern: bool,
+    shadowed: bool,
 }
 
 fn names(expr: &Expression<'_>, name: &str) -> bool {
@@ -392,6 +398,10 @@ fn tests_itself(call: &CallExpression<'_>, name: &str) -> bool {
 }
 
 impl<'a> VisitJs<'a> for SelfChain<'_> {
+    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+        self.shadowed |= self.by_pattern && it.name == self.name;
+    }
+
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
         let found = match self.by_pattern {
             true => tests_itself(it, self.name),

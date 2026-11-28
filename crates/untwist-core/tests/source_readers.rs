@@ -325,3 +325,13 @@ fn a_function_a_pattern_tests_is_a_source_reader() {
         SourceReaders::Unguarded
     );
 }
+
+#[test]
+fn a_pattern_test_of_a_parameter_that_shadows_the_name_reads_no_source() {
+    let code = "var r = function (r) {
+  return /^Int8Array$/.test(r);
+};
+console.log(r(\"x\"));
+";
+    assert_eq!(source_readers(code), SourceReaders::None);
+}
