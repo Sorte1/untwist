@@ -19,6 +19,7 @@ pub mod directives;
 mod domain_lock;
 pub mod driver;
 pub mod evaluate_globals;
+mod exits;
 mod flag_home;
 pub mod fold_chains;
 pub mod fused;

@@ -100,6 +100,16 @@ function check(depth) {
 }
 "#;
 
+const COUNTER_EARLY_XOR: &str = r#"console.log(check(2));
+var counter = 0xeb | 1;
+function check(depth) {
+  if ((Math.imul(534532529, Math.imul(2260162385, counter | 27) - Math.imul(2260162385, counter & 27) + 2031794264 | 0) + 3163730728 | 0) !== (counter ^ 27 | 0)) {
+    return "never";
+  }
+  return depth;
+}
+"#;
+
 const GUARDED_PATCH: &str = r#"var counter = 235;
 function patcher(hook) {
   function expose() {
@@ -131,6 +141,7 @@ fn programs() -> Vec<(String, String)> {
         ("loop-var", LOOP_VAR),
         ("counter", COUNTER),
         ("counter-read-early", COUNTER_READ_EARLY),
+        ("counter-early-xor", COUNTER_EARLY_XOR),
         ("guarded-patch", GUARDED_PATCH),
         ("live-patch", LIVE_PATCH),
     ]
@@ -178,6 +189,12 @@ fn a_counter_never_written_decides_its_predicates() {
 #[test]
 fn a_counter_read_before_its_declaration_keeps_its_predicates() {
     assert!(commonjs(COUNTER_READ_EARLY).contains("Math.imul"));
+}
+
+#[test]
+fn a_counter_read_early_decides_what_undefined_would_decide_alike() {
+    let code = commonjs(COUNTER_EARLY_XOR);
+    assert!(!code.contains("Math.imul"), "{code}");
 }
 
 #[test]

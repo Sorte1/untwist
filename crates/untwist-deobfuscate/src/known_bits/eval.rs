@@ -5,7 +5,7 @@ use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
 use oxc_syntax::symbol::SymbolId;
 
 use super::bits::Bits;
-use super::value::Val;
+use super::value::{Kind, Val};
 
 const MAX_DEPTH: u32 = 64;
 
@@ -14,6 +14,12 @@ pub trait Leaves {
     fn is_imul(&self, callee: &Expression<'_>) -> bool;
     fn lax(&self) -> bool;
     fn decided(&self, _test: &Expression<'_>) -> Option<bool> {
+        None
+    }
+    fn member(&self, _expr: &Expression<'_>) -> Option<Val> {
+        None
+    }
+    fn kind_of(&self, _test: &Expression<'_>) -> Option<bool> {
         None
     }
 }
@@ -38,6 +44,8 @@ impl Walker<'_> {
             Expression::BinaryExpression(binary) => self.binary(binary, depth),
             Expression::UnaryExpression(unary) => self.unary(unary, depth),
             Expression::CallExpression(call) => self.call(call, depth),
+            member @ (Expression::ComputedMemberExpression(_)
+            | Expression::StaticMemberExpression(_)) => self.leaves.member(member),
             Expression::ConditionalExpression(conditional) if self.leaves.lax() => {
                 if let Some(test) = self.leaves.decided(&conditional.test) {
                     let chosen = if test {
@@ -165,6 +173,7 @@ pub fn low_determined(
     match expr.without_parentheses() {
         Expression::NumericLiteral(literal) => Val::from_number(literal.value).is_some(),
         Expression::Identifier(id) => match leaves.leaf(id) {
+            Some((_, value)) if value.kind == Kind::Undefined => false,
             Some((symbol, value)) => {
                 if !seen.iter().any(|(known, _)| *known == symbol) {
                     seen.push((symbol, value.bits));
