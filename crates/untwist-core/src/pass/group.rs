@@ -578,6 +578,24 @@ impl<'p, 'a> Traverse<'a, ()> for SinglePassRunner<'p, 'a> {
     }
 }
 
+struct Unscoped(bool);
+
+impl<'a> oxc_ast_visit::VisitJs<'a> for Unscoped {
+    fn enter_scope(
+        &mut self,
+        _flags: oxc_syntax::scope::ScopeFlags,
+        scope_id: &std::cell::Cell<Option<oxc_syntax::scope::ScopeId>>,
+    ) {
+        self.0 |= scope_id.get().is_none();
+    }
+}
+
+fn has_unscoped(program: &Program<'_>) -> bool {
+    let mut found = Unscoped(false);
+    oxc_ast_visit::VisitJs::visit_program(&mut found, program);
+    found.0
+}
+
 fn park<'a>(
     program: &mut Program<'a>,
     ctx: &TraverseCtx<'a, ()>,
