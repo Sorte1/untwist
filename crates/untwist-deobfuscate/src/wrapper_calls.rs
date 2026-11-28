@@ -509,7 +509,8 @@ impl<'p, 'a> Round<'_, 'p, 'a, '_> {
         if arguments_hold_a_scope(site.arguments) {
             return Outcome::Kept(notes::wrapper_site_scoped_argument());
         }
-        if !self.checked && arguments_read_an_undeclared_name(site.arguments, self.cx.scoping()) {
+        let unsafe_lane = self.cx.opts.unsafe_transforms;
+        if unsafe_lane && arguments_read_an_undeclared_name(site.arguments, self.cx.scoping()) {
             return Outcome::Kept(notes::wrapper_site_undeclared_argument());
         }
         let (inlined, refusal) = if arguments_are_substitutable(site.arguments) {
