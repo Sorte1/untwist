@@ -8,11 +8,11 @@ use untwist_core::semantic::{Semantics, Shape};
 
 use crate::{
     block_statements, computed_properties, for_to_while, function_to_arrow, infinity,
-    invert_boolean_logic, json_parse, let_to_const, logical_to_if, merge_else_if, merge_strings,
-    number_expressions, remove_double_not, sequence, split_for_loop_vars,
-    split_variable_declarations, string_literal_in_template, ternary_to_if,
-    truncate_number_literal, typeof_undefined, unary_expressions, unminify_booleans, untranspile,
-    unwrap_comma_call, var_to_let, void_to_undefined, yoda,
+    invert_boolean_logic, json_parse, lead_assignment, let_to_const, logical_to_if, merge_else_if,
+    merge_strings, number_expressions, remove_double_not, sequence, split_for_loop_vars,
+    split_merged_vars, split_variable_declarations, string_literal_in_template, ternary_to_if,
+    truncate_number_literal, typeof_strict, typeof_undefined, unary_expressions, unminify_booleans,
+    untranspile, unwrap_comma_call, var_to_let, void_to_undefined, yoda,
 };
 
 pub fn unminify_ctors<'a>() -> Vec<PassCtor<'a>> {
@@ -40,6 +40,15 @@ pub fn unminify_ctors<'a>() -> Vec<PassCtor<'a>> {
         void_to_undefined::boxed,
         yoda::boxed,
         unwrap_comma_call::boxed,
+    ]
+}
+
+pub fn tidy_ctors<'a>() -> Vec<PassCtor<'a>> {
+    vec![
+        lead_assignment::boxed,
+        typeof_strict::boxed,
+        split_for_loop_vars::read_only_tests_boxed,
+        split_merged_vars::boxed,
     ]
 }
 

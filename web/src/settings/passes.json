@@ -310,6 +310,26 @@
     "unsafe": false
   },
   {
+    "name": "lead-assignment",
+    "stage": "lexical",
+    "unsafe": false
+  },
+  {
+    "name": "typeof-strict",
+    "stage": "lexical",
+    "unsafe": false
+  },
+  {
+    "name": "split-for-loop-reads",
+    "stage": "lexical",
+    "unsafe": false
+  },
+  {
+    "name": "split-merged-vars",
+    "stage": "lexical",
+    "unsafe": false
+  },
+  {
     "name": "let-to-const",
     "stage": "lexical",
     "unsafe": false

@@ -1,7 +1,7 @@
 {
  "schema": "untwist.library-collection/1",
  "version": "2026.11.0-test",
- "shape_epoch": 2,
+ "shape_epoch": 3,
  "untwist": ">=0.7.0",
  "packages": [
   {

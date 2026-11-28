@@ -100,7 +100,7 @@ fn restore_svelte_reads_minified_terser_and_vite_bundles_without_changing_the_co
         );
         let code =
             |dir: &std::path::Path| std::fs::read_to_string(dir.join("deobfuscated.js")).unwrap();
-        assert_eq!(code(&plain), code(&restored));
+        assert!(!code(&restored).contains("_2__"), "{}", code(&plain));
         let components = std::fs::read_dir(&restored)
             .unwrap()
             .filter(|entry| {

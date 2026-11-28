@@ -2,7 +2,7 @@
 source: crates/untwist/tests/wasm_emscripten.rs
 expression: code
 ---
-var Module = typeof Module != "undefined" ? Module : {};
+var Module = typeof Module !== "undefined" ? Module : {};
 var wasmBinaryFile = "data:application/octet-stream;base64,AGFzbQEAAAABGwZgA39/fwBgAABgAAF8YAF/AX9gAABgAX8BfwIZBAFhAWEAAAFhAWIAAQFhAWMAAgFhAWQAAwMDAgQFBQMBAAEHDQMBZQIAAWYABAFnAAUKCQICAAsEAEEACw==";
 var wasmExports;
 var wasmMemory;

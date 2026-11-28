@@ -183,7 +183,7 @@ fn optional_chaining_shadowed_undefined() {
     check(&Row {
         source: OPTIONAL_CHAINING_SHADOWED_UNDEFINED,
         prints: "3 1 3 2\n",
-        kept: r#"(t = a) === null || t === undefined"#,
+        kept: r#"|| t === undefined) {"#,
     });
 }
 

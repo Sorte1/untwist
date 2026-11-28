@@ -5,10 +5,18 @@ use untwist_core::ast_util::scope::{binding_symbol, references_symbol};
 use untwist_core::pass::{Cx, Interest, Locality, Pass};
 
 #[derive(Default)]
-pub struct SplitForLoopVars;
+pub struct SplitForLoopVars {
+    read_only_tests: bool,
+}
 
 pub fn boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
-    Box::new(SplitForLoopVars)
+    Box::new(SplitForLoopVars::default())
+}
+
+pub fn read_only_tests_boxed<'a>() -> Box<dyn Pass<'a> + 'a> {
+    Box::new(SplitForLoopVars {
+        read_only_tests: true,
+    })
 }
 
 fn is_candidate(stmt: &Statement<'_>) -> bool {
@@ -26,7 +34,18 @@ fn is_candidate(stmt: &Statement<'_>) -> bool {
             .all(|declarator| matches!(declarator.id, BindingPattern::BindingIdentifier(_)))
 }
 
-fn hoistable_prefix_len(node: &ForStatement<'_>, scoping: &Scoping) -> usize {
+fn is_written(symbol: oxc_syntax::symbol::SymbolId, scoping: &Scoping) -> bool {
+    scoping
+        .get_resolved_reference_ids(symbol)
+        .iter()
+        .any(|reference| scoping.get_reference(*reference).is_write())
+}
+
+fn hoistable_prefix_len(
+    node: &ForStatement<'_>,
+    scoping: &Scoping,
+    read_only_tests: bool,
+) -> usize {
     let Some(ForStatementInit::VariableDeclaration(declaration)) = &node.init else {
         return 0;
     };
@@ -43,7 +62,7 @@ fn hoistable_prefix_len(node: &ForStatement<'_>, scoping: &Scoping) -> usize {
             .update
             .as_ref()
             .is_some_and(|update| references_symbol(update, scoping, symbol));
-        if used_in_test || used_in_update {
+        if used_in_update || (used_in_test && (!read_only_tests || is_written(symbol, scoping))) {
             break;
         }
         count += 1;
@@ -86,7 +105,11 @@ fn hoist_prefix<'a>(
 
 impl<'a> Pass<'a> for SplitForLoopVars {
     fn name(&self) -> &'static str {
-        "split-for-loop-vars"
+        if self.read_only_tests {
+            "split-for-loop-reads"
+        } else {
+            "split-for-loop-vars"
+        }
     }
 
     fn locality(&self) -> Locality {
@@ -106,7 +129,7 @@ impl<'a> Pass<'a> for SplitForLoopVars {
         for stmt in old {
             let count = match &stmt {
                 Statement::ForStatement(node) if is_candidate(&stmt) => {
-                    hoistable_prefix_len(node, cx.scoping())
+                    hoistable_prefix_len(node, cx.scoping(), self.read_only_tests)
                 }
                 _ => 0,
             };

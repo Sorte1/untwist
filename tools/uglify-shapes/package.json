@@ -1,0 +1,8 @@
+{
+  "name": "untwist-uglify-shapes",
+  "private": true,
+  "description": "Pinned uglify-js used by tools/uglify-shapes/gen.mjs to minify fixtures/uglify-shapes/src into fixtures/uglify-shapes.",
+  "dependencies": {
+    "uglify-js": "3.19.3"
+  }
+}

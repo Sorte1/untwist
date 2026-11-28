@@ -14,7 +14,7 @@ use untwist_deobfuscate::{
 };
 use untwist_rename::{rename_passes_with_state, shorthand, RenameConfig, RenameMode};
 use untwist_unminify::{
-    lexical_ctors, prepare_ctors, run_last_traversal, transpile_ctors, unminify_ctors,
+    lexical_ctors, prepare_ctors, run_last_traversal, tidy_ctors, transpile_ctors, unminify_ctors,
     untranspile_ctors,
 };
 
@@ -185,12 +185,14 @@ impl Pipeline {
             Some(sem) => {
                 let sem = self.rename_stage(site, sem, reservation);
                 let sem = self.modern_stage(site, sem);
-                self.library_stage(site, sem);
+                let sem = self.library_stage(site, sem);
+                self.tidy_stage(site, sem);
             }
             None => {
                 let sem = untwist_core::semantic::build_scoping(site.program);
                 let sem = self.modern_stage(site, sem);
-                self.library_stage(site, sem);
+                let sem = self.library_stage(site, sem);
+                self.tidy_stage(site, sem);
             }
         }
         settle_notes(site, &shaping.runs, shaping.latest);
@@ -278,6 +280,25 @@ impl Pipeline {
         let (kept, report) = run_last_traversal(site.alloc, site.program, sem, &mut group, renames);
         site.record("lexical", started, report);
         kept
+    }
+
+    fn tidy_stage<'a>(&self, site: &mut StageCx<'a, '_>, sem: Semantics) {
+        let bundled = self.options.unpack
+            && (self.options.split_assume_modules
+                || untwist_unpack::holds_a_bundle_with(site.program, self.unpack_options()));
+        let restores = self.options.svelte || self.options.solid;
+        let libraries = untwist_rename::library::pass::summaries(
+            site.notes
+                .iter()
+                .filter(|note| note.pass == untwist_rename::library::pass::NAME)
+                .map(|note| note.message.as_str()),
+        );
+        if !self.options.unminify || bundled || restores || !libraries.is_empty() {
+            return;
+        }
+        let mut group = PassGroup::from_ctors(&tidy_ctors(), site.pass_opts.clone());
+        let (_, report) = run_last_traversal(site.alloc, site.program, sem, &mut group, false);
+        site.notes.extend(report.notes);
     }
 
     fn settle<'a>(
