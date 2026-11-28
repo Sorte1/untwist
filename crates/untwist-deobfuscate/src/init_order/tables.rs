@@ -93,6 +93,12 @@ pub(super) struct Site {
     end: u32,
 }
 
+impl Site {
+    pub(super) fn span(&self) -> Span {
+        Span::new(self.start, self.end)
+    }
+}
+
 #[derive(Default)]
 pub(super) struct Sites {
     records: Vec<Site>,

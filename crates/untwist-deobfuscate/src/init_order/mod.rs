@@ -1,4 +1,5 @@
 mod kept;
+mod local;
 mod scan;
 mod tables;
 
@@ -24,6 +25,7 @@ pub(crate) use kept::{
     lend_order, lend_order_and_readonly_uses, lend_order_with, note_overflow, sharing_mark,
     LentOrder,
 };
+pub(crate) use local::read_before_local_declaration;
 
 const REACHABILITY_BUDGET: usize = 4096;
 

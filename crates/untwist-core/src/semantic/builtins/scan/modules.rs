@@ -17,6 +17,8 @@ pub(super) const LOADERS: [&str; 3] = ["require", "getBuiltinModule", "createReq
 
 const REQUIRE: &str = "require";
 
+const BUILTIN_LOADER: &str = "getBuiltinModule";
+
 const FORWARDERS: [&str; 3] = ["call", "apply", "bind"];
 
 fn url_whitespace(character: char) -> bool {
@@ -135,6 +137,29 @@ impl Scan<'_> {
         is_require(callee)
             || member_of(callee)
                 .is_some_and(|(_, key)| self.member_name(key).as_deref() == Some(REQUIRE))
+    }
+
+    pub(super) fn is_builtin_loader(&self, expression: &Expression<'_>) -> bool {
+        let Some((object, key)) = member_of(expression) else {
+            return false;
+        };
+        let named = match key {
+            Key::Name(name) => name == BUILTIN_LOADER,
+            Key::Other => false,
+            Key::Unknown(_) => self.member_name(key).as_deref() == Some(BUILTIN_LOADER),
+        };
+        named
+            && matches!(
+                self.allow_root(object),
+                Some(super::allow::Root::Host(PROCESS_MODULE))
+            )
+    }
+
+    pub(super) fn loads_a_safe_builtin(&self, call: &CallExpression<'_>) -> bool {
+        !call.optional
+            && call.arguments.len() == 1
+            && self.is_builtin_loader(&call.callee)
+            && names_a_safe_module(call.arguments.first().and_then(Argument::as_expression))
     }
 
     pub(super) fn reads_off_require(&self, object: &Expression<'_>, key: Key<'_>) -> bool {

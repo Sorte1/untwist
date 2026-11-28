@@ -1124,6 +1124,10 @@ impl<'a> VisitJs<'a> for Scan<'_> {
             self.visit_require(it);
             return;
         }
+        if self.loads_a_safe_builtin(it) {
+            self.visit_arguments(&it.arguments);
+            return;
+        }
         if self.defines_on_window(&it.callee, &it.arguments) {
             self.not_allowed();
         }
@@ -1199,6 +1203,7 @@ impl<'a> VisitJs<'a> for Scan<'_> {
     fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
         match it.operator {
             UnaryOperator::Typeof if self.is_require_name(&it.argument) => {}
+            UnaryOperator::Typeof if self.is_builtin_loader(&it.argument) => {}
             UnaryOperator::Typeof if self.visit_timer_member(&it.argument) => {}
             UnaryOperator::Typeof | UnaryOperator::LogicalNot | UnaryOperator::Void => {
                 self.visit_unless_root(&it.argument);

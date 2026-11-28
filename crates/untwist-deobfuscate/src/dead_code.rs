@@ -251,6 +251,31 @@ impl<'a> Visit<'a> for Hoisted<'a> {
     fn visit_class(&mut self, _it: &Class<'a>) {}
 }
 
+fn completes_abruptly(statement: &Statement<'_>) -> bool {
+    matches!(
+        statement,
+        Statement::ReturnStatement(_) | Statement::ThrowStatement(_)
+    )
+}
+
+fn runs_nothing_hoisted(statement: &Statement<'_>) -> bool {
+    if matches!(
+        statement,
+        Statement::VariableDeclaration(_)
+            | Statement::FunctionDeclaration(_)
+            | Statement::ClassDeclaration(_)
+    ) || statement.is_module_declaration()
+    {
+        return false;
+    }
+    hoists_nothing(statement)
+}
+
+fn hoists_nothing(statement: &Statement<'_>) -> bool {
+    let hoisted = hoisted_by(Some(statement));
+    !hoisted.function && hoisted.names.is_empty()
+}
+
 fn hoisted_by<'a>(statement: Option<&Statement<'a>>) -> Hoisted<'a> {
     let mut hoisted = Hoisted::default();
     if let Some(statement) = statement {
@@ -902,7 +927,12 @@ impl<'a> DeadCode<'a> {
         let outer = cx.current_scope_id();
         let taken: Vec<Statement<'a>> = stmts.drain(..).collect();
         let mut changes = 0usize;
+        let mut unreachable = false;
         for statement in taken {
+            if unreachable && runs_nothing_hoisted(&statement) {
+                changes += 1;
+                continue;
+            }
             let mut next = Some(statement);
             while let Some(statement) = next.take() {
                 let Some(decision) = self.decision_of_statement(&statement, cx) else {
@@ -922,6 +952,8 @@ impl<'a> DeadCode<'a> {
                 };
                 if folded {
                     changes += 1;
+                    unreachable |=
+                        stmts.len() > before && stmts.last().is_some_and(completes_abruptly);
                     next = (stmts.len() > before)
                         .then(|| self.next_link(stmts, cx))
                         .flatten();
@@ -953,6 +985,93 @@ impl<'a> DeadCode<'a> {
             return None;
         }
         stmts.pop()
+    }
+
+    fn settle_identity_inits(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
+        for stmt in stmts.iter_mut() {
+            let Statement::VariableDeclaration(declaration) = stmt else {
+                continue;
+            };
+            for declarator in declaration.declarations.iter_mut() {
+                let Some(init) = declarator.init.as_mut() else {
+                    continue;
+                };
+                if let Some(value) = self.known_bits.identity(init, cx) {
+                    *init = Expression::new_boolean_literal(init.span(), value, cx);
+                    cx.changed();
+                }
+            }
+        }
+    }
+
+    fn settle_right(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) -> bool {
+        let mut changed = false;
+        loop {
+            let test = match &*stmt {
+                Statement::IfStatement(node) => &node.test,
+                Statement::WhileStatement(node) => &node.test,
+                _ => return changed,
+            };
+            let Expression::LogicalExpression(logical) = test else {
+                return changed;
+            };
+            let absorbing = match logical.operator {
+                LogicalOperator::And => false,
+                LogicalOperator::Or => true,
+                LogicalOperator::Coalesce => return changed,
+            };
+            let Some(decision) = self.decide(&logical.right, cx) else {
+                return changed;
+            };
+            let neutral = decision.value != absorbing;
+            let step = if neutral || crate::mutants::settled_rights_dropped_anywhere() {
+                self.drop_right(stmt, cx)
+            } else {
+                !absorbing && self.absorb_right(stmt, cx)
+            };
+            if !step {
+                return changed;
+            }
+            changed = true;
+            if !neutral {
+                return changed;
+            }
+        }
+    }
+
+    fn drop_right(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) -> bool {
+        let Statement::IfStatement(node) = stmt else {
+            return false;
+        };
+        let Expression::LogicalExpression(logical) = &mut node.test else {
+            return false;
+        };
+        let left = logical.left.take_in(cx);
+        node.test = left;
+        true
+    }
+
+    fn absorb_right(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) -> bool {
+        let dropped = match &*stmt {
+            Statement::WhileStatement(node) => &node.body,
+            Statement::IfStatement(node) if node.alternate.is_none() => &node.consequent,
+            _ => return false,
+        };
+        if !hoists_nothing(dropped) {
+            return false;
+        }
+        let span = stmt.span();
+        let test = match stmt {
+            Statement::IfStatement(node) => &mut node.test,
+            Statement::WhileStatement(node) => &mut node.test,
+            _ => return false,
+        };
+        let Expression::LogicalExpression(logical) = test else {
+            return false;
+        };
+        let left = logical.left.take_in(cx);
+        *stmt = Statement::new_expression_statement(span, left, cx);
+        true
     }
 
     fn drop_settled_right(&mut self, test: &mut Expression<'a>, cx: &mut Cx<'a, '_>) -> bool {
@@ -1062,10 +1181,8 @@ impl<'a> Pass<'a> for DeadCode<'a> {
     }
 
     fn exit_statement(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) {
-        if let Statement::IfStatement(node) = stmt {
-            while self.drop_settled_right(&mut node.test, cx) {
-                cx.changed();
-            }
+        if self.settle_right(stmt, cx) {
+            cx.changed();
         }
         if self.decision_of_statement(stmt, cx).is_some() {
             self.armed += 1;
@@ -1073,6 +1190,7 @@ impl<'a> Pass<'a> for DeadCode<'a> {
     }
 
     fn exit_statements(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
+        self.settle_identity_inits(stmts, cx);
         if !self.kept_vars.is_empty() {
             let pruned = self.prune_kept_vars(stmts, cx);
             cx.changed_by(pruned);
@@ -1082,10 +1200,8 @@ impl<'a> Pass<'a> for DeadCode<'a> {
         }
         if self.unsafe_lane {
             for stmt in stmts.iter_mut() {
-                if let Statement::IfStatement(node) = stmt {
-                    while self.drop_settled_right(&mut node.test, cx) {
-                        cx.changed();
-                    }
+                if self.settle_right(stmt, cx) {
+                    cx.changed();
                 }
             }
         }
