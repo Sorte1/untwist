@@ -251,6 +251,27 @@ impl<'a> Visit<'a> for Hoisted<'a> {
     fn visit_class(&mut self, _it: &Class<'a>) {}
 }
 
+fn completes_abruptly(statement: &Statement<'_>) -> bool {
+    matches!(
+        statement,
+        Statement::ReturnStatement(_) | Statement::ThrowStatement(_)
+    )
+}
+
+fn runs_nothing_hoisted(statement: &Statement<'_>) -> bool {
+    if matches!(
+        statement,
+        Statement::VariableDeclaration(_)
+            | Statement::FunctionDeclaration(_)
+            | Statement::ClassDeclaration(_)
+    ) || statement.is_module_declaration()
+    {
+        return false;
+    }
+    let hoisted = hoisted_by(Some(statement));
+    hoisted.names.is_empty() && !hoisted.function
+}
+
 fn hoisted_by<'a>(statement: Option<&Statement<'a>>) -> Hoisted<'a> {
     let mut hoisted = Hoisted::default();
     if let Some(statement) = statement {
@@ -902,7 +923,12 @@ impl<'a> DeadCode<'a> {
         let outer = cx.current_scope_id();
         let taken: Vec<Statement<'a>> = stmts.drain(..).collect();
         let mut changes = 0usize;
+        let mut unreachable = false;
         for statement in taken {
+            if unreachable && runs_nothing_hoisted(&statement) {
+                changes += 1;
+                continue;
+            }
             let mut next = Some(statement);
             while let Some(statement) = next.take() {
                 let Some(decision) = self.decision_of_statement(&statement, cx) else {
@@ -922,6 +948,8 @@ impl<'a> DeadCode<'a> {
                 };
                 if folded {
                     changes += 1;
+                    unreachable |=
+                        stmts.len() > before && stmts.last().is_some_and(completes_abruptly);
                     next = (stmts.len() > before)
                         .then(|| self.next_link(stmts, cx))
                         .flatten();
@@ -953,6 +981,68 @@ impl<'a> DeadCode<'a> {
             return None;
         }
         stmts.pop()
+    }
+
+    fn settle_guarded_statement(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) -> bool {
+        let (test, dropped) = match stmt {
+            Statement::WhileStatement(node) => (&node.test, &node.body),
+            Statement::IfStatement(node) if node.alternate.is_none() => {
+                (&node.test, &node.consequent)
+            }
+            _ => return false,
+        };
+        let Expression::LogicalExpression(logical) = test else {
+            return false;
+        };
+        if logical.operator != LogicalOperator::And {
+            return false;
+        }
+        let hoisted = hoisted_by(Some(dropped));
+        if hoisted.function || !hoisted.names.is_empty() {
+            return false;
+        }
+        let dead = self
+            .decide(&logical.right, cx)
+            .is_some_and(|decision| !decision.value);
+        if !dead {
+            return false;
+        }
+        let span = stmt.span();
+        let test = match stmt {
+            Statement::WhileStatement(node) => &mut node.test,
+            Statement::IfStatement(node) => &mut node.test,
+            _ => return false,
+        };
+        let Expression::LogicalExpression(logical) = test else {
+            return false;
+        };
+        let left = logical.left.take_in(cx);
+        *stmt = Statement::new_expression_statement(span, left, cx);
+        true
+    }
+
+    fn split_absorbing_right(&mut self, test: &mut Expression<'a>, cx: &mut Cx<'a, '_>) -> bool {
+        let Expression::LogicalExpression(logical) = test else {
+            return false;
+        };
+        let absorbing = match logical.operator {
+            LogicalOperator::And => false,
+            LogicalOperator::Or => true,
+            LogicalOperator::Coalesce => return false,
+        };
+        let settled = self
+            .decide(&logical.right, cx)
+            .is_some_and(|decision| decision.value == absorbing);
+        if !settled {
+            return false;
+        }
+        let span = logical.span;
+        let left = logical.left.take_in(cx);
+        let mut expressions = AVec::with_capacity_in(2, cx);
+        expressions.push(left);
+        expressions.push(Expression::new_boolean_literal(SPAN, absorbing, cx));
+        *test = Expression::new_sequence_expression(span, expressions, cx);
+        true
     }
 
     fn drop_settled_right(&mut self, test: &mut Expression<'a>, cx: &mut Cx<'a, '_>) -> bool {
@@ -1027,6 +1117,7 @@ impl<'a> DeadCode<'a> {
 }
 
 const ACTED_ON_EXPRESSIONS: ExpressionVariants = ExpressionVariants::of(&[
+    ExpressionKind::BinaryExpression,
     ExpressionKind::ConditionalExpression,
     ExpressionKind::LogicalExpression,
     ExpressionKind::UnaryExpression,
@@ -1062,8 +1153,14 @@ impl<'a> Pass<'a> for DeadCode<'a> {
     }
 
     fn exit_statement(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) {
+        if self.settle_guarded_statement(stmt, cx) {
+            cx.changed();
+        }
         if let Statement::IfStatement(node) = stmt {
             while self.drop_settled_right(&mut node.test, cx) {
+                cx.changed();
+            }
+            if self.split_absorbing_right(&mut node.test, cx) {
                 cx.changed();
             }
         }
@@ -1082,8 +1179,14 @@ impl<'a> Pass<'a> for DeadCode<'a> {
         }
         if self.unsafe_lane {
             for stmt in stmts.iter_mut() {
+                if self.settle_guarded_statement(stmt, cx) {
+                    cx.changed();
+                }
                 if let Statement::IfStatement(node) = stmt {
                     while self.drop_settled_right(&mut node.test, cx) {
+                        cx.changed();
+                    }
+                    if self.split_absorbing_right(&mut node.test, cx) {
                         cx.changed();
                     }
                 }
@@ -1130,6 +1233,13 @@ impl<'a> Pass<'a> for DeadCode<'a> {
     }
 
     fn exit_expression(&mut self, expr: &mut Expression<'a>, cx: &mut Cx<'a, '_>) {
+        if matches!(expr, Expression::BinaryExpression(_)) {
+            if let Some(value) = self.known_bits.identity(expr, cx) {
+                *expr = Expression::new_boolean_literal(expr.span(), value, cx);
+                cx.changed();
+                return;
+            }
+        }
         if let Expression::LogicalExpression(outer) = expr {
             let same = matches!(&outer.left, Expression::LogicalExpression(inner) if inner.operator == outer.operator);
             if same && self.drop_settled_right(&mut outer.left, cx) {

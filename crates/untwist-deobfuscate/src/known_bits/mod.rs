@@ -1,7 +1,10 @@
 mod bits;
 mod checksum;
 mod eval;
+mod guards;
+mod identity;
 mod inert;
+mod length_reads;
 mod value;
 
 #[cfg(test)]
@@ -14,10 +17,14 @@ use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::FxHashMap;
 use untwist_core::pass::Cx;
-use untwist_core::semantic::builtins::{patched_by_another_input, scan, Reliance};
-use untwist_core::semantic::{has_module_syntax, may_call_eval, other_inputs_given};
+use untwist_core::semantic::builtins::{patched_by_another_input, scan, scan_outside, Reliance};
+use untwist_core::semantic::{
+    has_module_syntax, may_call_eval, other_inputs_given, top_level_is_local,
+};
 
-use crate::init_order::{read_before_declaration, read_during_initialiser};
+use crate::init_order::{
+    read_before_declaration, read_before_local_declaration, read_during_initialiser,
+};
 pub use bits::Bits;
 use eval::{abstract_value, concrete, low_determined, Leaves};
 pub use value::{Kind, Val};
@@ -35,6 +42,10 @@ pub struct KnownBits {
     imul: bool,
     wanted: bool,
     barren: bool,
+    seedless: bool,
+    plain: identity::PlainSymbols,
+    plain_ready: bool,
+    identities: bool,
 }
 
 impl KnownBits {
@@ -46,7 +57,10 @@ impl KnownBits {
     ) {
         self.approved.clear();
         self.imul = false;
-        if !self.wanted || self.barren {
+        self.plain.clear();
+        self.plain_ready = false;
+        let seeking = self.wanted && !self.seedless;
+        if !(seeking || self.identities) || self.barren {
             return;
         }
         if has_with() || may_call_eval(cx.scoping()) {
@@ -54,18 +68,32 @@ impl KnownBits {
             return;
         }
         let scoping = cx.scoping();
+        if self.identities {
+            self.plain = identity::plain_symbols(program, scoping, top_level_is_local(program));
+            self.plain_ready = true;
+            cx.walk_whole_round();
+        }
+        if !seeking {
+            return;
+        }
         let computed = seeds(program, scoping, cx.opts.unsafe_transforms);
         if computed.is_empty() {
-            self.barren = true;
+            self.seedless = true;
             return;
         }
         let bound: Vec<(Span, SymbolId)> = computed
             .iter()
             .map(|(symbol, seed)| (seed.statement, *symbol))
             .collect();
-        let early = read_before_declaration(program, scoping, &bound);
+        let early = if top_level_is_local(program) {
+            let harmless = length_reads::function_length_reads(program, scoping);
+            read_before_local_declaration(program, scoping, &bound, &harmless)
+        } else {
+            read_before_declaration(program, scoping, &bound)
+        };
         let during: Vec<(Span, SymbolId, bool)> = computed
             .iter()
+            .filter(|(_, seed)| !seed.closed)
             .map(|(symbol, seed)| (seed.statement, *symbol, seed.inert))
             .collect();
         let during = read_during_initialiser(program, scoping, &during);
@@ -74,13 +102,33 @@ impl KnownBits {
             .filter(|(symbol, _)| !early.contains(symbol) && !during.contains(symbol))
             .map(|(symbol, seed)| (symbol, seed.value))
             .collect();
-        self.imul = !self.approved.is_empty() && imul_holds(program, cx);
+        self.imul = !self.approved.is_empty() && imul_holds(program, cx, &self.approved);
         cx.walk_whole_round();
     }
 
+    pub fn identity(&mut self, expr: &Expression<'_>, cx: &Cx<'_, '_>) -> Option<bool> {
+        if self.plain_ready {
+            if let Some(value) = self.plain.flag(expr, cx.scoping()) {
+                return Some(value);
+            }
+        }
+        let relation = identity::relation(expr)?;
+        if self.plain_ready {
+            return relation.decide(&self.plain, cx.scoping());
+        }
+        if !self.identities && !self.barren {
+            self.identities = true;
+            cx.opts.round_requested.set(true);
+        }
+        None
+    }
+
     pub fn decide(&mut self, expr: &Expression<'_>, cx: &Cx<'_, '_>) -> Option<bool> {
+        if let Some(value) = self.identity(expr, cx) {
+            return Some(value);
+        }
         if self.approved.is_empty() {
-            if !self.wanted && !self.barren && is_candidate(expr, cx.scoping()) {
+            if !self.wanted && !self.seedless && !self.barren && is_candidate(expr, cx.scoping()) {
                 self.wanted = true;
                 cx.opts.round_requested.set(true);
             }
@@ -95,14 +143,26 @@ impl KnownBits {
     }
 }
 
-fn imul_holds(program: &Program<'_>, cx: &Cx<'_, '_>) -> bool {
+fn imul_holds(program: &Program<'_>, cx: &Cx<'_, '_>, approved: &FxHashMap<SymbolId, Val>) -> bool {
     if patched_by_another_input(&MATH_IMUL) {
         return false;
     }
     let module = has_module_syntax(program);
-    scan(program, cx.scoping(), module, false, &MATH_IMUL)
+    let scoping = cx.scoping();
+    let lane = cx.opts.unsafe_transforms;
+    if scan(program, scoping, module, false, &MATH_IMUL)
         .verdict
-        .allows_safe(cx.opts.unsafe_transforms)
+        .allows_safe(lane)
+    {
+        return true;
+    }
+    let assumed = Strict {
+        approved,
+        scoping,
+        imul: true,
+    };
+    let dead = guards::dead_regions(program, scoping, &assumed, top_level_is_local(program));
+    !dead.is_empty() && scan_outside(program, scoping, module, &MATH_IMUL, &dead).allows_safe(lane)
 }
 
 fn decide_with(expr: &Expression<'_>, leaves: &dyn Leaves) -> Option<bool> {
@@ -236,6 +296,7 @@ struct Seed {
     statement: Span,
     value: Val,
     inert: bool,
+    closed: bool,
 }
 
 struct Lax<'k, 's, 'r, 'p> {
@@ -271,12 +332,18 @@ fn seeds<'p>(
 ) -> FxHashMap<SymbolId, Seed> {
     let roots = checksum::Roots::of(program, unsafe_lane);
     let alone = !other_inputs_given();
+    let local = top_level_is_local(program);
     let mut computed = FxHashMap::default();
     for statement in &program.body {
         let Statement::VariableDeclaration(declaration) = statement else {
             continue;
         };
-        if declaration.kind != VariableDeclarationKind::Const {
+        let kind_allowed = match declaration.kind {
+            VariableDeclarationKind::Const => true,
+            VariableDeclarationKind::Var => local,
+            _ => false,
+        };
+        if !kind_allowed {
             continue;
         }
         for declarator in &declaration.declarations {
@@ -305,12 +372,19 @@ fn seeds<'p>(
                             .as_ref()
                             .is_some_and(|init| inert::runs_no_code(init, &lax))
                     });
+                let closed = declaration.declarations.iter().all(|declarator| {
+                    declarator
+                        .init
+                        .as_ref()
+                        .is_some_and(|init| is_closed_number(init, 0))
+                });
                 computed.insert(
                     symbol,
                     Seed {
                         statement: declaration.span,
                         value,
                         inert,
+                        closed,
                     },
                 );
             }
@@ -320,7 +394,9 @@ fn seeds<'p>(
 }
 
 fn written(symbol: SymbolId, scoping: &Scoping) -> bool {
-    !scoping.symbol_flags(symbol).is_const_variable()
+    let flags = scoping.symbol_flags(symbol);
+    !(flags.is_const_variable() || flags.is_function_scoped_declaration())
+        || !scoping.symbol_redeclarations(symbol).is_empty()
         || scoping
             .get_resolved_references(symbol)
             .any(|reference| reference.is_write())
@@ -328,6 +404,7 @@ fn written(symbol: SymbolId, scoping: &Scoping) -> bool {
 
 fn is_seed_shape(init: &Expression<'_>) -> bool {
     match init.without_parentheses() {
+        Expression::NumericLiteral(_) => true,
         Expression::BinaryExpression(binary) => matches!(
             binary.operator,
             BinaryOperator::BitwiseAnd
@@ -372,7 +449,7 @@ fn const_reads(
     match expr.without_parentheses() {
         Expression::Identifier(id) => {
             if let Some(symbol) = resolved(id, scoping)
-                .filter(|symbol| depth > 0 && scoping.symbol_flags(*symbol).is_const_variable())
+                .filter(|symbol| depth > 0 && is_counter_like(scoping, *symbol))
             {
                 reads.push(symbol);
             }
@@ -403,6 +480,32 @@ fn const_reads(
         }
         _ => false,
     }
+}
+
+fn is_closed_number(expr: &Expression<'_>, depth: u32) -> bool {
+    if depth > 8 {
+        return false;
+    }
+    match expr.without_parentheses() {
+        Expression::NumericLiteral(_) => true,
+        Expression::BinaryExpression(binary) => {
+            (is_int_operator(binary.operator) || binary.operator == BinaryOperator::Multiplication)
+                && is_closed_number(&binary.left, depth + 1)
+                && is_closed_number(&binary.right, depth + 1)
+        }
+        Expression::UnaryExpression(unary) => {
+            matches!(
+                unary.operator,
+                UnaryOperator::BitwiseNot | UnaryOperator::UnaryNegation | UnaryOperator::UnaryPlus
+            ) && is_closed_number(&unary.argument, depth + 1)
+        }
+        _ => false,
+    }
+}
+
+fn is_counter_like(scoping: &Scoping, symbol: SymbolId) -> bool {
+    let flags = scoping.symbol_flags(symbol);
+    flags.is_const_variable() || flags.is_function_scoped_declaration()
 }
 
 fn is_int_operator(operator: BinaryOperator) -> bool {

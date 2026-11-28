@@ -185,6 +185,9 @@ impl Scan<'_> {
         if let Some((object, key)) = member_of(expression) {
             return self.reached_member(object, key);
         }
+        if call_of(expression).is_some_and(|call| self.loads_a_safe_builtin(call)) {
+            return false;
+        }
         callee_of(expression).is_some_and(|callee| {
             self.reads_prototypes(callee)
                 || self.is_reached(callee)
