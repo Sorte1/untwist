@@ -1,17 +1,9 @@
 # fixture-glob	lane-glob (safe|unsafe)	check (runs|machinery|simplified|node)	xfail|allow	cause-key: reason
 # An xfail that passes fails the run: remove its line when the cause is fixed. cargo xtask obf-options --dir fixtures/js-confuser --baseline fixtures/js-confuser/BASELINE ranks the cause keys.
-cff-05--objects-1.js	*	machinery	xfail	jsc-cff: controlFlowFlattening's state-vector dispatcher (while (sum(states) !== end) switch (sum(states))) is not undone
-cff-05--control-1.js	*	machinery	xfail	jsc-cff: controlFlowFlattening's state-vector dispatcher (while (sum(states) !== end) switch (sum(states))) is not undone
-cff-05--strings-1.js	*	machinery	xfail	jsc-cff: controlFlowFlattening's state-vector dispatcher (while (sum(states) !== end) switch (sum(states))) is not undone
-cff-05--numbers-1.js	*	machinery	xfail	jsc-cff: controlFlowFlattening's state-vector dispatcher (while (sum(states) !== end) switch (sum(states))) is not undone
-cff-1--greeting-1.js	*	machinery	xfail	jsc-cff: controlFlowFlattening's state-vector dispatcher (while (sum(states) !== end) switch (sum(states))) is not undone
-cff-1--functions-1.js	*	machinery	xfail	jsc-cff: controlFlowFlattening's state-vector dispatcher (while (sum(states) !== end) switch (sum(states))) is not undone
-cff-1--objects-1.js	*	machinery	xfail	jsc-cff: controlFlowFlattening's state-vector dispatcher (while (sum(states) !== end) switch (sum(states))) is not undone
+cff-1--greeting-1.js	safe	machinery	xfail	jsc-cff: controlFlowFlattening's state-vector dispatcher (while (sum(states) !== end) switch (sum(states))) is not undone
 cff-1--classes-1.js	*	machinery	xfail	jsc-cff: controlFlowFlattening's state-vector dispatcher (while (sum(states) !== end) switch (sum(states))) is not undone
-cff-1--control-1.js	*	machinery	xfail	jsc-cff: controlFlowFlattening's state-vector dispatcher (while (sum(states) !== end) switch (sum(states))) is not undone
-cff-1--strings-1.js	*	machinery	xfail	jsc-cff: controlFlowFlattening's state-vector dispatcher (while (sum(states) !== end) switch (sum(states))) is not undone
-cff-1--mixed-1.js	*	machinery	xfail	jsc-cff: controlFlowFlattening's state-vector dispatcher (while (sum(states) !== end) switch (sum(states))) is not undone
-cff-1--numbers-1.js	*	machinery	xfail	jsc-cff: controlFlowFlattening's state-vector dispatcher (while (sum(states) !== end) switch (sum(states))) is not undone
+cff-1--strings-1.js	safe	machinery	xfail	jsc-cff: controlFlowFlattening's state-vector dispatcher (while (sum(states) !== end) switch (sum(states))) is not undone
+cff-1--mixed-1.js	safe	machinery	xfail	jsc-cff: controlFlowFlattening's state-vector dispatcher (while (sum(states) !== end) switch (sum(states))) is not undone
 global-concealing--classes-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
 global-concealing--mixed-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written
 string-concealing--classes-1.js	safe	machinery	xfail	jsc-builtin-patched: safe lane: the program may replace a built-in that the js-confuser machinery reads, so that machinery is left as written

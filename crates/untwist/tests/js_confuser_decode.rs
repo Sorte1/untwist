@@ -2,9 +2,10 @@ use untwist::{Options, Pipeline};
 use untwist_testing::js_files_in;
 use untwist_testing::node_rows::{self, node_or_skip, Mode};
 
-const KEPT: [(&str, &str); 24] = [
+const KEPT: [(&str, &str); 25] = [
     ("kept-pair-dispatcher-this.js", "_dispatcher_0("),
     ("kept-moved-getter-passed.js", "TextDecoder"),
+    ("patched-cff-array.js", "_cff_sum"),
     ("kept-custom-free-name.js", "_MAIN_STR("),
     ("kept-integrity-key-read.js", "fnObject"),
     ("kept-integrity-key-prototype.js", "TAMPERED"),
@@ -49,7 +50,7 @@ fn unsafe_lane(source: &str) -> String {
 
 fn fixtures() -> Vec<(String, String)> {
     let fixtures = js_files_in("fixtures/js-confuser-decode");
-    assert_eq!(fixtures.len(), 34);
+    assert_eq!(fixtures.len(), 36);
     fixtures
 }
 
@@ -199,5 +200,15 @@ fn a_decoder_that_drifted_from_the_template_decodes_by_evaluation_in_both_lanes(
     for code in [default_lane(&source), unsafe_lane(&source)] {
         assert!(code.contains("hello, "), "{code}");
         assert!(!code.contains("_MAIN_STR("), "{code}");
+    }
+}
+
+#[test]
+fn a_flattened_control_flow_machine_is_undone_in_both_lanes() {
+    let source = named(&fixtures(), "cff.js");
+    for code in [default_lane(&source), unsafe_lane(&source)] {
+        assert!(!code.contains("_cff_sum"), "{code}");
+        assert!(!code.contains("_main("), "{code}");
+        assert!(code.contains("\"many \""), "{code}");
     }
 }
