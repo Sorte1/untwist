@@ -315,6 +315,19 @@ fn a_curated_core_js_package_matches_like_the_built_in_table() {
 }
 
 #[test]
+fn the_default_build_names_core_js_with_an_empty_cache() {
+    const { assert!(cfg!(feature = "libraries-corejs")) };
+    for lane in [&[][..], &["--unsafe"][..]] {
+        let out = stdin_output(&core_js_input(), lane);
+        assert!(out.status.success());
+        assert!(
+            String::from_utf8_lossy(&out.stdout).contains("// core-js 3."),
+            "{lane:?}"
+        );
+    }
+}
+
+#[test]
 fn modern_without_core_js_fingerprints_stops_with_a_hint() {
     let out = stdin_output("a;", &["--modern", "chrome 120", "--libraries", "none"]);
     assert!(!out.status.success());

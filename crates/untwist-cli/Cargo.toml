@@ -17,6 +17,7 @@ name = "untwist"
 path = "src/main.rs"
 
 [features]
+default = ["libraries-corejs"]
 peak-probe = []
 test-hooks = ["untwist/test-hooks"]
 libraries-corejs = ["untwist/libraries-all"]
