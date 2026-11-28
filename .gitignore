@@ -21,6 +21,7 @@ web/src/engine/pkg
 /game.js
 /game_old.js
 /.wrangler/
+/tools/bla-sweep/node_modules/
 /tools/obfuscated/node_modules/
 /tools/obfuscators/node_modules/
 /tools/js-confuser/node_modules

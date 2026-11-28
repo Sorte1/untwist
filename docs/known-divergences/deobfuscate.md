@@ -1541,3 +1541,21 @@
   (`document.querySelector('script')`, `document.scripts[0]`) and writes program text into it is
   not seen, and its strings may be decoded. Pinned by `crates/untwist/tests/dom_sink_rows.rs`
   (`dec-existing-script-text` is that assumption).
+- **An input that may read its own file is passed through unchanged.** The reference deobfuscator
+  rewrites it, and a program that hashes or prints its own bytes then sees other bytes: BLA's
+  `selfSeal` reads `__filename`, hashes it and throws `integrity check failed`. Untwist passes an
+  input through in both lanes, with the note `this input may read its own file ...`, when its own
+  path reaches a call that reads a file. The own path is `__filename`, `import.meta`,
+  `require.main`, `module.filename`, `process.mainModule`, `process.argv` other than
+  `process.argv[n]` for a literal `n` other than 1, `process.argv.slice(n)` for `n` of 2 or more
+  and `process.argv.length`, and every variable or property (matched by name) whose value holds one
+  of those outside a `typeof`, a `dirname(...)` call or a nested function. A call reads a file when
+  its callee is named `readFileSync`, `readFile`, `openSync`, `open`, `createReadStream`, `stat`,
+  `statSync`, `lstat`, `lstatSync`, `watch`, `watchFile`, `copyFile`, `copyFileSync`, `cpSync`,
+  `exec`, `execSync`, `execFile`, `execFileSync`, `spawn`, `spawnSync`, `fork` or `fetch`, or names a
+  function that passes one of its parameters to such a call, found again until nothing changes.
+  `vm.runInThisContext(fs.readFileSync(__filename, ...))`, which runs its own text again, does not
+  count. Both lanes assume no code reaches its own file another way: a path spelled out,
+  `__dirname` joined with its own name, the CommonJS wrapper's `arguments`, `process` taken as a
+  value, or a code text Untwist does not read. Rows: `crates/untwist/tests/own_file_read.rs`,
+  `tools/bla-sweep` (`self-seal`).

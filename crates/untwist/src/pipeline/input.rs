@@ -37,8 +37,8 @@ use super::snapshots::Snapshots;
 use super::stages::StageCx;
 use super::trail::Trail;
 use super::{
-    summarize_diagnostics, Pipeline, Reservation, ANNEX_B_UNMODELLED, PANICKED, PARSE_UNSUPPORTED,
-    TYPESCRIPT_IN_JAVASCRIPT,
+    summarize_diagnostics, Pipeline, Reservation, ANNEX_B_UNMODELLED, OWN_FILE_READ, PANICKED,
+    PARSE_UNSUPPORTED, TYPESCRIPT_IN_JAVASCRIPT,
 };
 use crate::options::Progress;
 use crate::report::StageReport;
@@ -481,6 +481,10 @@ impl Pipeline {
             Ok(errors) => errors,
             Err(step) => return step,
         };
+        if super::own_file::may_read_own_file(&parsed.program) {
+            result.parse_refusal = Some(OWN_FILE_READ);
+            return Step::Done(None);
+        }
         result
             .notes
             .extend(super::notes::vm_interpreter_notes(&parsed.program));

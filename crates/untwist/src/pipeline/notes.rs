@@ -12,6 +12,7 @@ pub use super::refusal::ANNEX_B_UNMODELLED;
 pub use super::refusal::NESTED_TOO_DEEP;
 pub use super::refusal::OVER_MEMORY_REFUSED;
 pub use super::refusal::OVER_TIME_REFUSED;
+pub use super::refusal::OWN_FILE_READ;
 pub use super::refusal::PARENTHESES_TOO_DEEP;
 pub use super::refusal::PARSE_UNSUPPORTED;
 pub use super::refusal::PRINT_TOO_LARGE;
@@ -138,6 +139,7 @@ catalogue!(
     SYNTAX_ERROR_REFUSED,
     PARSE_UNSUPPORTED,
     ANNEX_B_UNMODELLED,
+    OWN_FILE_READ,
     WORKER_DIED,
     OVER_MEMORY_REFUSED,
     OVER_TIME_REFUSED,

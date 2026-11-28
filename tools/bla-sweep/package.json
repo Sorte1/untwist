@@ -1,0 +1,9 @@
+{
+  "name": "untwist-bla-sweep",
+  "private": true,
+  "description": "Pinned bla-agents used by tools/bla-sweep/sweep.mjs to protect our own sources inside a bubblewrap sandbox, and acorn to read identifier tokens.",
+  "dependencies": {
+    "acorn": "8.15.0",
+    "bla-agents": "3.6.1"
+  }
+}
