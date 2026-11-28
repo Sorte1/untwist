@@ -3,8 +3,8 @@ import { EditorView } from '@codemirror/view';
 import { byId, setText } from '../dom';
 import { librariesOf, type LibraryRow } from '../libraries/libraries';
 import type { ModuleHit } from '../libraries/locate';
-import type { LibraryTables } from '../libraries/tables';
-import type { TableIndex } from '../libraries/index-format';
+import type { LibraryCollection } from '../libraries/collection';
+import type { CollectionIndex } from '../libraries/collection-format';
 import type { AppState } from '../state';
 import type { Store } from '../store';
 import type { LibrariesView } from './libraries/panel';
@@ -15,7 +15,7 @@ type Render = (holder: HTMLElement, view: LibrariesView) => void;
 interface Painted {
   readonly result: unknown;
   readonly libs: boolean;
-  readonly index: TableIndex | null;
+  readonly index: CollectionIndex | null;
 }
 
 export function revealModule(store: Store<AppState>, view: EditorView, hit: ModuleHit): void {
@@ -35,13 +35,13 @@ function rowsOf(state: AppState): LibraryRow[] {
   return result === null ? [] : librariesOf(result.report);
 }
 
-export function mountLibrariesTab(store: Store<AppState>, output: EditorView, tables: LibraryTables, run: () => void): void {
+export function mountLibrariesTab(store: Store<AppState>, output: EditorView, collection: LibraryCollection, run: () => void): void {
   const tab = byId<HTMLButtonElement>('libraries-tab');
   const panel = byId('libraries-panel');
   const count = byId('libraries-count');
   let render: Render | null = null;
   let open = false;
-  let index: TableIndex | null = null;
+  let index: CollectionIndex | null = null;
   let painted: Painted | null = null;
   let rows: LibraryRow[] = [];
   const turnOn = () => {
@@ -77,7 +77,7 @@ export function mountLibrariesTab(store: Store<AppState>, output: EditorView, ta
       panel.replaceChildren();
       return;
     }
-    tables.index().then((loaded) => {
+    collection.index().then((loaded) => {
       index = loaded;
       paint();
     }, () => undefined);

@@ -1,10 +1,10 @@
 import wasmUrl from './pkg/untwist_wasm_bg.wasm?url';
 import RunWorker from './run.worker.ts?worker';
-import type { LibraryTablesUsed, RunResult, WorkerReply } from './types';
+import type { RunResult, WorkerReply } from './types';
 import type { SuppliedWasm } from '../wasm/wasm';
-import type { LibraryTables, LoadedTable, TableTiming } from '../libraries/tables';
-import { MARK, tablesOn, tablesMark, type StageMark } from '../progress';
-import { sizeLabel } from '../dom';
+import type { CollectionFiles, FetchedShard, LibraryCollection } from '../libraries/collection';
+import type { CollectionShard } from '../libraries/collection-format';
+import { MARK, tablesOn, type StageMark } from '../progress';
 
 export const REPORT_EXTRAS = 'refusals strings links';
 
@@ -21,23 +21,6 @@ interface Warm {
   readonly ready: Promise<void>;
 }
 
-interface Prepared {
-  readonly tables: readonly LoadedTable[];
-  readonly failed: readonly string[];
-  readonly scanMs: number;
-  readonly loadMs: number;
-  readonly timings: readonly TableTiming[];
-}
-
-interface PrepareStep {
-  readonly mark: (name: string) => void;
-  readonly generation: number;
-  readonly signal: AbortSignal;
-  readonly name: string;
-}
-
-const NO_TABLES: Prepared = { tables: [], failed: [], scanMs: 0, loadMs: 0, timings: [] };
-
 export type OnProgress = (mark: StageMark) => void;
 
 const NO_PROGRESS: OnProgress = () => undefined;
@@ -47,6 +30,7 @@ interface Attempt {
   readonly extras: string;
   readonly wasm: readonly SuppliedWasm[];
   readonly onProgress: OnProgress;
+  readonly libraries: CollectionFiles | null;
 }
 
 function marker(onProgress: OnProgress): (name: string) => void {
@@ -84,13 +68,12 @@ function awaitReady(worker: Worker, module: Promise<WebAssembly.Module>): Promis
 export class Engine {
   readonly #module: Promise<WebAssembly.Module>;
   readonly #keepWarm: boolean;
-  readonly #libraries: LibraryTables | null;
+  readonly #libraries: LibraryCollection | null;
   #warm: Warm | null = null;
   #current: Current | null = null;
   #generation = 0;
-  #abort = new AbortController();
 
-  constructor(source: string | Promise<WebAssembly.Module> = wasmUrl, keepWarm = true, libraries: LibraryTables | null = null) {
+  constructor(source: string | Promise<WebAssembly.Module> = wasmUrl, keepWarm = true, libraries: LibraryCollection | null = null) {
     this.#module = typeof source === 'string' ? compile(source) : source;
     this.#keepWarm = keepWarm;
     this.#libraries = libraries;
@@ -110,47 +93,24 @@ export class Engine {
 
   async run(source: string, flags: string, onProgress: OnProgress = NO_PROGRESS, extras = REPORT_EXTRAS, wasm: readonly SuppliedWasm[] = []): Promise<RunResult> {
     const generation = this.#generation;
-    const signal = this.#abort.signal;
-    const mark = marker(onProgress);
-    const attempt: Attempt = { flags, extras, wasm, onProgress };
-    const libraries = tablesOn(flags) ? this.#libraries : null;
-    const prepared = await this.#prepare(libraries, source, [], NO_TABLES, { mark, generation, signal, name: MARK.scan });
-    const result = await this.#runTrapped(source, attempt, prepared.tables);
-    if (libraries === null) {
-      return result;
-    }
-    const more = await this.#prepare(libraries, result.stdout, prepared.tables.map((table) => table.id).concat(prepared.failed), prepared, { mark, generation, signal, name: MARK.scanOutput });
-    if (more.tables.length === prepared.tables.length) {
-      return { ...result, libraryTables: used(prepared, result, false) };
-    }
-    mark(MARK.rerun);
-    const rerun = await this.#runTrapped(source, attempt, more.tables);
-    return { ...rerun, workerMs: result.workerMs + rerun.workerMs, libraryTables: used(more, rerun, true) };
+    const collection = tablesOn(flags) ? this.#libraries : null;
+    const libraries = collection === null ? null : await collection.files().catch(() => null);
+    this.#stillCurrent(generation);
+    return this.#runTrapped(source, { flags, extras, wasm, onProgress, libraries });
   }
 
-  async #prepare(libraries: LibraryTables | null, text: string, skip: readonly string[], known: Prepared, step: PrepareStep): Promise<Prepared> {
-    if (libraries === null) {
-      return known;
-    }
-    step.mark(step.name);
-    const scanStarted = performance.now();
-    const wanted = await libraries.wanted(text, skip, step.signal).catch(() => []);
-    this.#stillCurrent(step.generation);
-    const scanMs = known.scanMs + performance.now() - scanStarted;
-    if (wanted.length === 0) {
-      return { ...known, scanMs };
-    }
-    step.mark(tablesMark(wanted, sizeLabel));
-    const loadStarted = performance.now();
-    const fetched = await libraries.load(wanted, step.signal);
-    this.#stillCurrent(step.generation);
-    return {
-      tables: [...known.tables, ...fetched.tables],
-      failed: [...known.failed, ...fetched.failed],
-      timings: [...known.timings, ...fetched.timings],
-      scanMs,
-      loadMs: known.loadMs + performance.now() - loadStarted,
+  #sendShards(worker: Worker, request: number, shards: readonly CollectionShard[]): void {
+    const answer = (results: readonly (FetchedShard | null)[]) => {
+      if (this.#current?.worker === worker) {
+        worker.postMessage({ kind: 'shards', request, results });
+      }
     };
+    const collection = this.#libraries;
+    if (collection === null) {
+      answer(shards.map(() => null));
+      return;
+    }
+    collection.shards(shards).then(answer, () => answer(shards.map(() => null)));
   }
 
   #stillCurrent(generation: number): void {
@@ -159,14 +119,13 @@ export class Engine {
     }
   }
 
-  async #runTrapped(source: string, attempt: Attempt, tables: readonly LoadedTable[]): Promise<RunResult> {
-    const bytes = tables.map((table) => table.bytes);
-    const first = await this.#runOnce(source, attempt, false, bytes);
+  async #runTrapped(source: string, attempt: Attempt): Promise<RunResult> {
+    const first = await this.#runOnce(source, attempt, false);
     if (first.kind === 'done') {
       return { ...first.result, trap: null, workerMs: first.wallMs };
     }
     marker(attempt.onProgress)(MARK.retry);
-    const refused = await this.#runOnce(source, attempt, true, bytes);
+    const refused = await this.#runOnce(source, attempt, true);
     if (refused.kind !== 'done') {
       throw new Error(`the refused re-run trapped too: ${refused.message}`);
     }
@@ -175,8 +134,6 @@ export class Engine {
 
   cancel(): void {
     this.#generation += 1;
-    this.#abort.abort();
-    this.#abort = new AbortController();
     const current = this.#current;
     if (current === null) {
       return;
@@ -203,8 +160,8 @@ export class Engine {
     return this.#warm;
   }
 
-  async #runOnce(source: string, attempt: Attempt, refused: boolean, tables: readonly Uint8Array<ArrayBuffer>[]): Promise<Finished> {
-    const { flags, extras, wasm, onProgress } = attempt;
+  async #runOnce(source: string, attempt: Attempt, refused: boolean): Promise<Finished> {
+    const { flags, extras, wasm, onProgress, libraries } = attempt;
     marker(onProgress)(MARK.start);
     const { worker, ready } = this.#prewarm();
     this.#warm = null;
@@ -220,6 +177,8 @@ export class Engine {
             const reply = event.data;
             if (reply.kind === 'stage') {
               onProgress({ name: reply.name, at: reply.at - performance.timeOrigin });
+            } else if (reply.kind === 'fetch-shards') {
+              this.#sendShards(worker, reply.request, reply.shards);
             } else if (reply.kind === 'done' || reply.kind === 'trap') {
               performance.mark('untwist:result-received');
               resolve({ ...reply, wallMs: performance.now() - posted });
@@ -228,7 +187,7 @@ export class Engine {
             }
           };
           worker.onerror = (event) => reject(new Error(event.message));
-          worker.postMessage({ kind: 'run', source, flags, refused, extras, wasm, tables });
+          worker.postMessage({ kind: 'run', source, flags, refused, extras, wasm, libraries });
         };
         ready.then(start, reject);
       });
@@ -240,16 +199,4 @@ export class Engine {
       this.#rewarm();
     }
   }
-}
-
-function used(prepared: Prepared, result: RunResult, reran: boolean): LibraryTablesUsed {
-  const loaded = new Set((result.tablesLoaded ?? '').split(','));
-  return {
-    fetched: prepared.tables.map((table) => table.id).filter((id) => loaded.has(id)),
-    failed: [...prepared.failed, ...prepared.tables.map((table) => table.id).filter((id) => !loaded.has(id))],
-    reran,
-    scanMs: prepared.scanMs,
-    loadMs: prepared.loadMs,
-    timings: prepared.timings,
-  };
 }

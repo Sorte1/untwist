@@ -9,7 +9,7 @@ import { FOLDS_MARK, MARK, type StageMark } from './progress';
 import type { RunResult } from './engine/types';
 import { hashSetsLibraries, storedLibraryNames, storeLibraryNames } from './settings/library-pref';
 import { flagsFrom } from './settings/flags';
-import { LibraryTables } from './libraries/tables';
+import { LibraryCollection } from './libraries/collection';
 import { registerServiceWorker } from './pwa/register';
 import { settingsFromHash, writeHash } from './settings/hash';
 import { createStore, type Store } from './store';
@@ -173,7 +173,7 @@ function showStarsLater(engineReady: Promise<unknown>): void {
 function main(): void {
   const parsed = initialSettings(window.location.hash);
   const store = createStore(initialState(preferredTheme(), parsed.settings, parsed.problems));
-  const libraries = new LibraryTables();
+  const libraries = new LibraryCollection();
   const engine = new Engine(undefined, true, libraries);
   applyTheme(store.get().theme);
   mountEditorTheme(store);

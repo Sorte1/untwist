@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import type { Page } from '@playwright/test';
-import { expect, openApp, openDiagnostics, paste, readRepo, repoPath, runAndWait, saved, test, skipWithoutGame, CORE_JS_TABLE } from './fixtures';
+import { expect, openApp, openDiagnostics, paste, readRepo, repoPath, runAndWait, saved, test, skipWithoutGame, LIBRARY_ARGS } from './fixtures';
 
 const FIXTURE = 'fixtures/reference/deobfuscate/obfuscator.io-control-flow.js';
 const MS_FIELDS = new Set(['per_pass_ms', 'fixpoint_per_pass_ms', 'iterations_ms', 'elapsed_ms']);
@@ -13,7 +13,7 @@ function masked(stages: Row[]): Row[] {
 
 function cliStages(fixture: string): Row[] {
   const bin = process.env['UNTWIST_BIN'] ?? repoPath('target/release/untwist');
-  const json = execFileSync(bin, [...CORE_JS_TABLE, '--report', 'json', '--disable', 'library-names,library-rename', repoPath(fixture)], {
+  const json = execFileSync(bin, [...LIBRARY_ARGS, '--report', 'json', '--disable', 'library-names,library-rename', repoPath(fixture)], {
     encoding: 'utf8',
     maxBuffer: 1 << 28,
     env: { ...process.env, UNTWIST_TEST_SUPERVISOR: 'off' },
@@ -104,7 +104,7 @@ test('Details shows the fuel used, the peak call depth, the collision reasons an
   await page.locator('#details-tab').click();
   const pair = (label: string) => page.locator('#details .details-pairs dt', { hasText: new RegExp(`^\\s*${label}$`) }).locator('xpath=following-sibling::dd[1]');
   const cli = JSON.parse(
-    execFileSync(process.env['UNTWIST_BIN'] ?? repoPath('target/release/untwist'), [...CORE_JS_TABLE, '--rename', 'simple', '--report', 'json', repoPath(FIXTURE)], {
+    execFileSync(process.env['UNTWIST_BIN'] ?? repoPath('target/release/untwist'), [...LIBRARY_ARGS, '--rename', 'simple', '--report', 'json', repoPath(FIXTURE)], {
       encoding: 'utf8',
       maxBuffer: 1 << 28,
       env: { ...process.env, UNTWIST_TEST_SUPERVISOR: 'off' },

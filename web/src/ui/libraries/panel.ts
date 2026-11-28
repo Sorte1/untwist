@@ -2,8 +2,8 @@ import type { RunResult } from '../../engine/types';
 import { sizeLabel } from '../../dom';
 import { moduleLabel, rangeLabel, type LibraryRow } from '../../libraries/libraries';
 import { locateModules, type ModuleHit } from '../../libraries/locate';
-import { tableRows, tableStateText, type TableRow } from '../../libraries/panel-model';
-import type { TableIndex } from '../../libraries/index-format';
+import { builtInIds, tableRows, tableStateText, type TableRow } from '../../libraries/panel-model';
+import type { CollectionIndex } from '../../libraries/collection-format';
 import { durationLabel } from '../../progress';
 import './libraries.css';
 
@@ -11,7 +11,7 @@ export interface LibrariesView {
   readonly libraries: boolean;
   readonly rows: readonly LibraryRow[];
   readonly result: RunResult | null;
-  readonly index: TableIndex | null;
+  readonly index: CollectionIndex | null;
   readonly reveal: (hit: ModuleHit) => void;
   readonly fileName: (index: number) => string;
   readonly turnOn: () => void;
@@ -29,8 +29,8 @@ function make<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, 
 function emptyState(view: LibrariesView): HTMLElement {
   const box = make('div', 'lib-empty');
   box.append(
-    make('p', 'lib-note', 'Library names is off. Turn it on to detect known libraries such as core-js, regenerator-runtime, tslib and the Babel helpers, put a comment above each library module, fold them in the output, and fetch the extra name tables a run needs.'),
-    make('p', 'lib-note muted', 'It is off by default because the scan and the table downloads add time to every run. The setting is under Settings > Libraries.'),
+    make('p', 'lib-note', 'Library names is off. Turn it on to detect known libraries such as core-js, regenerator-runtime, tslib and the Babel helpers, put a comment above each library module, fold them in the output, and fetch the library packages a run needs.'),
+    make('p', 'lib-note muted', 'It is off by default because the scan and the package downloads add time to every run. The setting is under Settings > Libraries.'),
   );
   const button = make('button', 'btn btn-small', 'Turn on and run again');
   button.type = 'button';
@@ -92,19 +92,22 @@ function tableItem(row: TableRow): HTMLElement {
 function tablesSection(view: LibrariesView): HTMLElement {
   const section = make('section', 'lib-tables');
   section.append(make('h3', 'lib-title', 'Name tables'));
-  const rows = tableRows(view.index, view.result?.libraryTables);
+  const used = view.result?.libraryTables;
+  const rows = tableRows(view.index, used, builtInIds(view.result?.tablesLoaded, view.index, used));
   if (rows.length === 0) {
-    section.append(make('p', 'lib-note muted', 'The table index could not be read.'));
+    section.append(make('p', 'lib-note muted', 'The library collection could not be read.'));
     return section;
   }
   const table = make('table', 'lib-table');
   const head = make('tr', 'lib-table-head');
-  head.append(make('th', '', 'Table'), make('th', '', 'State'), make('th', '', 'Size'), make('th', '', 'Load'));
+  head.append(make('th', '', 'Package'), make('th', '', 'State'), make('th', '', 'Size'), make('th', '', 'Load'));
   table.append(head, ...rows.map(tableItem));
   section.append(table);
-  const used = view.result?.libraryTables;
+  if (view.index !== null) {
+    section.append(make('p', 'lib-note muted', `Collection ${view.index.version}. Only the packages whose fingerprints match this code are fetched; the code itself never leaves the page.`));
+  }
   if (used !== undefined) {
-    section.append(make('p', 'lib-note muted', `Input and output scan ${durationLabel(used.scanMs)}, loading ${durationLabel(used.loadMs)}${used.reran ? '; found in the output, so the run went again with the table' : ''}.`));
+    section.append(make('p', 'lib-note muted', `Input and output scan ${durationLabel(used.scanMs)}, loading ${durationLabel(used.loadMs)}${used.reran ? '; found in the output, so the run went again with the package' : ''}.`));
   }
   return section;
 }

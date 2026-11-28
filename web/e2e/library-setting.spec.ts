@@ -2,7 +2,8 @@ import type { Page, Request } from '@playwright/test';
 import { expect, openApp, openDiagnostics, openSettings, readRepo, runAndWait, test } from './fixtures';
 
 const CORE_JS = 'fixtures/libraries/core-js/rollup-cjs.terser.js';
-const LIBRARY_FILES = /\/libraries\/(index\.json|[\w-]+\.table)\b/;
+const LIBRARY_FILES = /\/libraries\/(collection\.json|shards\/)/;
+const SHARD = /\/libraries\/shards\/[0-9a-f]{64}\.utl$/;
 const SCREENSHOTS = process.env['UNTWIST_PROGRESS_SHOTS'];
 
 function libraryRequests(page: Page): Request[] {
@@ -61,7 +62,7 @@ test('turning library names on fetches the table, folds the library and is remem
   await page.keyboard.press('Escape');
   await load(page, CORE_JS);
   await runAndWait(page);
-  expect(requests.some((request) => /core-js\.table/.test(request.url()))).toBe(true);
+  expect(requests.some((request) => SHARD.test(request.url()))).toBe(true);
   await expect(page.locator('#library-code')).toBeVisible();
   await expect(page.locator('#output-editor .cm-foldPlaceholder').first()).toBeVisible();
   const timeline = await detailsSection(page, 'Run timeline');
@@ -83,7 +84,7 @@ test('turning library names on fetches the table, folds the library and is remem
 test('the progress panel names the table it fetches with its size, and cancel stops the run while it waits', async ({ page }) => {
   let release: () => void = () => undefined;
   const held = new Promise<void>((resolve) => (release = resolve));
-  await page.route(/\/libraries\/core-js\.table\b/, async (route) => {
+  await page.route(SHARD, async (route) => {
     await held;
     await route.continue().catch(() => undefined);
   });

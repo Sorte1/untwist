@@ -88,11 +88,15 @@ describe('the details rows', () => {
 
   it('name the library tables a run fetched and the ones that failed', () => {
     expect(tablePairs(undefined)).toEqual([]);
-    expect(tablePairs({ fetched: [], failed: [], reran: false, scanMs: 3, loadMs: 0 })).toEqual([]);
-    expect(tablePairs({ fetched: ['core-js'], failed: ['lodash'], reran: true, scanMs: 12, loadMs: 140 })).toEqual([
+    expect(tablePairs({ collection: 'test', error: '', fetched: [], failed: [], reran: false, scanMs: 3, loadMs: 0 })).toEqual([]);
+    expect(tablePairs({ collection: 'test', error: '', fetched: ['core-js'], failed: ['lodash'], reran: true, scanMs: 12, loadMs: 140 })).toEqual([
       { label: 'Tables loaded', value: 'core-js (found in the output, run again)' },
       { label: 'Tables not loaded', value: 'lodash' },
       { label: 'Table scan / load', value: '12 ms / 140 ms' },
+    ]);
+    expect(tablePairs({ collection: 'test', error: 'the collection is for shape epoch 9', fetched: [], failed: [], reran: false, scanMs: 0, loadMs: 0 })).toEqual([
+      { label: 'Library collection', value: 'the collection is for shape epoch 9' },
+      { label: 'Table scan / load', value: '— / —' },
     ]);
   });
 });
