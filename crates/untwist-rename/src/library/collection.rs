@@ -379,7 +379,7 @@ impl Collection {
             let total: usize = hits.iter().map(|hit| hit.all).sum();
             let strong: usize = hits.iter().map(|hit| hit.strong).sum();
             let whole = hits.iter().any(|hit| hit.program);
-            let enough = entry.curated || whole || (strong > 0 && total >= CLUSTER_HITS);
+            let enough = whole || (strong > 0 && total >= CLUSTER_HITS);
             if !enough {
                 continue;
             }

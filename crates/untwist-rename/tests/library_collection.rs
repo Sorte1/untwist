@@ -259,3 +259,33 @@ fn the_fixture_filter_file_is_what_bloom_file_writes_for_its_shards() {
     let written = std::fs::read(fixture().join(&filters.file)).expect("the filter file");
     assert_eq!(bloom_file(&entries), written);
 }
+
+#[test]
+fn a_curated_package_needs_the_same_evidence_as_a_generated_one() {
+    use untwist_rename::library::collection::ProgramKeys;
+    use untwist_rename::library::CLUSTER_HITS;
+    let keys: Vec<u32> = (1u32..=8)
+        .map(|seed| seed.wrapping_mul(2_654_435_761))
+        .collect();
+    let blooms = bloom_file(&[("core-js".to_string(), Bloom::with_keys(&keys))]);
+    let sha = sha256_hex(&blooms);
+    let shard = format!(
+        "{{\"file\": \"shards/{0}.utl\", \"bytes\": 1, \"sha256\": \"{0}\"}}",
+        "c".repeat(64)
+    );
+    let index = format!(
+        "{{\"schema\": \"untwist.library-collection/1\", \"version\": \"t\", \"shape_epoch\": {SHAPE_EPOCH}, \"packages\": [{{\"id\": \"core-js\", \"label\": \"core-js\", \"curated\": true, \"shards\": [{shard}]}}], \"filters\": {{\"file\": \"shards/{sha}.bloom\", \"sha256\": \"{sha}\"}}}}"
+    );
+    let mut collection = Collection::parse(&index).expect("the index parses");
+    collection
+        .attach_filters(&blooms)
+        .expect("the filters load");
+    let found = |count: usize, strong: usize| ProgramKeys {
+        loose: keys.iter().take(count).copied().collect(),
+        strong: keys.iter().take(strong).copied().collect(),
+        program: None,
+    };
+    assert!(collection.shards_wanted(&found(1, 1)).is_empty());
+    assert!(collection.shards_wanted(&found(CLUSTER_HITS, 0)).is_empty());
+    assert_eq!(collection.shards_wanted(&found(CLUSTER_HITS, 1)), [(0, 0)]);
+}
