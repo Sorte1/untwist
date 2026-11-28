@@ -20,6 +20,7 @@ const RUNTIMES: &str = "runtimes";
 const RUNTIME_KEYS: &str = "runtimes.keys";
 const MIN_UNIT_TOKENS: u32 = 12;
 const LANES: [&[&str]; 2] = [&[], &["--unsafe"]];
+pub(crate) const PINNED_LIBRARIES: [&str; 2] = ["--libraries", "builtin"];
 const BABEL_6_HELPERS: [&str; 3] = [
     "sliceIterator",
     "possibleConstructorReturn",
@@ -71,7 +72,7 @@ pub enum Action {
         #[arg(long)]
         out: PathBuf,
         #[arg(long)]
-        version: String,
+        version: Option<String>,
         #[arg(long)]
         only: Option<String>,
         #[arg(long)]
@@ -126,7 +127,11 @@ pub fn run(root: &Path, request: &Request) -> Result<()> {
                 true => Vec::new(),
                 false => curated_tables(root, only.as_deref())?,
             };
-            pack(work, out, version, only.as_deref(), &curated)
+            let version = match version {
+                Some(version) => version.clone(),
+                None => default_version(work)?,
+            };
+            pack(work, out, &version, only.as_deref(), &curated)
         }
         Action::Hints {
             files,
@@ -185,13 +190,19 @@ fn select(
 struct Selected {
     name: String,
     versions: Vec<String>,
+    taken: Option<String>,
+}
+
+fn selection_json(work: &Path) -> Result<Value> {
+    let path = work.join("selection.json");
+    Ok(serde_json::from_str(
+        &std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?,
+    )?)
 }
 
 fn selection(work: &Path) -> Result<Vec<Selected>> {
-    let path = work.join("selection.json");
-    let value: Value = serde_json::from_str(
-        &std::fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?,
-    )?;
+    let value = selection_json(work)?;
+    let taken = value["taken"].as_str().map(str::to_string);
     Ok(value["packages"]
         .as_array()
         .context("selection.json has no packages")?
@@ -204,9 +215,18 @@ fn selection(work: &Path) -> Result<Vec<Selected>> {
                     .iter()
                     .filter_map(|version| version.as_str().map(str::to_string))
                     .collect(),
+                taken: taken.clone(),
             })
         })
         .collect())
+}
+
+fn default_version(work: &Path) -> Result<String> {
+    let value = selection_json(work)?;
+    let taken = value["taken"]
+        .as_str()
+        .context("selection.json has no date; pass --version")?;
+    Ok(format!("{}-e{SHAPE_EPOCH}", taken.replace('-', ".")))
 }
 
 fn safe_name(name: &str) -> String {
@@ -242,6 +262,9 @@ fn build_package(
         let install = work.join("pkgs").join(&pinned);
         let mut command = node(root, wrap, "install.mjs");
         command.arg(&install).arg(&package.name).arg(version);
+        if let Some(taken) = &package.taken {
+            command.arg(taken);
+        }
         if let Err(error) = checked(command, "install.mjs") {
             eprintln!("{pinned}: {error:#}");
             continue;
@@ -407,6 +430,7 @@ fn runtime_keys(root: &Path, work: &Path, untwist: &Path, wrap: Option<&str>) ->
             let out = dir.join("out");
             let status = Command::new(untwist)
                 .args(flags)
+                .args(PINNED_LIBRARIES)
                 .arg("-f")
                 .arg("-o")
                 .arg(&out)

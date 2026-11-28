@@ -184,24 +184,76 @@ jobs:
           npm run build
           npm publish --provenance --access public
 
+  libraries:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.23.1
+
+      - name: Rust toolchain from rust-toolchain.toml
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - name: Build untwist and xtask
+        run: cargo build --release -p untwist-cli -p xtask
+
+      - name: Install the pinned bundlers
+        working-directory: tools/library-collection
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Build the library collection from the pinned selection
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/library-work"
+          mkdir -p "$work"
+          cp tools/library-collection/selection.json "$work/"
+          target/release/xtask library-collection build --work "$work" --untwist target/release/untwist --jobs 4 2>&1 | tee "$RUNNER_TEMP/library-build.log"
+          target/release/xtask library-collection pack --work "$work" --out "$RUNNER_TEMP/libraries"
+          target/release/untwist --libraries "$RUNNER_TEMP/libraries" --report json fixtures/library-collection/inputs/eventemitter3.rollup-cjs.terser.js > "$RUNNER_TEMP/smoke.json"
+          jq -e '.collection.packages > 0' "$RUNNER_TEMP/smoke.json" >/dev/null
+          tools/library-collection/package.sh "$RUNNER_TEMP/libraries" "$RUNNER_TEMP/library-release"
+
+      - name: Keep the collection for the deploy and the release
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: libraries
+          path: |
+            ${{ runner.temp }}/library-release/
+          if-no-files-found: error
+          retention-days: 7
+
   web:
-    needs: [verify, crates, npm]
+    needs: [verify, crates, npm, libraries]
     permissions:
       contents: read
     uses: ./.github/workflows/deploy-web.yml
     with:
       production: true
+      libraries-artifact: libraries
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
   github-release:
-    needs: [verify, crates, npm, web]
+    needs: [verify, crates, npm, libraries, web]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: libraries
+          path: ${{ runner.temp }}/library-release
 
       - name: Create the GitHub release from the CHANGELOG section
         env:
@@ -220,3 +272,13 @@ jobs:
           else
             gh release create "$TAG" --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag
           fi
+
+      - name: Attach the library collection
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/library-release"
+          sha256sum -c ./*.tar.gz.sha256
+          gh release upload "$TAG" ./*.tar.gz ./*.tar.gz.sha256 --clobber --repo "$GITHUB_REPOSITORY"

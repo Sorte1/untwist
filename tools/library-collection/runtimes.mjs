@@ -13,6 +13,7 @@ if (!process.argv[2]) {
 const SOURCE = join(OUT, "app");
 mkdirSync(OUT, { recursive: true });
 cpSync(join(HERE, "runtime"), SOURCE, { recursive: true });
+process.chdir(SOURCE);
 const entry = join(SOURCE, "entry.mjs");
 
 async function rollupBuild(strict, format) {
