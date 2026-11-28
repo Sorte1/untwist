@@ -115,7 +115,10 @@ fn failing_rounds(keeping: bool) -> (Vec<(String, untwist_eval::stats::DecodeSta
     let memo = Rc::new(RefCell::new(RotationMemo::default()));
     let source = format!(
         "{}{IN_ORDER}",
-        MACHINERY.replace("while (!![]) {", "while (!![]) { for (var z = 0; z < 1e9; z++); ")
+        MACHINERY.replace(
+            "while (!![]) {",
+            "while (!![]) { for (var z = 0; z < 1e9; z++); "
+        )
     );
     let options = untwist_core::pass::PassOptions {
         fuel: Some(FAILING_FUEL),
@@ -141,7 +144,11 @@ fn a_failed_unit_whose_inputs_are_unchanged_replays_its_failure_and_its_steps() 
     let (fresh, fresh_hits) = failing_rounds(false);
     assert_eq!(kept, fresh);
     assert_eq!((hits, fresh_hits), (2, 0));
-    assert!(kept[0].0.contains("__DECODE_0__(0), __DECODE_0__(1)"), "{}", kept[0].0);
+    assert!(
+        kept[0].0.contains("__DECODE_0__(0), __DECODE_0__(1)"),
+        "{}",
+        kept[0].0
+    );
     assert_eq!(kept[0].1.steps, FAILING_FUEL);
     assert_eq!(kept[2].1, kept[0].1);
 }

@@ -272,7 +272,11 @@
   forwards to. A site whose arguments still contain an unresolved wrapper call is deferred, so
   nested wrappers keep flattening across iterations. The reference deobfuscator substitutes
   regardless, so `w(i++, 0)` leaves `i` at 2 where the program leaves it at 1. `--unsafe` keeps
-  the earlier rule. Effect: Untwist decodes fewer sites on hand-written inputs; obfuscator.io
+  the earlier rule, except that a site whose substituted argument reads a name no declaration
+  binds (other than `undefined`, `NaN` and `Infinity`, and outside `typeof`) is kept with the
+  note `an argument reads a name no declaration binds, …`: the read throws a `ReferenceError`
+  that an unused parameter would drop, and no `--unsafe` premise says the name exists. Rows:
+  `crates/untwist/tests/data/fuzz_differential_rows.txt`. Effect: Untwist decodes fewer sites on hand-written inputs; obfuscator.io
   passes literals and `const` string literals, which the rule accepts. Pinned by
   `crates/untwist/tests/decoder_call_soundness_rows.rs`.
 - **Nothing is inlined into a position that can run before its declaration**.
@@ -1559,3 +1563,20 @@
   `__dirname` joined with its own name, the CommonJS wrapper's `arguments`, `process` taken as a
   value, or a code text Untwist does not read. Rows: `crates/untwist/tests/own_file_read.rs`,
   `tools/bla-sweep` (`self-seal`).
+- **`--unsafe` output behaves like the source where a protection fires on the input.** The
+  unsafe lane assumes protections never fire, so it removes them even where they do fire on the
+  input, and the output then prints what the unprotected source prints. Three shapes do this on
+  the committed fixtures, and the v0.7.0 fuzz differential (inputs from the fuzz corpus run under
+  node, compared with both lanes' outputs) found each of them again on mutated copies:
+  obfuscator.io's console disable, which the relayer stacks keep active from the first line
+  (`fixtures/obfuscator-relayer/guarded-no-eval-n4--classes-1.js` prints nothing) or turn on
+  part way (`web-no-eval-n1--objects-1.js` prints two lines); the self-defending trap of
+  obfuscator.io 0.x on a file reformatted after obfuscation, which recurses until the stack
+  overflows (`fixtures/obfuscator-versions/0.16.0--b64-rot-t75-self--wp4-module--terser--greeting-1.js`,
+  `0.10.2--b64-norot-t1-self--wp4-module--uglify--strings-1.js`,
+  `0.23.2--rc4-rot-shuf-t75-self--wp4-bundle--uglify--objects-1.js`); and, from the same
+  differential, the class and `__spreadArray` premises of
+  [untranspile.md](untranspile.md) (`fixtures/behaviour/class-called-with-instance.js`,
+  `fixtures/untranspile/ts/generators.es5.js`) and the stack-trace premise of the README
+  (a program that prints `e.stack` sees the output's file name and line numbers, in both
+  lanes). On those inputs the default lane kept the protections and printed what the input prints.

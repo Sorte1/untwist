@@ -168,6 +168,13 @@ fixture that then joins the differential.
   in place, as terser leaves it) passes the input through. The bait functions themselves
   (a parameterless function whose whole body is `return "dev"`, `"window"` or `"newState"`, the
   words obfuscator.io's checks read) are printed on one line wherever they stand.
+  A function bound to a name whose body (nested functions included) tests a pattern against that
+  name (`re.test(f)`, `re["test"](f)`), as js-confuser's self-defending lock does with
+  `new RegExp("\n")`, is a reader of its own text too: when the output prints it across lines,
+  the input is passed through unchanged with the same note. The js-confuser pass removes such a
+  lock only when the built-in scan is clean; a lock it keeps would otherwise hang after a pretty
+  print (`fixtures/js-confuser/lock-self-defending--classes-1.js` in the default lane, found by
+  the v0.7.0 fuzz differential).
   A function that adds its own name to a string (`c = a + F` inside `F`, declared or assigned,
   the G3 self-read) is a reader too: it must come out on one line the same way. Its
   `("" + function () { … }).indexOf("\n")` escape hatch only counts when the escape function is
