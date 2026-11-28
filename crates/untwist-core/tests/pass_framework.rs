@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use oxc_allocator::{Allocator, Vec as AVec};
+use oxc_allocator::{Allocator, GetAllocator, Vec as AVec};
 use oxc_ast::ast::*;
 use oxc_span::{GetSpan, Span};
 use untwist_core::parse::parse_program;
@@ -689,4 +689,43 @@ fn a_cycle_that_starts_late_is_still_found() {
     let (_, report) = run("300;", vec![Box::new(LateToggle)], PassOptions::default());
     assert_eq!(report.stop, StopReason::Cycle);
     assert!(report.iterations < 600, "{}", report.iterations);
+}
+
+struct PrependsParsedFunction {
+    done: bool,
+}
+impl<'a> Pass<'a> for PrependsParsedFunction {
+    fn name(&self) -> &'static str {
+        "prepends-parsed-function"
+    }
+    fn interest(&self) -> Interest {
+        Interest::ENTER_PROGRAM
+    }
+    fn enter_program(&mut self, program: &mut Program<'a>, cx: &mut Cx<'a, '_>) {
+        if self.done {
+            return;
+        }
+        self.done = true;
+        let parsed = parse_program(cx.allocator(), "function added() { return 1; }");
+        let mut body = parsed.program.body;
+        let Some(statement) = body.pop() else {
+            return;
+        };
+        program.body.insert(0, statement);
+        cx.changed();
+    }
+}
+
+#[test]
+fn a_body_whose_program_hook_left_unscoped_nodes_is_walked_only_after_a_rebuild() {
+    let (out, report) = run(
+        "var a = !0;",
+        vec![
+            Box::new(PrependsParsedFunction { done: false }),
+            Box::new(NotZeroToTrue),
+        ],
+        PassOptions::default(),
+    );
+    assert_eq!(out, "function added() {\n  return 1;\n}\nvar a = true;");
+    assert!(report.converged());
 }
