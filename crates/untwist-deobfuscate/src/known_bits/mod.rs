@@ -46,6 +46,7 @@ pub struct KnownBits {
     plain: identity::PlainSymbols,
     plain_ready: bool,
     identities: bool,
+    local: bool,
 }
 
 impl KnownBits {
@@ -59,6 +60,7 @@ impl KnownBits {
         self.imul = false;
         self.plain.clear();
         self.plain_ready = false;
+        self.local = top_level_is_local(program);
         let seeking = self.wanted && !self.seedless;
         if !(seeking || self.identities) || self.barren {
             return;
@@ -132,7 +134,11 @@ impl KnownBits {
             return Some(value);
         }
         if self.approved.is_empty() {
-            if !self.wanted && !self.seedless && !self.barren && is_candidate(expr, cx.scoping()) {
+            if !self.wanted
+                && !self.seedless
+                && !self.barren
+                && is_candidate(expr, cx.scoping(), self.local)
+            {
                 self.wanted = true;
                 cx.opts.round_requested.set(true);
             }
@@ -358,7 +364,7 @@ fn seeds<'p>(
             let Some(symbol) = id.symbol_id.get() else {
                 continue;
             };
-            if !is_seed_shape(init) || written(symbol, scoping) {
+            if !is_seed_shape(init, local) || written(symbol, scoping) {
                 continue;
             }
             let lax = Lax {
@@ -406,9 +412,9 @@ fn written(symbol: SymbolId, scoping: &Scoping) -> bool {
             .any(|reference| reference.is_write())
 }
 
-fn is_seed_shape(init: &Expression<'_>) -> bool {
+fn is_seed_shape(init: &Expression<'_>, local: bool) -> bool {
     match init.without_parentheses() {
-        Expression::NumericLiteral(_) => true,
+        Expression::NumericLiteral(_) => local,
         Expression::BinaryExpression(binary) => matches!(
             binary.operator,
             BinaryOperator::BitwiseAnd
@@ -423,15 +429,15 @@ fn is_seed_shape(init: &Expression<'_>) -> bool {
     }
 }
 
-fn is_candidate(expr: &Expression<'_>, scoping: &Scoping) -> bool {
+fn is_candidate(expr: &Expression<'_>, scoping: &Scoping, local: bool) -> bool {
     match expr.without_parentheses() {
         Expression::UnaryExpression(unary) if unary.operator == UnaryOperator::LogicalNot => {
-            is_candidate(&unary.argument, scoping)
+            is_candidate(&unary.argument, scoping, local)
         }
         Expression::BinaryExpression(binary) => {
             let mut reads = Vec::new();
-            let imul = const_reads(&binary.left, scoping, 0, &mut reads)
-                | const_reads(&binary.right, scoping, 0, &mut reads);
+            let imul = const_reads(&binary.left, scoping, local, 0, &mut reads)
+                | const_reads(&binary.right, scoping, local, 0, &mut reads);
             imul || reads
                 .iter()
                 .enumerate()
@@ -444,6 +450,7 @@ fn is_candidate(expr: &Expression<'_>, scoping: &Scoping) -> bool {
 fn const_reads(
     expr: &Expression<'_>,
     scoping: &Scoping,
+    local: bool,
     depth: u32,
     reads: &mut Vec<SymbolId>,
 ) -> bool {
@@ -453,15 +460,15 @@ fn const_reads(
     match expr.without_parentheses() {
         Expression::Identifier(id) => {
             if let Some(symbol) = resolved(id, scoping)
-                .filter(|symbol| depth > 0 && is_counter_like(scoping, *symbol))
+                .filter(|symbol| depth > 0 && is_counter_like(scoping, *symbol, local))
             {
                 reads.push(symbol);
             }
             false
         }
         Expression::BinaryExpression(binary) if is_int_operator(binary.operator) => {
-            const_reads(&binary.left, scoping, depth + 1, reads)
-                | const_reads(&binary.right, scoping, depth + 1, reads)
+            const_reads(&binary.left, scoping, local, depth + 1, reads)
+                | const_reads(&binary.right, scoping, local, depth + 1, reads)
         }
         Expression::UnaryExpression(unary)
             if matches!(
@@ -469,7 +476,7 @@ fn const_reads(
                 UnaryOperator::BitwiseNot | UnaryOperator::UnaryNegation
             ) =>
         {
-            const_reads(&unary.argument, scoping, depth + 1, reads)
+            const_reads(&unary.argument, scoping, local, depth + 1, reads)
         }
         Expression::CallExpression(call) if is_global_math_imul(&call.callee, scoping) => {
             let before = reads.len();
@@ -478,7 +485,7 @@ fn const_reads(
                 .iter()
                 .filter_map(|argument| argument.as_expression())
             {
-                const_reads(argument, scoping, depth + 1, reads);
+                const_reads(argument, scoping, local, depth + 1, reads);
             }
             reads.len() > before
         }
@@ -507,9 +514,9 @@ fn is_closed_number(expr: &Expression<'_>, depth: u32) -> bool {
     }
 }
 
-fn is_counter_like(scoping: &Scoping, symbol: SymbolId) -> bool {
+fn is_counter_like(scoping: &Scoping, symbol: SymbolId, local: bool) -> bool {
     let flags = scoping.symbol_flags(symbol);
-    flags.is_const_variable() || flags.is_function_scoped_declaration()
+    flags.is_const_variable() || (local && flags.is_function_scoped_declaration())
 }
 
 fn is_int_operator(operator: BinaryOperator) -> bool {

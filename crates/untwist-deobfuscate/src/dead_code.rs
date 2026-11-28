@@ -268,8 +268,12 @@ fn runs_nothing_hoisted(statement: &Statement<'_>) -> bool {
     {
         return false;
     }
+    hoists_nothing(statement)
+}
+
+fn hoists_nothing(statement: &Statement<'_>) -> bool {
     let hoisted = hoisted_by(Some(statement));
-    hoisted.names.is_empty() && !hoisted.function
+    !hoisted.function && hoisted.names.is_empty()
 }
 
 fn hoisted_by<'a>(statement: Option<&Statement<'a>>) -> Hoisted<'a> {
@@ -983,44 +987,6 @@ impl<'a> DeadCode<'a> {
         stmts.pop()
     }
 
-    fn settle_guarded_statement(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) -> bool {
-        let (test, dropped) = match stmt {
-            Statement::WhileStatement(node) => (&node.test, &node.body),
-            Statement::IfStatement(node) if node.alternate.is_none() => {
-                (&node.test, &node.consequent)
-            }
-            _ => return false,
-        };
-        let Expression::LogicalExpression(logical) = test else {
-            return false;
-        };
-        if logical.operator != LogicalOperator::And {
-            return false;
-        }
-        let dead = self
-            .decide(&logical.right, cx)
-            .is_some_and(|decision| !decision.value);
-        if !dead {
-            return false;
-        }
-        let hoisted = hoisted_by(Some(dropped));
-        if hoisted.function || !hoisted.names.is_empty() {
-            return false;
-        }
-        let span = stmt.span();
-        let test = match stmt {
-            Statement::WhileStatement(node) => &mut node.test,
-            Statement::IfStatement(node) => &mut node.test,
-            _ => return false,
-        };
-        let Expression::LogicalExpression(logical) = test else {
-            return false;
-        };
-        let left = logical.left.take_in(cx);
-        *stmt = Statement::new_expression_statement(span, left, cx);
-        true
-    }
-
     fn settle_identity_inits(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
         for stmt in stmts.iter_mut() {
             let Statement::VariableDeclaration(declaration) = stmt else {
@@ -1038,27 +1004,89 @@ impl<'a> DeadCode<'a> {
         }
     }
 
-    fn split_absorbing_right(&mut self, test: &mut Expression<'a>, cx: &mut Cx<'a, '_>) -> bool {
+    fn settle_right(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) -> bool {
+        let mut changed = false;
+        loop {
+            let test = match &*stmt {
+                Statement::IfStatement(node) => &node.test,
+                Statement::WhileStatement(node) => &node.test,
+                _ => return changed,
+            };
+            let Expression::LogicalExpression(logical) = test else {
+                return changed;
+            };
+            let absorbing = match logical.operator {
+                LogicalOperator::And => false,
+                LogicalOperator::Or => true,
+                LogicalOperator::Coalesce => return changed,
+            };
+            let Some(decision) = self.decide(&logical.right, cx) else {
+                return changed;
+            };
+            let neutral = decision.value != absorbing;
+            let step = if neutral || crate::mutants::settled_rights_dropped_anywhere() {
+                self.drop_right(stmt, cx)
+            } else {
+                self.absorb_right(stmt, absorbing, cx)
+            };
+            if !step {
+                return changed;
+            }
+            changed = true;
+            if !neutral {
+                return changed;
+            }
+        }
+    }
+
+    fn drop_right(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) -> bool {
+        let Statement::IfStatement(node) = stmt else {
+            return false;
+        };
+        let Expression::LogicalExpression(logical) = &mut node.test else {
+            return false;
+        };
+        let left = logical.left.take_in(cx);
+        node.test = left;
+        true
+    }
+
+    fn absorb_right(
+        &mut self,
+        stmt: &mut Statement<'a>,
+        absorbing: bool,
+        cx: &mut Cx<'a, '_>,
+    ) -> bool {
+        let removable = match &*stmt {
+            Statement::WhileStatement(node) if !absorbing => Some(hoists_nothing(&node.body)),
+            Statement::IfStatement(node) if !absorbing && node.alternate.is_none() => {
+                Some(hoists_nothing(&node.consequent))
+            }
+            Statement::IfStatement(_) => None,
+            _ => return false,
+        };
+        if removable == Some(false) {
+            return false;
+        }
+        let span = stmt.span();
+        let test = match stmt {
+            Statement::IfStatement(node) => &mut node.test,
+            Statement::WhileStatement(node) => &mut node.test,
+            _ => return false,
+        };
         let Expression::LogicalExpression(logical) = test else {
             return false;
         };
-        let absorbing = match logical.operator {
-            LogicalOperator::And => false,
-            LogicalOperator::Or => true,
-            LogicalOperator::Coalesce => return false,
-        };
-        let settled = self
-            .decide(&logical.right, cx)
-            .is_some_and(|decision| decision.value == absorbing);
-        if !settled {
-            return false;
-        }
-        let span = logical.span;
+        let sequence = logical.span;
         let left = logical.left.take_in(cx);
+        if removable == Some(true) {
+            *stmt = Statement::new_expression_statement(span, left, cx);
+            return true;
+        }
         let mut expressions = AVec::with_capacity_in(2, cx);
         expressions.push(left);
         expressions.push(Expression::new_boolean_literal(SPAN, absorbing, cx));
-        *test = Expression::new_sequence_expression(span, expressions, cx);
+        *test = Expression::new_sequence_expression(sequence, expressions, cx);
         true
     }
 
@@ -1169,16 +1197,8 @@ impl<'a> Pass<'a> for DeadCode<'a> {
     }
 
     fn exit_statement(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) {
-        if self.settle_guarded_statement(stmt, cx) {
+        if self.settle_right(stmt, cx) {
             cx.changed();
-        }
-        if let Statement::IfStatement(node) = stmt {
-            while self.drop_settled_right(&mut node.test, cx) {
-                cx.changed();
-            }
-            if self.split_absorbing_right(&mut node.test, cx) {
-                cx.changed();
-            }
         }
         if self.decision_of_statement(stmt, cx).is_some() {
             self.armed += 1;
@@ -1198,16 +1218,8 @@ impl<'a> Pass<'a> for DeadCode<'a> {
         }
         if self.unsafe_lane {
             for stmt in stmts.iter_mut() {
-                if self.settle_guarded_statement(stmt, cx) {
+                if self.settle_right(stmt, cx) {
                     cx.changed();
-                }
-                if let Statement::IfStatement(node) = stmt {
-                    while self.drop_settled_right(&mut node.test, cx) {
-                        cx.changed();
-                    }
-                    if self.split_absorbing_right(&mut node.test, cx) {
-                        cx.changed();
-                    }
                 }
             }
         }
