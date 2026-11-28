@@ -297,3 +297,31 @@ fn a_direct_eval_cannot_rewrite_a_const_controller_or_one_outside_its_scope() {
     let walled = format!("function f(text) {{\n  return eval(text);\n}}\nfunction g() {{\n{CONTROLLER_ONE_LINE}{READER}}}\n");
     assert_eq!(source_readers(&walled), SourceReaders::Guarded);
 }
+
+const PATTERN_LOCK_ONE_LINE: &str = "(function(){var namedFunction=function(){const test=function(){const regExp=new RegExp(\"\\n\");return regExp[\"test\"](namedFunction)};if(test()){while(true){}}};return namedFunction()})();\n";
+
+const PATTERN_LOCK_ACROSS_LINES: &str = "(function () {
+  var namedFunction = function () {
+    const test = () => {
+      const regExp = new RegExp(\"\\n\");
+      return regExp.test(namedFunction);
+    };
+    if (test()) {
+      while (true) {}
+    }
+  };
+  return namedFunction();
+})();
+";
+
+#[test]
+fn a_function_a_pattern_tests_is_a_source_reader() {
+    assert_eq!(
+        source_readers(PATTERN_LOCK_ONE_LINE),
+        SourceReaders::Guarded
+    );
+    assert_eq!(
+        source_readers(PATTERN_LOCK_ACROSS_LINES),
+        SourceReaders::Unguarded
+    );
+}

@@ -244,6 +244,52 @@ pub(crate) fn arguments_hold_a_scope(arguments: &AVec<'_, Argument<'_>>) -> bool
     })
 }
 
+const ALWAYS_DECLARED: [&str; 3] = ["undefined", "NaN", "Infinity"];
+
+struct UndeclaredReads<'s> {
+    scoping: &'s Scoping,
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for UndeclaredReads<'_> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        let resolved = it
+            .reference_id
+            .get()
+            .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+            .is_some();
+        if !resolved && !ALWAYS_DECLARED.contains(&it.name.as_str()) {
+            self.found = true;
+        }
+    }
+
+    fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
+        let probed = it.operator == UnaryOperator::Typeof
+            && matches!(it.argument.without_parentheses(), Expression::Identifier(_));
+        if !probed {
+            walk_js::walk_unary_expression(self, it);
+        }
+    }
+}
+
+fn arguments_read_an_undeclared_name(
+    arguments: &AVec<'_, Argument<'_>>,
+    scoping: &Scoping,
+) -> bool {
+    let mut reads = UndeclaredReads {
+        scoping,
+        found: false,
+    };
+    let substituted = arguments
+        .iter()
+        .filter_map(Argument::as_expression)
+        .filter(|expression| is_substitutable_argument(expression));
+    for expression in substituted {
+        reads.visit_expression(expression);
+    }
+    reads.found
+}
+
 struct WrapperSearch<'p, 's> {
     scoping: &'s Scoping,
     units: MachineryDepth,
@@ -459,6 +505,9 @@ impl<'p, 'a> Round<'_, 'p, 'a, '_> {
         }
         if arguments_hold_a_scope(site.arguments) {
             return Outcome::Kept(notes::wrapper_site_scoped_argument());
+        }
+        if !self.checked && arguments_read_an_undeclared_name(site.arguments, self.cx.scoping()) {
+            return Outcome::Kept(notes::wrapper_site_undeclared_argument());
         }
         let (inlined, refusal) = if arguments_are_substitutable(site.arguments) {
             self.plain(wrapper, site)

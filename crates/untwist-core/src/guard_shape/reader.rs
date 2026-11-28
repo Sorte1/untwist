@@ -19,6 +19,7 @@ const ESCAPE_BREAK: char = '\n';
 const CHAIN_CALLS: usize = 3;
 const ESCAPED_BAIT: &str = "window";
 const SELF_READ: &str = "charCodeAt";
+const PATTERN_TEST: &str = "test";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SourceReaders {
@@ -158,10 +159,32 @@ impl<'a> VisitJs<'a> for SelfText<'_, '_> {
     }
 }
 
+struct PatternTest<'n> {
+    name: &'n str,
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for PatternTest<'_> {
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        let tests = member_parts(&it.callee).is_some_and(|(_, key)| key == PATTERN_TEST);
+        self.found |= tests && passes(it, self.name);
+        walk_js::walk_call_expression(self, it);
+    }
+}
+
+fn tests_its_own_text(body: &FunctionBody<'_>, name: &str) -> bool {
+    let mut test = PatternTest { name, found: false };
+    test.visit_function_body(body);
+    test.found
+}
+
 fn reads_its_own_text(function: &Function<'_>, name: &str, printed: Printed<'_>) -> bool {
     let Some(body) = &function.body else {
         return false;
     };
+    if tests_its_own_text(body, name) {
+        return true;
+    }
     let mut text = SelfText {
         name,
         printed,

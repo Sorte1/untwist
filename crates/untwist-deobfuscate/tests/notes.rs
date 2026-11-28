@@ -152,6 +152,10 @@ fn composed_wrappers() -> Vec<(&'static str, String)> {
             notes::wrapper_site_scoped_argument(),
         ),
         (
+            "WRAPPER_SITE_UNDECLARED_ARGUMENT",
+            notes::wrapper_site_undeclared_argument(),
+        ),
+        (
             "WRAPPER_SITE_IMPURE_ARGUMENT",
             notes::wrapper_site_impure_argument(),
         ),

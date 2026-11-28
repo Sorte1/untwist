@@ -576,6 +576,13 @@ pub const CASES: &[Case] = &[
     },
     Case {
         source: Source::Headed(
+            "function w(x, y, z) { return __DECODE_0__(x, y); }\nconsole[w(0x0, 0x0, notDeclaredAnywhere)]('t');",
+        ),
+        expects: notes::WRAPPER_SITE_UNDECLARED_ARGUMENT,
+        mode: Match::Contains,
+    },
+    Case {
+        source: Source::Headed(
             "var s = unknownGlobal;\nfunction w(x, y) { return __DECODE_0__(x + s, y); }\nfunction caller() { var s = 0x1; return w(0x0, 0x0); }\nconsole[caller()]('t');",
         ),
         expects: notes::WRAPPER_BODY_NOT_SELF_CONTAINED,
