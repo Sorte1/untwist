@@ -1,0 +1,259 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Sorte1/untwist/blob/main/docs/report.schema.json",
+  "title": "untwist --report json",
+  "type": "object",
+  "required": ["schema_version", "stages", "notes", "parse_diagnostics", "parse_errors", "stats", "budget"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "const": 1 },
+    "code": { "type": "string" },
+    "codes": { "type": "array", "items": { "type": "string" } },
+    "output_path": { "type": "string" },
+    "files_written": { "type": "array", "items": { "type": "string" } },
+    "bundle": { "$ref": "#/$defs/bundle" },
+    "stages": { "type": "array", "items": { "$ref": "#/$defs/stage" } },
+    "notes": { "type": "array", "items": { "type": "string" } },
+    "libraries": { "type": "array", "items": { "$ref": "#/$defs/library" } },
+    "collection": { "$ref": "#/$defs/collection" },
+    "library_imports": { "$ref": "#/$defs/library_imports" },
+    "types": { "$ref": "#/$defs/types" },
+    "parse_diagnostics": { "type": "array", "items": { "type": "string" } },
+    "parse_errors": { "$ref": "#/$defs/count" },
+    "panicked": { "$ref": "#/$defs/inputs" },
+    "depth_refused": { "$ref": "#/$defs/inputs" },
+    "unpack_panicked": { "const": true },
+    "wasm_panicked": { "const": true },
+    "stats": { "$ref": "#/$defs/stats" },
+    "wasm": { "type": "array", "items": { "$ref": "#/$defs/wasm_file" } },
+    "wasm_unresolved": { "type": "array", "items": { "$ref": "#/$defs/wasm_reference" } },
+    "budget": { "$ref": "#/$defs/budget" },
+    "refusal_span": { "type": "array", "items": { "type": "string" } }
+  },
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0 },
+    "ms": { "type": "number", "minimum": 0 },
+    "inputs": { "type": "array", "items": { "$ref": "#/$defs/count" } },
+    "pass_count": {
+      "type": "array",
+      "prefixItems": [{ "type": "string" }, { "$ref": "#/$defs/count" }],
+      "items": false,
+      "minItems": 2
+    },
+    "pass_ms": {
+      "type": "array",
+      "prefixItems": [{ "type": "string" }, { "$ref": "#/$defs/ms" }],
+      "items": false,
+      "minItems": 2
+    },
+    "optional_ms": { "anyOf": [{ "$ref": "#/$defs/ms" }, { "type": "null" }] },
+    "stage": {
+      "type": "object",
+      "required": ["stage", "round", "iterations", "changes", "per_pass", "per_pass_ms", "fixpoint_per_pass", "fixpoint_per_pass_ms", "iterations_ms", "elapsed_ms", "stop"],
+      "additionalProperties": false,
+      "properties": {
+        "stage": { "type": "string" },
+        "round": { "$ref": "#/$defs/count" },
+        "iterations": { "$ref": "#/$defs/count" },
+        "changes": { "$ref": "#/$defs/count" },
+        "per_pass": { "type": "array", "items": { "$ref": "#/$defs/pass_count" } },
+        "per_pass_ms": { "type": "array", "items": { "$ref": "#/$defs/pass_ms" } },
+        "fixpoint_per_pass": { "type": "array", "items": { "$ref": "#/$defs/pass_count" } },
+        "fixpoint_per_pass_ms": { "type": "array", "items": { "$ref": "#/$defs/pass_ms" } },
+        "iterations_ms": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [{ "$ref": "#/$defs/ms" }, { "$ref": "#/$defs/optional_ms" }, { "$ref": "#/$defs/optional_ms" }],
+            "items": false,
+            "minItems": 3
+          }
+        },
+        "elapsed_ms": { "$ref": "#/$defs/ms" },
+        "stop": { "type": "string" },
+        "work": { "type": "array" }
+      }
+    },
+    "bundle": {
+      "type": "object",
+      "required": ["type", "entryId", "modules"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string" },
+        "entryId": { "type": ["string", "null"] },
+        "chunkIds": { "type": "array", "items": { "type": "string" } },
+        "modules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "path", "isEntry"],
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "path": { "type": "string" },
+              "isEntry": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "library": {
+      "type": "object",
+      "required": ["library", "range", "modules"],
+      "additionalProperties": false,
+      "properties": {
+        "library": { "type": "string" },
+        "range": { "type": "string" },
+        "disagree": { "const": true },
+        "modules": { "$ref": "#/$defs/count" }
+      }
+    },
+    "collection": {
+      "type": "object",
+      "required": ["version", "epoch", "packages", "shards_loaded"],
+      "additionalProperties": false,
+      "properties": {
+        "version": { "type": "string" },
+        "epoch": { "$ref": "#/$defs/count" },
+        "packages": { "$ref": "#/$defs/count" },
+        "shards_loaded": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "library_imports": {
+      "type": "object",
+      "required": ["replaced", "kept", "pins"],
+      "additionalProperties": false,
+      "properties": {
+        "replaced": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["module", "package", "version", "specifier"],
+            "additionalProperties": false,
+            "properties": {
+              "module": { "type": "string" },
+              "package": { "type": "string" },
+              "version": { "type": "string" },
+              "specifier": { "type": "string" }
+            }
+          }
+        },
+        "kept": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["module", "package", "reason"],
+            "additionalProperties": false,
+            "properties": {
+              "module": { "type": "string" },
+              "package": { "type": "string" },
+              "reason": { "enum": ["side-effects", "format", "ambiguous"] }
+            }
+          }
+        },
+        "pins": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+    "type_counts": {
+      "type": "object",
+      "required": ["eligible", "proven", "annotated", "redundant", "refused"],
+      "additionalProperties": false,
+      "properties": {
+        "eligible": { "$ref": "#/$defs/count" },
+        "proven": { "$ref": "#/$defs/count" },
+        "annotated": { "$ref": "#/$defs/count" },
+        "redundant": { "$ref": "#/$defs/count" },
+        "refused": { "$ref": "#/$defs/count" }
+      }
+    },
+    "types": {
+      "type": "object",
+      "required": ["mode", "bindings", "params", "returns", "files", "files_refused", "near_eval", "elapsed_ms"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "enum": ["ts", "jsdoc"] },
+        "bindings": { "$ref": "#/$defs/type_counts" },
+        "params": { "$ref": "#/$defs/type_counts" },
+        "returns": { "$ref": "#/$defs/type_counts" },
+        "files": { "$ref": "#/$defs/count" },
+        "files_refused": { "$ref": "#/$defs/count" },
+        "near_eval": { "$ref": "#/$defs/count" },
+        "elapsed_ms": { "$ref": "#/$defs/ms" }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "required": ["decode", "collisions"],
+      "additionalProperties": false,
+      "properties": {
+        "decode": {
+          "type": "object",
+          "required": ["steps", "peakUnitSteps", "units", "peakCallDepth"],
+          "additionalProperties": false,
+          "properties": {
+            "steps": { "$ref": "#/$defs/count" },
+            "peakUnitSteps": { "$ref": "#/$defs/count" },
+            "units": { "$ref": "#/$defs/count" },
+            "peakCallDepth": { "$ref": "#/$defs/count" }
+          }
+        },
+        "collisions": {
+          "type": "object",
+          "required": ["boundInScope", "freeReference", "label", "excluded"],
+          "additionalProperties": false,
+          "properties": {
+            "boundInScope": { "$ref": "#/$defs/count" },
+            "freeReference": { "$ref": "#/$defs/count" },
+            "label": { "$ref": "#/$defs/count" },
+            "excluded": { "$ref": "#/$defs/count" }
+          }
+        }
+      }
+    },
+    "wasm_file": {
+      "type": "object",
+      "required": ["path", "origin", "byteLength", "imports", "exports", "renamed"],
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string" },
+        "origin": { "enum": ["embedded", "supplied", "fetched"] },
+        "url": { "type": "string" },
+        "byteLength": { "$ref": "#/$defs/count" },
+        "imports": { "$ref": "#/$defs/count" },
+        "exports": { "$ref": "#/$defs/count" },
+        "renamed": { "$ref": "#/$defs/count" }
+      }
+    },
+    "wasm_reference": {
+      "type": "object",
+      "required": ["name", "url"],
+      "additionalProperties": false,
+      "properties": {
+        "name": { "type": "string" },
+        "url": { "type": "string" }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "required": ["max_memory", "timeout", "memory_peak", "hits"],
+      "additionalProperties": false,
+      "properties": {
+        "max_memory": { "anyOf": [{ "$ref": "#/$defs/count" }, { "type": "null" }] },
+        "timeout": { "anyOf": [{ "type": "number", "minimum": 0 }, { "type": "null" }] },
+        "memory_peak": { "$ref": "#/$defs/count" },
+        "hits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["input", "reason"],
+            "additionalProperties": false,
+            "properties": {
+              "input": { "$ref": "#/$defs/count" },
+              "reason": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
