@@ -128,19 +128,21 @@ impl Flow {
         self.names.len() + self.properties.len() + self.readers.len()
     }
 
+    fn absorb(&mut self, other: Flow) {
+        self.names.extend(other.names);
+        self.properties.extend(other.properties);
+        self.readers.extend(other.readers);
+    }
+
     fn reads(&self, callee: &Expression<'_>) -> bool {
         callee_name(callee)
             .is_some_and(|name| READ_METHODS.contains(&name) || self.readers.contains(name))
     }
 
     fn carries(&self, expression: &Expression<'_>, params: Option<&HashSet<&str>>) -> bool {
-        let mut taint = Taint {
-            flow: self,
-            params,
-            found: false,
-        };
-        taint.visit_expression(expression);
-        taint.found
+        let mut scan = Scan::new(self, Mode::Taint(params));
+        scan.visit_expression(expression);
+        scan.found
     }
 
     fn carried(&self, arguments: &[Argument<'_>], params: Option<&HashSet<&str>>) -> bool {
@@ -153,68 +155,12 @@ impl Flow {
     }
 }
 
-struct Taint<'f, 'p> {
-    flow: &'f Flow,
-    params: Option<&'p HashSet<&'p str>>,
-    found: bool,
-}
-
-impl<'a> VisitJs<'a> for Taint<'_, '_> {
-    fn visit_function(&mut self, _it: &Function<'a>, _flags: ScopeFlags) {}
-
-    fn visit_arrow_function_expression(&mut self, _it: &ArrowFunctionExpression<'a>) {}
-
-    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
-        let name = it.name.as_str();
-        self.found |= match self.params {
-            Some(params) => params.contains(name),
-            None => name == OWN_NAME || self.flow.names.contains(name),
-        };
-    }
-
-    fn visit_import_meta(&mut self, _it: &ImportMeta) {
-        self.found |= self.params.is_none();
-    }
-
-    fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
-        if it.operator != UnaryOperator::Typeof {
-            walk_js::walk_unary_expression(self, it);
-        }
-    }
-
-    fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
-        let property = it.property.name.as_str();
-        if self.params.is_none() {
-            if is_argv(&it.object) && property == LENGTH {
-                return;
-            }
-            if host_member(&it.object, property) || self.flow.properties.contains(property) {
-                self.found = true;
-                return;
-            }
-        }
-        walk_js::walk_static_member_expression(self, it);
-    }
-
-    fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
-        if self.params.is_none() && is_argv(&it.object) {
-            if index_of(&it.expression).is_none_or(|index| index == SCRIPT_INDEX) {
-                self.found = true;
-            }
-            return self.visit_expression(&it.expression);
-        }
-        walk_js::walk_computed_member_expression(self, it);
-    }
-
-    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
-        if callee_name(&it.callee) == Some(DIRNAME) {
-            return;
-        }
-        if user_arguments(it) {
-            return walk_js::walk_arguments(self, &it.arguments);
-        }
-        walk_js::walk_call_expression(self, it);
-    }
+#[derive(Clone, Copy)]
+enum Mode<'p> {
+    Taint(Option<&'p HashSet<&'p str>>),
+    Collect,
+    Params(&'p HashSet<&'p str>),
+    Find,
 }
 
 enum Body<'k, 'a> {
@@ -222,25 +168,43 @@ enum Body<'k, 'a> {
     Arrow(&'k ArrowFunctionBody<'a>),
 }
 
-struct Collect<'f> {
-    flow: &'f mut Flow,
+struct Scan<'f, 'p> {
+    flow: &'f Flow,
+    mode: Mode<'p>,
+    found: bool,
+    added: Flow,
 }
 
-impl Collect<'_> {
+impl<'f, 'p> Scan<'f, 'p> {
+    fn new(flow: &'f Flow, mode: Mode<'p>) -> Self {
+        Self {
+            flow,
+            mode,
+            found: false,
+            added: Flow::default(),
+        }
+    }
+
+    fn own_path(&self) -> bool {
+        matches!(self.mode, Mode::Taint(None))
+    }
+
     fn taint_name(&mut self, name: &str, value: &Expression<'_>) {
-        if !self.flow.names.contains(name) && self.flow.carries(value, None) {
-            self.flow.names.insert(name.to_string());
+        let known = self.flow.names.contains(name) || self.added.names.contains(name);
+        if !known && self.flow.carries(value, None) {
+            self.added.names.insert(name.to_string());
         }
     }
 
     fn taint_property(&mut self, name: &str, value: &Expression<'_>) {
-        if !self.flow.properties.contains(name) && self.flow.carries(value, None) {
-            self.flow.properties.insert(name.to_string());
+        let known = self.flow.properties.contains(name) || self.added.properties.contains(name);
+        if !known && self.flow.carries(value, None) {
+            self.added.properties.insert(name.to_string());
         }
     }
 
     fn reader<'a>(&mut self, name: &str, params: &FormalParameters<'a>, body: Body<'_, 'a>) {
-        if self.flow.readers.contains(name) {
+        if self.flow.readers.contains(name) || self.added.readers.contains(name) {
             return;
         }
         let names: HashSet<&str> = params
@@ -252,18 +216,14 @@ impl Collect<'_> {
         if names.is_empty() {
             return;
         }
-        let mut uses = ParamReads {
-            flow: self.flow,
-            params: &names,
-            found: false,
-        };
+        let mut uses = Scan::new(self.flow, Mode::Params(&names));
         match body {
             Body::Function(Some(body)) => uses.visit_function_body(body),
             Body::Function(None) => return,
             Body::Arrow(body) => uses.visit_arrow_function_body(body),
         }
         if uses.found {
-            self.flow.readers.insert(name.to_string());
+            self.added.readers.insert(name.to_string());
         }
     }
 
@@ -282,75 +242,26 @@ impl Collect<'_> {
             _ => {}
         }
     }
-}
 
-impl<'a> VisitJs<'a> for Collect<'_> {
-    fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
-        if let (Some(name), Some(init)) = (it.id.get_identifier_name(), &it.init) {
-            self.taint_name(name.as_str(), init);
-            self.function_value(name.as_str(), init);
+    fn assigned(&mut self, name: &str, value: &Expression<'_>, property: bool) {
+        match property {
+            true => self.taint_property(name, value),
+            false => self.taint_name(name, value),
         }
-        walk_js::walk_variable_declarator(self, it);
+        self.function_value(name, value);
     }
 
-    fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
-        match &it.left {
-            AssignmentTarget::AssignmentTargetIdentifier(id) => {
-                self.taint_name(id.name.as_str(), &it.right);
-                self.function_value(id.name.as_str(), &it.right);
-            }
-            AssignmentTarget::StaticMemberExpression(member) => {
-                self.taint_property(member.property.name.as_str(), &it.right);
-                self.function_value(member.property.name.as_str(), &it.right);
-            }
-            _ => {}
+    fn taint_call(&mut self, it: &CallExpression<'_>) {
+        if callee_name(&it.callee) == Some(DIRNAME) {
+            return;
         }
-        walk_js::walk_assignment_expression(self, it);
-    }
-
-    fn visit_object_property(&mut self, it: &ObjectProperty<'a>) {
-        let key = it.key.static_name();
-        if let Some(name) = key.as_ref().and_then(|key| key.as_js_str().as_str()) {
-            self.taint_property(name, &it.value);
-            self.function_value(name, &it.value);
-        }
-        walk_js::walk_object_property(self, it);
-    }
-
-    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
-        if let Some(id) = &it.id {
-            self.reader(
-                id.name.as_str(),
-                &it.params,
-                Body::Function(it.body.as_deref()),
-            );
-        }
-        walk_js::walk_function(self, it, flags);
-    }
-}
-
-struct ParamReads<'f, 'p> {
-    flow: &'f Flow,
-    params: &'p HashSet<&'p str>,
-    found: bool,
-}
-
-impl<'a> VisitJs<'a> for ParamReads<'_, '_> {
-    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
-        if self.flow.reads(&it.callee) && self.flow.carried(&it.arguments, Some(self.params)) {
-            self.found = true;
+        if user_arguments(it) {
+            return walk_js::walk_arguments(self, &it.arguments);
         }
         walk_js::walk_call_expression(self, it);
     }
-}
 
-struct Find<'f> {
-    flow: &'f Flow,
-    found: bool,
-}
-
-impl<'a> VisitJs<'a> for Find<'_> {
-    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+    fn find_call(&mut self, it: &CallExpression<'_>) {
         if let (Some(RUN_IN_THIS_CONTEXT), [only]) =
             (callee_name(&it.callee), it.arguments.as_slice())
         {
@@ -368,6 +279,123 @@ impl<'a> VisitJs<'a> for Find<'_> {
     }
 }
 
+impl<'a> VisitJs<'a> for Scan<'_, '_> {
+    fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
+        match self.mode {
+            Mode::Taint(_) => {}
+            Mode::Collect => {
+                if let Some(id) = &it.id {
+                    self.reader(
+                        id.name.as_str(),
+                        &it.params,
+                        Body::Function(it.body.as_deref()),
+                    );
+                }
+                walk_js::walk_function(self, it, flags);
+            }
+            _ => walk_js::walk_function(self, it, flags),
+        }
+    }
+
+    fn visit_arrow_function_expression(&mut self, it: &ArrowFunctionExpression<'a>) {
+        if !matches!(self.mode, Mode::Taint(_)) {
+            walk_js::walk_arrow_function_expression(self, it);
+        }
+    }
+
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        let name = it.name.as_str();
+        self.found |= match self.mode {
+            Mode::Taint(Some(params)) => params.contains(name),
+            Mode::Taint(None) => name == OWN_NAME || self.flow.names.contains(name),
+            _ => false,
+        };
+    }
+
+    fn visit_import_meta(&mut self, _it: &ImportMeta) {
+        self.found |= self.own_path();
+    }
+
+    fn visit_unary_expression(&mut self, it: &UnaryExpression<'a>) {
+        let tested = matches!(self.mode, Mode::Taint(_)) && it.operator == UnaryOperator::Typeof;
+        if !tested {
+            walk_js::walk_unary_expression(self, it);
+        }
+    }
+
+    fn visit_static_member_expression(&mut self, it: &StaticMemberExpression<'a>) {
+        let property = it.property.name.as_str();
+        if self.own_path() {
+            if is_argv(&it.object) && property == LENGTH {
+                return;
+            }
+            if host_member(&it.object, property) || self.flow.properties.contains(property) {
+                self.found = true;
+                return;
+            }
+        }
+        walk_js::walk_static_member_expression(self, it);
+    }
+
+    fn visit_computed_member_expression(&mut self, it: &ComputedMemberExpression<'a>) {
+        if self.own_path() && is_argv(&it.object) {
+            if index_of(&it.expression).is_none_or(|index| index == SCRIPT_INDEX) {
+                self.found = true;
+            }
+            return self.visit_expression(&it.expression);
+        }
+        walk_js::walk_computed_member_expression(self, it);
+    }
+
+    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
+        match self.mode {
+            Mode::Taint(_) => self.taint_call(it),
+            Mode::Find => self.find_call(it),
+            Mode::Params(params) => {
+                if self.flow.reads(&it.callee) && self.flow.carried(&it.arguments, Some(params)) {
+                    self.found = true;
+                }
+                walk_js::walk_call_expression(self, it);
+            }
+            Mode::Collect => walk_js::walk_call_expression(self, it),
+        }
+    }
+
+    fn visit_variable_declarator(&mut self, it: &VariableDeclarator<'a>) {
+        if matches!(self.mode, Mode::Collect) {
+            if let (Some(name), Some(init)) = (it.id.get_identifier_name(), &it.init) {
+                self.assigned(name.as_str(), init, false);
+            }
+        }
+        walk_js::walk_variable_declarator(self, it);
+    }
+
+    fn visit_assignment_expression(&mut self, it: &AssignmentExpression<'a>) {
+        if matches!(self.mode, Mode::Collect) {
+            match &it.left {
+                AssignmentTarget::AssignmentTargetIdentifier(id) => {
+                    self.assigned(id.name.as_str(), &it.right, false);
+                }
+                AssignmentTarget::StaticMemberExpression(member) => {
+                    self.assigned(member.property.name.as_str(), &it.right, true);
+                }
+                _ => {}
+            }
+        }
+        walk_js::walk_assignment_expression(self, it);
+    }
+
+    fn visit_object_property(&mut self, it: &ObjectProperty<'a>) {
+        if matches!(self.mode, Mode::Collect) {
+            let key = it.key.static_name();
+            if let Some(name) = key.as_ref().and_then(|key| key.as_js_str().as_str()) {
+                self.assigned(name, &it.value, true);
+            }
+        }
+        walk_js::walk_object_property(self, it);
+    }
+}
+
 pub(super) fn may_read_own_file(program: &Program<'_>) -> bool {
     let text = program.source_text;
     if !OWN_MARKERS.iter().any(|marker| text.contains(marker))
@@ -377,16 +405,16 @@ pub(super) fn may_read_own_file(program: &Program<'_>) -> bool {
     }
     let mut flow = Flow::default();
     for _ in 0..ROUNDS {
+        let mut collect = Scan::new(&flow, Mode::Collect);
+        collect.visit_program(program);
+        let added = collect.added;
         let before = flow.size();
-        Collect { flow: &mut flow }.visit_program(program);
+        flow.absorb(added);
         if flow.size() == before {
             break;
         }
     }
-    let mut find = Find {
-        flow: &flow,
-        found: false,
-    };
+    let mut find = Scan::new(&flow, Mode::Find);
     find.visit_program(program);
     find.found
 }
