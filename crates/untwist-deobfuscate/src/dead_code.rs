@@ -997,14 +997,14 @@ impl<'a> DeadCode<'a> {
         if logical.operator != LogicalOperator::And {
             return false;
         }
-        let hoisted = hoisted_by(Some(dropped));
-        if hoisted.function || !hoisted.names.is_empty() {
-            return false;
-        }
         let dead = self
             .decide(&logical.right, cx)
             .is_some_and(|decision| !decision.value);
         if !dead {
+            return false;
+        }
+        let hoisted = hoisted_by(Some(dropped));
+        if hoisted.function || !hoisted.names.is_empty() {
             return false;
         }
         let span = stmt.span();
@@ -1019,6 +1019,23 @@ impl<'a> DeadCode<'a> {
         let left = logical.left.take_in(cx);
         *stmt = Statement::new_expression_statement(span, left, cx);
         true
+    }
+
+    fn settle_identity_inits(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
+        for stmt in stmts.iter_mut() {
+            let Statement::VariableDeclaration(declaration) = stmt else {
+                continue;
+            };
+            for declarator in declaration.declarations.iter_mut() {
+                let Some(init) = declarator.init.as_mut() else {
+                    continue;
+                };
+                if let Some(value) = self.known_bits.identity(init, cx) {
+                    *init = Expression::new_boolean_literal(init.span(), value, cx);
+                    cx.changed();
+                }
+            }
+        }
     }
 
     fn split_absorbing_right(&mut self, test: &mut Expression<'a>, cx: &mut Cx<'a, '_>) -> bool {
@@ -1117,7 +1134,6 @@ impl<'a> DeadCode<'a> {
 }
 
 const ACTED_ON_EXPRESSIONS: ExpressionVariants = ExpressionVariants::of(&[
-    ExpressionKind::BinaryExpression,
     ExpressionKind::ConditionalExpression,
     ExpressionKind::LogicalExpression,
     ExpressionKind::UnaryExpression,
@@ -1170,6 +1186,9 @@ impl<'a> Pass<'a> for DeadCode<'a> {
     }
 
     fn exit_statements(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
+        if self.known_bits.identities_ready() {
+            self.settle_identity_inits(stmts, cx);
+        }
         if !self.kept_vars.is_empty() {
             let pruned = self.prune_kept_vars(stmts, cx);
             cx.changed_by(pruned);
@@ -1233,13 +1252,6 @@ impl<'a> Pass<'a> for DeadCode<'a> {
     }
 
     fn exit_expression(&mut self, expr: &mut Expression<'a>, cx: &mut Cx<'a, '_>) {
-        if matches!(expr, Expression::BinaryExpression(_)) {
-            if let Some(value) = self.known_bits.identity(expr, cx) {
-                *expr = Expression::new_boolean_literal(expr.span(), value, cx);
-                cx.changed();
-                return;
-            }
-        }
         if let Expression::LogicalExpression(outer) = expr {
             let same = matches!(&outer.left, Expression::LogicalExpression(inner) if inner.operator == outer.operator);
             if same && self.drop_settled_right(&mut outer.left, cx) {

@@ -143,10 +143,16 @@ impl Scan<'_> {
         let Some((object, key)) = member_of(expression) else {
             return false;
         };
-        matches!(
-            self.allow_root(object),
-            Some(super::allow::Root::Host(PROCESS_MODULE))
-        ) && self.member_name(key).as_deref() == Some(BUILTIN_LOADER)
+        let named = match key {
+            Key::Name(name) => name == BUILTIN_LOADER,
+            Key::Other => false,
+            Key::Unknown(_) => self.member_name(key).as_deref() == Some(BUILTIN_LOADER),
+        };
+        named
+            && matches!(
+                self.allow_root(object),
+                Some(super::allow::Root::Host(PROCESS_MODULE))
+            )
     }
 
     pub(super) fn loads_a_safe_builtin(&self, call: &CallExpression<'_>) -> bool {

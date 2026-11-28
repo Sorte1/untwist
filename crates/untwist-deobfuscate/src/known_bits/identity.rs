@@ -68,14 +68,28 @@ fn unsigned_pair<'e, 'a>(
 
 impl Relation<'_, '_> {
     pub(super) fn decide(&self, plain: &PlainSymbols, scoping: &Scoping) -> Option<bool> {
+        let leaves = self.leaves(scoping)?;
+        leaves
+            .iter()
+            .all(|symbol| plain.symbols.contains(symbol))
+            .then_some(self.holds)
+    }
+
+    fn leaves(&self, scoping: &Scoping) -> Option<Vec<SymbolId>> {
+        let mut leaves = Vec::new();
         self.or_side
             .iter()
-            .all(|side| pure(side, &plain.symbols, scoping, 0))
-            .then_some(self.holds)
+            .all(|side| pure_leaves(side, scoping, 0, &mut leaves))
+            .then_some(leaves)
     }
 }
 
-fn pure(expr: &Expression<'_>, plain: &FxHashSet<SymbolId>, scoping: &Scoping, depth: u32) -> bool {
+fn pure_leaves(
+    expr: &Expression<'_>,
+    scoping: &Scoping,
+    depth: u32,
+    leaves: &mut Vec<SymbolId>,
+) -> bool {
     if depth > MAX_DEPTH {
         return false;
     }
@@ -85,15 +99,19 @@ fn pure(expr: &Expression<'_>, plain: &FxHashSet<SymbolId>, scoping: &Scoping, d
         | Expression::StringLiteral(_)
         | Expression::BooleanLiteral(_)
         | Expression::NullLiteral(_) => true,
-        Expression::Identifier(id) => {
-            resolved(id, scoping).is_some_and(|symbol| plain.contains(&symbol))
-        }
+        Expression::Identifier(id) => match resolved(id, scoping) {
+            Some(symbol) => {
+                leaves.push(symbol);
+                true
+            }
+            None => false,
+        },
         Expression::BinaryExpression(binary) => {
             !matches!(
                 binary.operator,
                 BinaryOperator::In | BinaryOperator::Instanceof
-            ) && pure(&binary.left, plain, scoping, depth)
-                && pure(&binary.right, plain, scoping, depth)
+            ) && pure_leaves(&binary.left, scoping, depth, leaves)
+                && pure_leaves(&binary.right, scoping, depth, leaves)
         }
         Expression::UnaryExpression(unary) => {
             matches!(
@@ -102,7 +120,7 @@ fn pure(expr: &Expression<'_>, plain: &FxHashSet<SymbolId>, scoping: &Scoping, d
                     | UnaryOperator::UnaryPlus
                     | UnaryOperator::BitwiseNot
                     | UnaryOperator::LogicalNot
-            ) && pure(&unary.argument, plain, scoping, depth)
+            ) && pure_leaves(&unary.argument, scoping, depth, leaves)
         }
         _ => false,
     }
@@ -122,6 +140,7 @@ pub(super) fn plain_symbols(program: &Program<'_>, scoping: &Scoping, local: boo
         consts: FxHashMap::default(),
         flags: FxHashMap::default(),
         hoisted: FxHashSet::default(),
+        relations: Vec::new(),
     };
     scan.statements(&program.body);
     scan.visit_program(program);
@@ -129,6 +148,7 @@ pub(super) fn plain_symbols(program: &Program<'_>, scoping: &Scoping, local: boo
         mut found,
         consts,
         mut flags,
+        relations,
         ..
     } = scan;
     for (symbol, (_, checked)) in consts {
@@ -136,6 +156,11 @@ pub(super) fn plain_symbols(program: &Program<'_>, scoping: &Scoping, local: boo
             found.insert(symbol);
         } else {
             flags.remove(&symbol);
+        }
+    }
+    for (symbol, holds, leaves) in relations {
+        if found.contains(&symbol) && leaves.iter().all(|leaf| found.contains(leaf)) {
+            flags.insert(symbol, holds);
         }
     }
     PlainSymbols {
@@ -168,6 +193,7 @@ struct Plain<'s> {
     consts: FxHashMap<SymbolId, (u32, usize)>,
     flags: FxHashMap<SymbolId, bool>,
     hoisted: FxHashSet<ScopeId>,
+    relations: Vec<(SymbolId, bool, Vec<SymbolId>)>,
 }
 
 impl Plain<'_> {
@@ -195,6 +221,11 @@ impl Plain<'_> {
                         .or_insert((declaration.span.end, 0));
                     if let Expression::BooleanLiteral(literal) = init.without_parentheses() {
                         self.flags.insert(symbol, literal.value);
+                    }
+                    if let Some(relation) = relation(init) {
+                        if let Some(leaves) = relation.leaves(self.scoping) {
+                            self.relations.push((symbol, relation.holds, leaves));
+                        }
                     }
                 }
             }
