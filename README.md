@@ -75,8 +75,9 @@ between visits; untwist.dev runs the latest release.
   of their functions, minified, mangled or obfuscated, and puts `// core-js 3.38–3.51: internals/global-this.js`
   above each matched module. With any `--rename` mode the matched bindings get the library's own names
   (`requireGetBuiltIn`, `getBuiltIn`, `isCallable`, ...); the report lists each library with its version range.
-  `--disable library-names,library-rename` turns this off. The CLI binary carries the helper tables; core-js
-  comes from a library collection (`--libraries DIR`) unless it was built with `--features libraries-corejs`.
+  `--disable library-names,library-rename` turns this off. The CLI binary carries the helper and core-js tables
+  (cargo feature `libraries-corejs`, on by default); a binary built with `--no-default-features` gets core-js from a
+  library collection instead (`untwist libraries update` or `--libraries DIR`).
 - **JSX.** Rebuilds JSX from `React.createElement` and the automatic `jsx`/`jsxs` runtime.
 
 ## Install
@@ -137,7 +138,7 @@ Common flags:
 | `-f, --force` | Overwrite the files in `DIR` that this run writes and remove the ones a previous run left there. Input files are never overwritten. |
 | `--unsafe` | Use the unsafe lane (see below). |
 | `--modern BASELINE` | Opt-in: remove core-js polyfills of features that are native in `BASELINE` (see [Modern mode](#modern-mode)). |
-| `--libraries SRC` | Library fingerprints to match (repeatable): `cache` (the default: the built-in tables plus the collection `untwist libraries update` cached, when there is one), `builtin` (the built-in tables only), `none`, a collection directory with `collection.json`, one `.table.gz`, or an `http(s)` URL of a collection. A collection loads only the shards whose bloom filter the program hits; with a URL only those shards are downloaded (and kept in the cache). The built-in tables are the Babel, swc, tslib and regenerator-runtime helpers; core-js is a package of the collection (or built in with the cargo feature `libraries-corejs`). |
+| `--libraries SRC` | Library fingerprints to match (repeatable): `cache` (the default: the built-in tables plus the collection `untwist libraries update` cached, when there is one), `builtin` (the built-in tables only), `none`, a collection directory with `collection.json`, one `.table.gz`, or an `http(s)` URL of a collection. A collection loads only the shards whose bloom filter the program hits; with a URL only those shards are downloaded (and kept in the cache). The built-in tables are core-js and the Babel, swc, tslib and regenerator-runtime helpers; a binary built with `--no-default-features` leaves core-js to the collection. |
 | `--library-imports` | Opt-in, needs `-o`: an unpacked CommonJS module that is a whole, unpatched file of a library package (an exact whole-module match against a collection's complete-module rows) becomes `module.exports = require("pkg/file")`, and `package.json` pins the versions; run `npm install` in the output directory before running it. A module is replaced only when all its requires go to modules that are replaced too, it reads no bundler state, and one version fits every replaced module of its package; the JSON report lists `library_imports {replaced, kept, pins}`. |
 | `--types[=jsdoc\|ts]` | Experimental, opt-in: annotate only types that hold for every value on every run, as JSDoc (the default) or TypeScript (see [Proven types](#proven-types)). |
 | `--restore svelte` | Opt-in, needs `-o`: also write each compiled Svelte 5 component back as a `.svelte` file (see [Svelte restore](#svelte-restore)). |
@@ -424,9 +425,9 @@ grouped by reason, instead of in Diagnostics.
 
 Modern mode is part of the CLI, the Rust library (cargo feature `modern`, on by default), the
 WebAssembly build and the playground (Settings, Modern baseline), where the core-js table is
-fetched only when the input holds core-js code. The CLI needs the core-js fingerprints for it:
-a collection with the `core-js` package (`--libraries DIR`) or a binary built with
-`--features libraries-corejs`; without either, `--modern` stops with an error that says so.
+fetched only when the input holds core-js code. The CLI binary carries the core-js fingerprints it needs;
+a binary built with `--no-default-features` needs a collection with the `core-js` package
+(`untwist libraries update` or `--libraries DIR`), and without one `--modern` stops with an error that says so.
 
 Today this covers Rollup bundles built with `@rollup/plugin-commonjs` and `strictRequires`
 (the lazy `requireX()` wrappers and the inline wrappers Rollup makes for modules required
