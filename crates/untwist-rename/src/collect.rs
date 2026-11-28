@@ -241,13 +241,13 @@ impl Collector<'_> {
             symbol,
             name: id.name.as_str().to_string(),
             span: id.span,
-            scope: self.scoping.symbol_scope_id(symbol),
+            scope: crate::holders::binding_scope(self.scoping, symbol),
             role,
         });
     }
 
     fn mark_hoisted_site(&mut self, symbol: SymbolId) {
-        let declared = self.scoping.symbol_scope_id(symbol);
+        let declared = crate::holders::binding_scope(self.scoping, symbol);
         let current = self.current();
         if declared == current || !self.scoping.scope_is_descendant_of(current, declared) {
             return;
@@ -670,7 +670,7 @@ impl<'a> VisitJs<'a> for Collector<'_> {
             return;
         };
         self.observe_through_with(symbol);
-        let declared = self.scoping.symbol_scope_id(symbol);
+        let declared = crate::holders::binding_scope(self.scoping, symbol);
         self.mark_free_below(symbol, self.current(), declared);
     }
 }
