@@ -1,13 +1,15 @@
 use std::cell::RefCell;
 use std::thread::LocalKey;
 
-type Owners = RefCell<Vec<(usize, usize)>>;
+use rustc_hash::{FxHashMap, FxHashSet};
+
+type Owners = RefCell<FxHashMap<usize, usize>>;
 
 thread_local! {
-    static SELF_CONTAINERS: Owners = const { RefCell::new(Vec::new()) };
-    static SUB_CONTAINERS: Owners = const { RefCell::new(Vec::new()) };
-    static ARGUMENTS_PASSED: Owners = const { RefCell::new(Vec::new()) };
-    static REWRITTEN: RefCell<Vec<usize>> = const { RefCell::new(Vec::new()) };
+    static SELF_CONTAINERS: Owners = RefCell::new(FxHashMap::default());
+    static SUB_CONTAINERS: Owners = RefCell::new(FxHashMap::default());
+    static ARGUMENTS_PASSED: Owners = RefCell::new(FxHashMap::default());
+    static REWRITTEN: RefCell<FxHashSet<usize>> = RefCell::new(FxHashSet::default());
 }
 
 pub(super) fn release() {
@@ -19,21 +21,12 @@ pub(super) fn release() {
 
 #[inline(always)]
 fn lookup(list: &'static LocalKey<Owners>, addr: usize) -> Option<usize> {
-    list.with(|entries| {
-        entries
-            .borrow()
-            .iter()
-            .find(|(entry_addr, _)| *entry_addr == addr)
-            .map(|(_, owner)| *owner)
-    })
+    list.with(|entries| entries.borrow().get(&addr).copied())
 }
 
 fn remember(list: &'static LocalKey<Owners>, addr: usize, owner: usize) {
     list.with(|entries| {
-        let mut entries = entries.borrow_mut();
-        if !entries.iter().any(|(entry_addr, _)| *entry_addr == addr) {
-            entries.push((addr, owner));
-        }
+        entries.borrow_mut().entry(addr).or_insert(owner);
     });
 }
 
@@ -64,7 +57,7 @@ pub(super) fn remember_passed(addr: usize, passed: usize) {
 }
 
 pub(super) fn note_rewritten(addr: usize) {
-    REWRITTEN.with(|addrs| addrs.borrow_mut().push(addr));
+    REWRITTEN.with(|addrs| addrs.borrow_mut().insert(addr));
 }
 
 pub(super) fn is_rewritten(addr: usize) -> bool {
@@ -75,12 +68,9 @@ pub(super) fn forget(addr: usize) -> bool {
     let mut known = false;
     for list in [&SELF_CONTAINERS, &SUB_CONTAINERS, &ARGUMENTS_PASSED] {
         list.with(|entries| {
-            let mut entries = entries.borrow_mut();
-            let before = entries.len();
-            entries.retain(|(entry_addr, _)| *entry_addr != addr);
-            known |= entries.len() != before;
+            known |= entries.borrow_mut().remove(&addr).is_some();
         });
     }
-    REWRITTEN.with(|addrs| addrs.borrow_mut().retain(|entry| *entry != addr));
+    REWRITTEN.with(|addrs| addrs.borrow_mut().remove(&addr));
     known
 }

@@ -72,7 +72,7 @@ thread_local! {
     static VIOLATION: Cell<bool> = const { Cell::new(false) };
     static EPOCH: Cell<u64> = const { Cell::new(0) };
     static ACTIVE_SHAPE: RefCell<Shape> = RefCell::new(Shape::default());
-    static TABLE: RefCell<FxHashMap<(usize, PropKey), TableEntry>> =
+    static TABLE: RefCell<FxHashMap<usize, FxHashMap<PropKey, TableEntry>>> =
         RefCell::new(FxHashMap::default());
     static FRAME_STACK: RefCell<Vec<Frame>> = const { RefCell::new(Vec::new()) };
     static GATE_DEPTH: Cell<usize> = const { Cell::new(0) };
@@ -192,7 +192,7 @@ pub fn note_object_drop(object: &JsObject<'_>) {
 #[inline(never)]
 fn forget_object(addr: usize) {
     if super::registry::forget(addr) {
-        TABLE.with(|table| table.borrow_mut().retain(|(entry, _), _| *entry != addr));
+        TABLE.with(|table| table.borrow_mut().remove(&addr));
         super::probe::forget(addr);
     }
 }
@@ -403,8 +403,8 @@ fn record_new_entry(owner: usize, addr: usize, key: PropKey, value: &Value<'_>) 
         mark_innermost_frame_read(owner, stored.clone());
     }
     TABLE.with(|table| {
-        table.borrow_mut().insert(
-            (addr, key),
+        table.borrow_mut().entry(addr).or_default().insert(
+            key,
             TableEntry {
                 read_args,
                 epoch,
@@ -428,7 +428,7 @@ fn check_and_record(owner: usize, addr: usize, key: PropKey, value: &Value<'_>, 
     }
     let verdict = TABLE.with(|table| {
         let table = table.borrow();
-        let entry = table.get(&(addr, key.clone()))?;
+        let entry = table.get(&addr)?.get(&key)?;
         let same_frame = FRAME_STACK.with(|stack| {
             stack
                 .borrow()
