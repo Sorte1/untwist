@@ -159,21 +159,12 @@ impl<'a> VisitJs<'a> for SelfText<'_, '_> {
     }
 }
 
-struct PatternTest<'n> {
-    name: &'n str,
-    found: bool,
-}
-
-impl<'a> VisitJs<'a> for PatternTest<'_> {
-    fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
-        let tests = member_parts(&it.callee).is_some_and(|(_, key)| key == PATTERN_TEST);
-        self.found |= tests && passes(it, self.name);
-        walk_js::walk_call_expression(self, it);
-    }
-}
-
 fn tests_its_own_text(body: &FunctionBody<'_>, name: &str) -> bool {
-    let mut test = PatternTest { name, found: false };
+    let mut test = SelfChain {
+        name,
+        found: false,
+        by_pattern: true,
+    };
     test.visit_function_body(body);
     test.found
 }
@@ -274,6 +265,7 @@ fn reader_controller<'k, 'a>(init: &'k Expression<'a>, own: &str) -> Option<&'k 
     let mut chain = SelfChain {
         name: own,
         found: false,
+        by_pattern: false,
     };
     callback.visit_with(&mut chain);
     chain.found.then_some(controller)
@@ -360,6 +352,7 @@ impl<'a> VisitJs<'a> for Readers<'_> {
 struct SelfChain<'n> {
     name: &'n str,
     found: bool,
+    by_pattern: bool,
 }
 
 fn names(expr: &Expression<'_>, name: &str) -> bool {
@@ -394,9 +387,17 @@ fn reads_itself(call: &CallExpression<'_>, name: &str) -> bool {
     }
 }
 
+fn tests_itself(call: &CallExpression<'_>, name: &str) -> bool {
+    member_parts(&call.callee).is_some_and(|(_, key)| key == PATTERN_TEST) && passes(call, name)
+}
+
 impl<'a> VisitJs<'a> for SelfChain<'_> {
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
-        if reads_itself(it, self.name) {
+        let found = match self.by_pattern {
+            true => tests_itself(it, self.name),
+            false => reads_itself(it, self.name),
+        };
+        if found {
             self.found = true;
             return;
         }
