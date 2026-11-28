@@ -225,3 +225,15 @@ fn a_block_function_declared_twice_keeps_both_declarations_in_its_block() {
         [binding(source, "function o", 9), outer(source)]
     );
 }
+
+#[test]
+fn the_fresh_scoping_check_agrees_with_a_repaired_blocked_hoist() {
+    let source = "{ function g() {} }\nlet g = \"lexical\";\nconsole.log(g);\n";
+    let alloc = Allocator::default();
+    let parsed = parse_program(&alloc, source);
+    let sem = build_scoping(&parsed.program);
+    assert_eq!(
+        untwist_core::semantic::compare::first_difference(&parsed.program, &sem.scoping),
+        None
+    );
+}

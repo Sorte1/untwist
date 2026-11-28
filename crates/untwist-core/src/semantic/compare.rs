@@ -63,6 +63,7 @@ fn differs(
     let built = SemanticBuilder::new().build(copy).semantic;
     let fresh_stats = built.stats();
     let mut fresh = built.into_scoping();
+    super::blocked_hoists::repair_blocked_hoists(copy, &mut fresh);
     super::observers::settle_eval_scopes(copy, &mut fresh);
     if let Some(stats) = stats.filter(|stats| !same_stats(*stats, fresh_stats)) {
         return Some(format!(
