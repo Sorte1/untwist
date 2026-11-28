@@ -102,7 +102,7 @@ const _: () = assert!(CALL_DEPTH_CAP <= u16::MAX as u32);
 
 pub const STEP_SLICE: u64 = 1 << 20;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Budget {
     steps_left: u64,
     steps_held: u64,

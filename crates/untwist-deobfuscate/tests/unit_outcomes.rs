@@ -43,14 +43,21 @@ const IN_ORDER: &str = "console['log'](__DECODE_0__(0x0), __DECODE_0__(0x1), __D
 const REVERSED: &str = "console['log'](__DECODE_0__(0x2), __DECODE_0__(0x1), __DECODE_0__(0x0));";
 
 fn round(memo: &Rc<RefCell<RotationMemo>>, calls: &str) -> String {
-    let source = format!("{MACHINERY}{calls}");
+    round_with(memo, &format!("{MACHINERY}{calls}"), common::pass_options())
+}
+
+fn round_with(
+    memo: &Rc<RefCell<RotationMemo>>,
+    source: &str,
+    options: untwist_core::pass::PassOptions,
+) -> String {
     let alloc = Allocator::default();
-    let mut parsed = parse_program(&alloc, &source);
+    let mut parsed = parse_program(&alloc, source);
     assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
     let sem = build_scoping(&parsed.program);
     let mut group = PassGroup::new(
         vec![decoded::boxed_with(Rc::clone(memo), Default::default())],
-        common::pass_options(),
+        options,
     );
     let _ = run_once(&alloc, &mut parsed.program, sem, &mut group);
     print(&parsed.program, PrintStyle::Pretty)
@@ -98,4 +105,43 @@ fn a_key_without_the_call_arguments_replays_a_stale_unit() {
     assert_eq!(hits, 2);
     assert_eq!(stale[1], fresh[1]);
     assert_ne!(stale[2], fresh[2]);
+}
+
+const FAILING_FUEL: u64 = 200_000;
+
+fn failing_rounds(keeping: bool) -> (Vec<(String, untwist_eval::stats::DecodeStats)>, usize) {
+    keep_unit_outcomes(keeping);
+    keep_units_from_steps(Some(0));
+    let memo = Rc::new(RefCell::new(RotationMemo::default()));
+    let source = format!(
+        "{}{IN_ORDER}",
+        MACHINERY.replace("while (!![]) {", "while (!![]) { for (var z = 0; z < 1e9; z++); ")
+    );
+    let options = untwist_core::pass::PassOptions {
+        fuel: Some(FAILING_FUEL),
+        ..common::pass_options()
+    };
+    let _ = untwist_eval::stats::take();
+    let rounds = (0..3)
+        .map(|_| {
+            let printed = round_with(&memo, &source, options.clone());
+            (printed, untwist_eval::stats::take())
+        })
+        .collect();
+    keep_unit_outcomes(true);
+    keep_units_from_steps(None);
+    let hits = memo.borrow().failed_unit_hits();
+    (rounds, hits)
+}
+
+#[test]
+fn a_failed_unit_whose_inputs_are_unchanged_replays_its_failure_and_its_steps() {
+    let _serial = serial();
+    let (kept, hits) = failing_rounds(true);
+    let (fresh, fresh_hits) = failing_rounds(false);
+    assert_eq!(kept, fresh);
+    assert_eq!((hits, fresh_hits), (2, 0));
+    assert!(kept[0].0.contains("__DECODE_0__(0), __DECODE_0__(1)"), "{}", kept[0].0);
+    assert_eq!(kept[0].1.steps, FAILING_FUEL);
+    assert_eq!(kept[2].1, kept[0].1);
 }

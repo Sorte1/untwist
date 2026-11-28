@@ -8,8 +8,11 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use rustc_hash::FxHashSet;
 
 use super::{Call, Decoded, DecoderProgram, InterpEvaluator};
-use crate::bail::EvalResult;
+use crate::bail::{Bail, EvalResult};
+use crate::budget::Budget;
+use crate::heap::spent_run_budget;
 use crate::object::ProtoRead;
+use crate::rotation::MemoCounters;
 
 use key::{machinery_digest, unit_key};
 use values::KeptValues;
@@ -71,16 +74,76 @@ fn arguments_keyed() -> bool {
 
 struct KeptUnit {
     key: UnitKey,
-    values: KeptValues,
+    outcome: Outcome,
     notes: Vec<String>,
     proto_reads: Vec<ProtoRead>,
     builtin_roots: Vec<&'static str>,
 }
 
+enum Outcome {
+    Values(KeptValues),
+    Failed(Box<Failure>),
+}
+
+struct Failure {
+    bail: Bail,
+    from: Budget,
+    to: Budget,
+    stored: usize,
+    searches: usize,
+    hits: usize,
+    heap_peak: Option<u64>,
+}
+
+impl Failure {
+    fn of(
+        start: &Start,
+        evaluator: &InterpEvaluator,
+        result: &UnitResult,
+        now: MemoCounters,
+    ) -> Option<Self> {
+        let bail = result.as_ref().err()?;
+        let ledger = evaluator.heap.as_ref();
+        let settled = !matches!(bail, Bail::RunBudget(_))
+            && evaluator.thrown_calls.is_empty()
+            && now.stored == start.memo.stored
+            && start.heap == heap_state(ledger);
+        settled.then(|| Self {
+            bail: bail.clone(),
+            from: start.budget,
+            to: evaluator.budget,
+            stored: now.stored,
+            searches: now.searches.saturating_sub(start.memo.searches),
+            hits: now.hits.saturating_sub(start.memo.hits),
+            heap_peak: ledger.map(|ledger| ledger.peak()),
+        })
+    }
+
+    fn replays_from(&self, start: &Start, now: MemoCounters) -> bool {
+        self.from == start.budget && self.stored == now.stored && spent_run_budget().is_ok()
+    }
+
+    fn replay(&self, evaluator: &mut InterpEvaluator) -> UnitResult {
+        evaluator.budget = self.to;
+        if let (Some(ledger), Some(peak)) = (evaluator.heap.as_ref(), self.heap_peak) {
+            ledger.raise_peak(peak);
+        }
+        Err(self.bail.clone())
+    }
+}
+
+pub(crate) struct Replayed {
+    pub(crate) result: UnitResult,
+    pub(crate) searches: usize,
+    pub(crate) hits: usize,
+}
+
 #[derive(Default)]
 pub(crate) struct KeptUnits {
     entries: VecDeque<KeptUnit>,
+    failures: VecDeque<KeptUnit>,
     hits: usize,
+    failure_hits: usize,
 }
 
 impl KeptUnits {
@@ -88,13 +151,32 @@ impl KeptUnits {
         self.hits
     }
 
+    pub(crate) fn failure_hits(&self) -> usize {
+        self.failure_hits
+    }
+
     pub(crate) fn replay(
         &mut self,
         key: &UnitKey,
+        (start, now): (&Start, MemoCounters),
         evaluator: &mut InterpEvaluator,
-    ) -> Option<UnitResult> {
-        let kept = self.entries.iter().find(|kept| &kept.key == key)?;
-        self.hits += 1;
+    ) -> Option<Replayed> {
+        let kept = self
+            .entries
+            .iter()
+            .chain(self.failures.iter())
+            .find(|kept| &kept.key == key)?;
+        let (result, searches, hits) = match &kept.outcome {
+            Outcome::Values(values) => {
+                self.hits += 1;
+                (Ok(values.charged(evaluator.heap.as_ref())), 0, 0)
+            }
+            Outcome::Failed(failure) if failure.replays_from(start, now) => {
+                self.failure_hits += 1;
+                (failure.replay(evaluator), failure.searches, failure.hits)
+            }
+            Outcome::Failed(_) => return None,
+        };
         evaluator.notes.extend(kept.notes.iter().cloned());
         evaluator
             .proto_reads
@@ -102,7 +184,11 @@ impl KeptUnits {
         evaluator
             .builtin_roots
             .extend(kept.builtin_roots.iter().copied());
-        Some(Ok(kept.values.charged(evaluator.heap.as_ref())))
+        Some(Replayed {
+            result,
+            searches,
+            hits,
+        })
     }
 
     pub(crate) fn early_key(
@@ -110,7 +196,7 @@ impl KeptUnits {
         start: &Start,
         (program, calls, escaped_decoders): Unit<'_, '_>,
     ) -> Option<UnitKey> {
-        if self.entries.is_empty() || !keeping() {
+        if (self.entries.is_empty() && self.failures.is_empty()) || !keeping() {
             return None;
         }
         Some(unit_key(
@@ -124,7 +210,7 @@ impl KeptUnits {
     pub(crate) fn keep(
         &mut self,
         (early, start): (Option<UnitKey>, Start),
-        unit: Unit<'_, '_>,
+        (unit, now): (Unit<'_, '_>, MemoCounters),
         evaluator: &InterpEvaluator,
         result: &UnitResult,
     ) {
@@ -135,20 +221,29 @@ impl KeptUnits {
         if spent < keep_from_steps() || !keeping() {
             return;
         }
-        let Some(values) = settled(evaluator, result) else {
-            return;
+        let outcome = match settled(evaluator, result) {
+            Some(values) => Outcome::Values(values),
+            None => match Failure::of(&start, evaluator, result, now) {
+                Some(failure) => Outcome::Failed(Box::new(failure)),
+                None => return,
+            },
         };
         let (program, calls, escaped_decoders) = unit;
         let key = early.unwrap_or_else(|| {
             unit_key(&start, &machinery_digest(program), calls, escaped_decoders)
         });
-        if self.entries.len() >= KEPT_UNITS {
-            self.entries.pop_front();
+        self.failures.retain(|kept| kept.key != key);
+        let shelf = match outcome {
+            Outcome::Values(_) => &mut self.entries,
+            Outcome::Failed(_) => &mut self.failures,
+        };
+        if shelf.len() >= KEPT_UNITS {
+            shelf.pop_front();
         }
         let marks = &start.marks;
-        self.entries.push_back(KeptUnit {
+        shelf.push_back(KeptUnit {
             key,
-            values,
+            outcome,
             notes: tail(&evaluator.notes, marks.notes),
             proto_reads: tail(&evaluator.proto_reads, marks.proto_reads),
             builtin_roots: tail(&evaluator.builtin_roots, marks.builtin_roots),
@@ -176,27 +271,34 @@ struct Marks {
     builtin_roots: usize,
 }
 
+type HeapState = Option<(bool, u64, u64)>;
+
+fn heap_state(ledger: Option<&std::rc::Rc<crate::heap::HeapLedger>>) -> HeapState {
+    ledger.map(|ledger| (ledger.is_over(), ledger.limit(), ledger.live()))
+}
+
 pub(crate) struct Start {
     steps_used: u64,
     steps_left: u64,
-    heap: Option<(bool, u64, u64)>,
+    heap: HeapState,
     marks: Marks,
+    budget: Budget,
+    memo: MemoCounters,
 }
 
 impl Start {
-    pub(crate) fn of(evaluator: &InterpEvaluator) -> Self {
+    pub(crate) fn of(evaluator: &InterpEvaluator, memo: MemoCounters) -> Self {
         Self {
             steps_used: evaluator.budget.steps_used(),
             steps_left: evaluator.budget.steps_left(),
-            heap: evaluator
-                .heap
-                .as_ref()
-                .map(|ledger| (ledger.is_over(), ledger.limit(), ledger.live())),
+            heap: heap_state(evaluator.heap.as_ref()),
             marks: Marks {
                 notes: evaluator.notes.len(),
                 proto_reads: evaluator.proto_reads.len(),
                 builtin_roots: evaluator.builtin_roots.len(),
             },
+            budget: evaluator.budget,
+            memo,
         }
     }
 }
