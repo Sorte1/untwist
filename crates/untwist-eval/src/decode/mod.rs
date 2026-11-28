@@ -640,11 +640,13 @@ impl InterpEvaluator {
         escaped_decoders: &FxHashSet<usize>,
     ) -> EvalResult<Vec<Option<Decoded>>> {
         self.thrown_calls.clear();
-        let start = kept::Start::of(self);
+        let start = kept::Start::of(self, memo.counters());
         let unit = (program, calls, escaped_decoders);
         let early = memo.units.early_key(&start, unit);
-        if let Some(kept) = early.and_then(|key| memo.units.replay(&key, self)) {
-            return kept;
+        let now = memo.counters();
+        if let Some(kept) = early.and_then(|key| memo.units.replay(&key, (&start, now), self)) {
+            memo.add_counted(kept.searches, kept.hits);
+            return kept.result;
         }
         #[cfg(feature = "test-hooks")]
         let mark = crate::test_hooks::UnitMark::decode(self, memo);
@@ -657,7 +659,8 @@ impl InterpEvaluator {
                 .map(|value| value.map(Decoded::of))
                 .collect()
         });
-        memo.units.keep((early, start), unit, self, &result);
+        let now = memo.counters();
+        memo.units.keep((early, start), (unit, now), self, &result);
         result
     }
 

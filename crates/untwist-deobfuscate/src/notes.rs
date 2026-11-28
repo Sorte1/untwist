@@ -71,6 +71,9 @@ pub const WRAPPER_NESTED_FUNCTION: &str =
      substitution would capture, so it was left in place";
 pub const WRAPPER_SITE_SCOPED_ARGUMENT: &str =
     "an argument holds a function, arrow or class whose scopes the substituted clone cannot carry";
+pub const WRAPPER_SITE_UNDECLARED_ARGUMENT: &str =
+    "an argument reads a name no declaration binds, which throws a ReferenceError the substituted \
+     body may drop or move";
 pub const WRAPPER_SITE_IMPURE_ARGUMENT: &str =
     "an argument is not side-effect-free, so substituting the body would run it again, drop it, or \
      reorder it";
@@ -525,6 +528,10 @@ pub fn wrapper_site_scoped_argument() -> String {
     format!("{WRAPPER_SITE_KEPT}: {WRAPPER_SITE_SCOPED_ARGUMENT}")
 }
 
+pub fn wrapper_site_undeclared_argument() -> String {
+    format!("{WRAPPER_SITE_KEPT}: {WRAPPER_SITE_UNDECLARED_ARGUMENT}")
+}
+
 pub fn wrapper_site_impure_argument() -> String {
     format!("{WRAPPER_SITE_KEPT}: {WRAPPER_SITE_IMPURE_ARGUMENT}")
 }
@@ -675,6 +682,7 @@ catalogue!(
     WRAPPER_DEFERRED,
     WRAPPER_NESTED_FUNCTION,
     WRAPPER_SITE_SCOPED_ARGUMENT,
+    WRAPPER_SITE_UNDECLARED_ARGUMENT,
     WRAPPER_SITE_IMPURE_ARGUMENT,
     WRAPPER_BODY_NOT_SELF_CONTAINED,
     WRAPPER_BINDING_UNSTABLE,

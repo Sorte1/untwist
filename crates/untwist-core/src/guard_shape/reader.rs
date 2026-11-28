@@ -19,6 +19,7 @@ const ESCAPE_BREAK: char = '\n';
 const CHAIN_CALLS: usize = 3;
 const ESCAPED_BAIT: &str = "window";
 const SELF_READ: &str = "charCodeAt";
+const PATTERN_TEST: &str = "test";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SourceReaders {
@@ -158,10 +159,27 @@ impl<'a> VisitJs<'a> for SelfText<'_, '_> {
     }
 }
 
+fn tests_its_own_text(function: &Function<'_>, name: &str) -> bool {
+    let mut test = SelfChain {
+        name,
+        found: false,
+        by_pattern: true,
+        shadowed: false,
+    };
+    test.visit_formal_parameters(&function.params);
+    if let Some(body) = &function.body {
+        test.visit_function_body(body);
+    }
+    test.found && !test.shadowed
+}
+
 fn reads_its_own_text(function: &Function<'_>, name: &str, printed: Printed<'_>) -> bool {
     let Some(body) = &function.body else {
         return false;
     };
+    if tests_its_own_text(function, name) {
+        return true;
+    }
     let mut text = SelfText {
         name,
         printed,
@@ -251,6 +269,8 @@ fn reader_controller<'k, 'a>(init: &'k Expression<'a>, own: &str) -> Option<&'k 
     let mut chain = SelfChain {
         name: own,
         found: false,
+        by_pattern: false,
+        shadowed: false,
     };
     callback.visit_with(&mut chain);
     chain.found.then_some(controller)
@@ -337,6 +357,8 @@ impl<'a> VisitJs<'a> for Readers<'_> {
 struct SelfChain<'n> {
     name: &'n str,
     found: bool,
+    by_pattern: bool,
+    shadowed: bool,
 }
 
 fn names(expr: &Expression<'_>, name: &str) -> bool {
@@ -371,9 +393,21 @@ fn reads_itself(call: &CallExpression<'_>, name: &str) -> bool {
     }
 }
 
+fn tests_itself(call: &CallExpression<'_>, name: &str) -> bool {
+    member_parts(&call.callee).is_some_and(|(_, key)| key == PATTERN_TEST) && passes(call, name)
+}
+
 impl<'a> VisitJs<'a> for SelfChain<'_> {
+    fn visit_binding_identifier(&mut self, it: &BindingIdentifier<'a>) {
+        self.shadowed |= self.by_pattern && it.name == self.name;
+    }
+
     fn visit_call_expression(&mut self, it: &CallExpression<'a>) {
-        if reads_itself(it, self.name) {
+        let found = match self.by_pattern {
+            true => tests_itself(it, self.name),
+            false => reads_itself(it, self.name),
+        };
+        if found {
             self.found = true;
             return;
         }

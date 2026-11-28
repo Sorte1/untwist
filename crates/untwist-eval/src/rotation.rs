@@ -11,6 +11,13 @@ pub type RotationKey = [u8; 32];
 
 const UNIT_CHUNK: usize = 512;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct MemoCounters {
+    pub(crate) stored: usize,
+    pub(crate) searches: usize,
+    pub(crate) hits: usize,
+}
+
 #[derive(Default)]
 pub struct RotationMemo {
     entries: FxHashMap<RotationKey, usize>,
@@ -32,6 +39,10 @@ impl RotationMemo {
         self.units.hits()
     }
 
+    pub fn failed_unit_hits(&self) -> usize {
+        self.units.failure_hits()
+    }
+
     pub fn stored(&self) -> usize {
         self.entries.len()
     }
@@ -46,6 +57,19 @@ impl RotationMemo {
 
     pub(crate) fn record_search(&mut self) {
         self.searches += 1;
+    }
+
+    pub(crate) fn counters(&self) -> MemoCounters {
+        MemoCounters {
+            stored: self.entries.len(),
+            searches: self.searches,
+            hits: self.hits,
+        }
+    }
+
+    pub(crate) fn add_counted(&mut self, searches: usize, hits: usize) {
+        self.searches += searches;
+        self.hits += hits;
     }
 
     pub(crate) fn store(&mut self, key: RotationKey, rotation: usize) {

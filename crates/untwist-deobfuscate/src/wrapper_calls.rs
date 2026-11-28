@@ -244,6 +244,55 @@ pub(crate) fn arguments_hold_a_scope(arguments: &AVec<'_, Argument<'_>>) -> bool
     })
 }
 
+const ALWAYS_DECLARED: [&str; 3] = ["undefined", "NaN", "Infinity"];
+
+fn reads_an_undeclared_name(expr: &Expression<'_>, scoping: &Scoping) -> bool {
+    match expr.without_parentheses() {
+        Expression::Identifier(id) => {
+            let resolved = id
+                .reference_id
+                .get()
+                .and_then(|reference| scoping.get_reference(reference).symbol_id())
+                .is_some();
+            !resolved && !ALWAYS_DECLARED.contains(&id.name.as_str())
+        }
+        Expression::UnaryExpression(unary)
+            if unary.operator == UnaryOperator::Typeof
+                && matches!(
+                    unary.argument.without_parentheses(),
+                    Expression::Identifier(_)
+                ) =>
+        {
+            false
+        }
+        Expression::UnaryExpression(unary) => reads_an_undeclared_name(&unary.argument, scoping),
+        Expression::BinaryExpression(binary) => {
+            reads_an_undeclared_name(&binary.left, scoping)
+                || reads_an_undeclared_name(&binary.right, scoping)
+        }
+        Expression::CallExpression(call) => {
+            reads_an_undeclared_name(&call.callee, scoping)
+                || call
+                    .arguments
+                    .iter()
+                    .filter_map(Argument::as_expression)
+                    .any(|argument| reads_an_undeclared_name(argument, scoping))
+        }
+        _ => false,
+    }
+}
+
+fn arguments_read_an_undeclared_name(
+    arguments: &AVec<'_, Argument<'_>>,
+    scoping: &Scoping,
+) -> bool {
+    arguments
+        .iter()
+        .filter_map(Argument::as_expression)
+        .filter(|expression| is_substitutable_argument(expression))
+        .any(|expression| reads_an_undeclared_name(expression, scoping))
+}
+
 struct WrapperSearch<'p, 's> {
     scoping: &'s Scoping,
     units: MachineryDepth,
@@ -459,6 +508,10 @@ impl<'p, 'a> Round<'_, 'p, 'a, '_> {
         }
         if arguments_hold_a_scope(site.arguments) {
             return Outcome::Kept(notes::wrapper_site_scoped_argument());
+        }
+        let unsafe_lane = self.cx.opts.unsafe_transforms;
+        if unsafe_lane && arguments_read_an_undeclared_name(site.arguments, self.cx.scoping()) {
+            return Outcome::Kept(notes::wrapper_site_undeclared_argument());
         }
         let (inlined, refusal) = if arguments_are_substitutable(site.arguments) {
             self.plain(wrapper, site)

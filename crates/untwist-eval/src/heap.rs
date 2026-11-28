@@ -49,6 +49,12 @@ impl HeapLedger {
         self.limit
     }
 
+    pub(crate) fn raise_peak(&self, peak: u64) {
+        if peak > self.peak.get() {
+            self.peak.set(peak);
+        }
+    }
+
     pub fn is_over(&self) -> bool {
         self.peak.get() > self.limit
     }
