@@ -37,8 +37,7 @@ between visits; untwist.dev runs the latest release.
   parameter reused for unrelated values gets one binding per value, an assignment evaluated first in
   a statement (`(c = c || {}).n++`) becomes its own statement, `typeof x == "s"` becomes `===`, and a
   read-only binding a `for` test reads moves out of the loop head. It runs after the library stage, and
-  is skipped for bundles that are unpacked, for a program in which a library was recognised, and with
-  `--restore`, whose fingerprints are taken without it.
+  is skipped for bundles that are unpacked and for a program in which a library was recognised.
 - **Untranspile.** Turns TypeScript, Babel, SWC and esbuild helpers for spread, destructuring,
   classes, generators and `async` back into native syntax. `Math.pow(a, b)` becomes `a ** b`
   when one operand is a plain number, string or boolean (so a BigInt operand throws in both forms),
@@ -512,8 +511,7 @@ writes each one as `<Name>.svelte` beside the file that holds it. In a minified 
 functions are found by the shape of their code, from a small table built from Svelte 5.0.5, 5.25.12
 and 5.57.3 under Terser and esbuild; a function is used only when its shape matches one table row
 exactly and nothing else in the bundle has the same shape. It is a view for reading: the
-JavaScript output is the same with or without the flag, except that the late uglify-js tidy
-(see [Unminify](#what-it-does)) is left out, so the runtime keeps the shapes the table was taken from.
+JavaScript output is the same with or without the flag.
 
 The markup is rebuilt from the template strings and the node walk (`first_child`, `child`,
 `sibling`), with text, attributes, `class:` and `style:` directives, events, `bind:` (value, checked,
@@ -543,8 +541,7 @@ from "solid-js/web"`) or bundled by Rollup or Vite, minified or not, and writes 
 the shape of their code, from a table built from solid-js 1.9.19 under Terser and esbuild; a
 function is used only when its shape matches one table row and nothing else in the bundle has the
 same shape. A component the minifier inlined into its only caller comes back as its own file. It is
-a view for reading: the JavaScript output is the same with or without the flag, except that the
-late uglify-js tidy is left out, as for Svelte.
+a view for reading: the JavaScript output is the same with or without the flag.
 
 The JSX is rebuilt from the `template()` strings and the node walk (`firstChild`, `nextSibling`),
 with `insert()` children (before their marker, appended or alone), attributes and properties from

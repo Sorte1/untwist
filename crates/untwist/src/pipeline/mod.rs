@@ -220,6 +220,7 @@ struct OutputParts {
     refusal_sites: Vec<RefusalSite>,
     source_maps: Vec<Option<OwnedSourceMap>>,
     module_goals: Vec<bool>,
+    restore_codes: Vec<Option<String>>,
 }
 
 impl OutputParts {
@@ -249,6 +250,7 @@ impl OutputParts {
             parts.source_maps.push(result.source_map);
             parts.module_goals.push(result.module_goal);
             parts.codes.push(result.code);
+            parts.restore_codes.push(result.restore_code);
             parts.stages.extend(result.stages);
             parts.notes.extend(result.notes);
             parts.parse_diagnostics.extend(result.parse_diagnostics);
@@ -399,11 +401,12 @@ impl Pipeline {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
             parts.stats = inputs.merged(crate::stats::RunStats::taken());
+            let untidied = std::mem::take(&mut parts.restore_codes);
             let mut output = Output {
                 wasm_check: self.options.wasm_check,
                 ..parts.into_output(bundle, self.options.single_file)
             };
-            self.restore_stage(&mut output);
+            self.restore_stage(&mut output, &untidied);
             self.types_stage(&mut output);
             self.imports_stage(&mut output);
             output
