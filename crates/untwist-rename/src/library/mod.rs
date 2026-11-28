@@ -445,7 +445,7 @@ fn probes(
         .iter()
         .enumerate()
         .filter(|(_, unit)| table.has_loose(table::loose_key(unit.loose_key(&shaped.prefix))))
-        .map(|(unit_index, unit)| (unit_index, exact_shape(unit, scoping)))
+        .map(|(unit_index, _)| (unit_index, shaped.exact_shape_of(unit_index, scoping)))
         .chain(inlined::expanded_probes(table, units, shaped, scoping))
         .collect()
 }
@@ -848,7 +848,23 @@ fn program_keys_of(shaped: &shape::Shaped<'_, '_>, scoping: &Scoping) -> collect
             .iter()
             .find(|unit| unit.kind == UnitKind::Program)
             .map(|unit| table::loose_key(unit.loose_key(&shaped.prefix))),
+        pairs: match registry::wants_pairs() {
+            true => unit_pairs(shaped, scoping),
+            false => Vec::new(),
+        },
     }
+}
+
+fn unit_pairs(shaped: &shape::Shaped<'_, '_>, scoping: &Scoping) -> Vec<(u32, u64)> {
+    let mut pairs: Vec<(u32, u64)> = shaped
+        .exact_shapes(scoping)
+        .iter()
+        .map(|shape| (table::loose_key(shape.loose), table::exact_key(shape.exact)))
+        .chain(inlined::expanded_pairs(shaped, scoping))
+        .collect();
+    pairs.sort_unstable();
+    pairs.dedup();
+    pairs
 }
 
 pub fn program_keys(program: &Program<'_>, scoping: &Scoping) -> collection::ProgramKeys {

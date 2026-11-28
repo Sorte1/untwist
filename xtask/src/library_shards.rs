@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use anyhow::Result;
-use untwist_rename::library::collection::{shard_bloom_id, Bloom, Shard};
+use untwist_rename::library::collection::{exact_bloom_id, shard_bloom_id, Bloom, Shard};
 use untwist_rename::library::table::{Role, RowData as Row, Table};
 use untwist_rename::library::{parse_ranges, version_key};
 
@@ -38,14 +38,19 @@ pub(crate) fn split_by_major(rows: &[Row]) -> Vec<Vec<Row>> {
     groups.into_values().collect()
 }
 
-fn shard_of(out: &Path, label: &str, rows: &[Row]) -> Result<(Shard, Bloom)> {
+pub(crate) fn shard_blooms(id: &str, rows: &[Row]) -> Blooms {
+    let matched: Vec<&Row> = rows.iter().filter(|row| row.role != Role::Order).collect();
+    let loose: Vec<u32> = matched.iter().map(|row| row.loose).collect();
+    let pairs: Vec<(u32, u64)> = matched.iter().map(|row| (row.loose, row.exact)).collect();
+    vec![
+        (id.to_string(), Bloom::with_keys(&loose)),
+        (exact_bloom_id(id), Bloom::with_pairs(&pairs)),
+    ]
+}
+
+fn shard_of(out: &Path, label: &str, rows: &[Row]) -> Result<Shard> {
     let bytes = crate::library_gz::bytes(&Table::from_rows(rows).write(label));
     let (file, sha256) = write_content(out, &bytes, "utl")?;
-    let loose: Vec<u32> = rows
-        .iter()
-        .filter(|row| row.role != Role::Order)
-        .map(|row| row.loose)
-        .collect();
     let shard = Shard {
         file,
         bytes: bytes.len() as u64,
@@ -53,7 +58,7 @@ fn shard_of(out: &Path, label: &str, rows: &[Row]) -> Result<(Shard, Bloom)> {
         versions: range_of(&versions_of(rows)),
         rows: rows.len() as u64,
     };
-    Ok((shard, Bloom::with_keys(&loose)))
+    Ok(shard)
 }
 
 pub(crate) type Blooms = Vec<(String, Bloom)>;
@@ -69,15 +74,14 @@ pub(crate) fn package_shards(
         false => vec![rows.to_vec()],
     };
     if groups.len() < 2 {
-        let (shard, bloom) = shard_of(out, label, rows)?;
-        return Ok((vec![shard], vec![(label.to_string(), bloom)]));
+        let shard = shard_of(out, label, rows)?;
+        return Ok((vec![shard], shard_blooms(label, rows)));
     }
     let mut shards = Vec::new();
     let mut blooms = Vec::new();
     for (index, group) in groups.iter().enumerate() {
-        let (shard, bloom) = shard_of(out, label, group)?;
-        shards.push(shard);
-        blooms.push((shard_bloom_id(label, index), bloom));
+        shards.push(shard_of(out, label, group)?);
+        blooms.extend(shard_blooms(&shard_bloom_id(label, index), group));
     }
     Ok((shards, blooms))
 }

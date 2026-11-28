@@ -39,6 +39,20 @@ pub(super) fn expanded_loose<'s>(
         .map(move |unit| table::loose_key(expanded_shape(unit, scoping).loose))
 }
 
+pub(super) fn expanded_pairs<'s>(
+    shaped: &'s Shaped<'_, '_>,
+    scoping: &'s Scoping,
+) -> impl Iterator<Item = (u32, u64)> + 's {
+    shaped
+        .units
+        .iter()
+        .filter(|unit| holds_inlined(unit.span, &shaped.inlined))
+        .map(move |unit| {
+            let shape = expanded_shape(unit, scoping);
+            (table::loose_key(shape.loose), table::exact_key(shape.exact))
+        })
+}
+
 pub(super) fn expanded_records<'s>(
     shaped: &'s Shaped<'_, '_>,
     scoping: &'s Scoping,

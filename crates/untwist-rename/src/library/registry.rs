@@ -219,6 +219,13 @@ pub fn attach(collection: Collection, source: Option<Box<dyn ShardSource>>) {
     });
 }
 
+pub fn wants_pairs() -> bool {
+    read()
+        .as_ref()
+        .and_then(|loaded| loaded.attached.as_ref())
+        .is_some_and(|attached| attached.collection.has_exact_filters())
+}
+
 pub fn pending() -> bool {
     read()
         .as_ref()

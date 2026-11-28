@@ -7,11 +7,12 @@ use std::sync::Mutex;
 use anyhow::{bail, Context, Result};
 use serde_json::{json, Value};
 use untwist_rename::library::collection::{
-    bloom_file, sha256_hex, Bloom, FileRef, Index, Package, Shard, INDEX, SCHEMA,
+    bloom_file, sha256_hex, FileRef, Index, Package, Shard, INDEX, SCHEMA,
 };
 use untwist_rename::library::table::{Role, RowData as Row, Table};
 use untwist_rename::library::SHAPE_EPOCH;
 
+use crate::library_shards::Blooms;
 use crate::library_table::{aggregate, process_build, read_manifest, Observed};
 
 const TOOLS: &str = "tools/library-collection";
@@ -643,14 +644,13 @@ pub(crate) fn range_of(versions: &[String]) -> String {
     }
 }
 
-fn curated_package(out: &Path, curated: &Curated) -> Result<(Package, Bloom)> {
+fn curated_package(out: &Path, curated: &Curated) -> Result<(Package, Blooms)> {
     let (file, sha256) = write_content(out, &curated.bytes, "utl")?;
     let versions = versions_of(&curated.rows);
     let label = curated
         .rows
         .first()
         .map_or_else(|| curated.id.clone(), |row| row.label.clone());
-    let loose: Vec<u32> = curated.rows.iter().map(|row| row.loose).collect();
     let package = Package {
         id: curated.id.clone(),
         label,
@@ -665,7 +665,8 @@ fn curated_package(out: &Path, curated: &Curated) -> Result<(Package, Bloom)> {
         keys: curated.keys.clone(),
         curated: true,
     };
-    Ok((package, Bloom::with_keys(&loose)))
+    let blooms = crate::library_shards::shard_blooms(&curated.id, &curated.rows);
+    Ok((package, blooms))
 }
 
 fn pack(
@@ -745,8 +746,8 @@ fn pack(
         });
     }
     for table in curated {
-        let (package, bloom) = curated_package(out, table)?;
-        blooms.push((package.id.clone(), bloom));
+        let (package, package_blooms) = curated_package(out, table)?;
+        blooms.extend(package_blooms);
         packages.push(package);
     }
     let bloom = bloom_file(&blooms);

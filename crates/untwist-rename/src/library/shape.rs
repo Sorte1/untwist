@@ -109,6 +109,25 @@ pub struct Shaped<'n, 'a> {
     pub prefix: PolyHash,
     pub bindings: u64,
     pub inlined: Vec<Span>,
+    exact: std::cell::OnceCell<Vec<ExactShape>>,
+}
+
+impl Shaped<'_, '_> {
+    pub fn exact_shapes(&self, scoping: &Scoping) -> &[ExactShape] {
+        self.exact.get_or_init(|| {
+            self.units
+                .iter()
+                .map(|unit| exact_shape(unit, scoping))
+                .collect()
+        })
+    }
+
+    pub fn exact_shape_of(&self, index: usize, scoping: &Scoping) -> ExactShape {
+        match self.exact.get() {
+            Some(known) => known[index].clone(),
+            None => exact_shape(&self.units[index], scoping),
+        }
+    }
 }
 
 pub fn shape_program<'n, 'a>(program: &'n Program<'a>, scoping: &'n Scoping) -> Shaped<'n, 'a> {
@@ -143,6 +162,7 @@ pub fn shape_program<'n, 'a>(program: &'n Program<'a>, scoping: &'n Scoping) -> 
         prefix,
         bindings,
         inlined,
+        exact: std::cell::OnceCell::new(),
     }
 }
 

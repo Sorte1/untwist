@@ -210,6 +210,7 @@ fn a_generated_package_is_wanted_only_on_enough_evidence() {
         loose: keys.iter().take(count).copied().collect(),
         strong: keys.iter().take(count.min(1)).copied().collect(),
         program,
+        pairs: Vec::new(),
     };
     let wanted = |found: ProgramKeys| -> Vec<usize> {
         collection
@@ -238,6 +239,7 @@ fn an_unrelated_big_program_wants_almost_no_package() {
         strong: loose.clone(),
         loose,
         program: None,
+        pairs: Vec::new(),
     };
     let wanted = collection.shards_wanted(&found);
     assert!(wanted.len() <= 1, "{wanted:?}");
@@ -284,8 +286,96 @@ fn a_curated_package_needs_the_same_evidence_as_a_generated_one() {
         loose: keys.iter().take(count).copied().collect(),
         strong: keys.iter().take(strong).copied().collect(),
         program: None,
+        pairs: Vec::new(),
     };
     assert!(collection.shards_wanted(&found(1, 1)).is_empty());
     assert!(collection.shards_wanted(&found(CLUSTER_HITS, 0)).is_empty());
     assert_eq!(collection.shards_wanted(&found(CLUSTER_HITS, 1)), [(0, 0)]);
+}
+
+fn shard_pairs(collection: &Collection, package: usize) -> Vec<(u32, u64)> {
+    let shard = &collection.packages()[package].shards[0];
+    let bytes = std::fs::read(fixture().join(&shard.file)).expect("a shard");
+    shard_table(shard, &bytes)
+        .expect("the shard loads")
+        .rows
+        .iter()
+        .map(|row| (row.loose, row.exact))
+        .collect()
+}
+
+fn with_exact_filters(collection: &Collection) -> Collection {
+    use untwist_rename::library::collection::exact_bloom_id;
+    let entries: Vec<(String, Bloom)> = (0..collection.packages().len())
+        .flat_map(|package| {
+            let id = collection.packages()[package].id.clone();
+            let pairs = shard_pairs(collection, package);
+            let loose: Vec<u32> = pairs.iter().map(|(loose, _)| *loose).collect();
+            [
+                (id.clone(), Bloom::with_keys(&loose)),
+                (exact_bloom_id(&id), Bloom::with_pairs(&pairs)),
+            ]
+        })
+        .collect();
+    let bytes = bloom_file(&entries);
+    let sha = sha256_hex(&bytes);
+    let mut index = collection.index.clone();
+    index.filters = Some(untwist_rename::library::collection::FileRef {
+        file: format!("shards/{sha}.bloom"),
+        sha256: sha,
+        bytes: bytes.len() as u64,
+    });
+    let json = serde_json::to_string(&index).expect("the index serialises");
+    let mut exact = Collection::parse(&json).expect("the index parses");
+    exact.attach_filters(&bytes).expect("the filters load");
+    exact
+}
+
+#[test]
+fn an_exact_filter_drops_a_shard_whose_loose_hits_have_no_exact_twin() {
+    use untwist_rename::library::collection::ProgramKeys;
+    let collection = with_exact_filters(&parsed());
+    assert!(collection.has_exact_filters());
+    assert!(!parsed().has_exact_filters());
+    let pairs = shard_pairs(&collection, 0);
+    let found = |pairs: Vec<(u32, u64)>| ProgramKeys {
+        loose: pairs.iter().map(|(loose, _)| *loose).collect(),
+        strong: pairs.iter().map(|(loose, _)| *loose).collect(),
+        program: None,
+        pairs,
+    };
+    let packages = |keys: &ProgramKeys| -> Vec<usize> {
+        collection
+            .shards_wanted(keys)
+            .into_iter()
+            .map(|(package, _)| package)
+            .collect()
+    };
+    assert!(packages(&found(pairs.clone())).contains(&0));
+    let twisted: Vec<(u32, u64)> = pairs
+        .iter()
+        .map(|&(loose, exact)| (loose, !exact))
+        .collect();
+    assert!(!packages(&found(twisted.clone())).contains(&0));
+    assert!(parsed()
+        .shards_wanted(&found(twisted))
+        .iter()
+        .any(|(package, _)| *package == 0));
+}
+
+#[test]
+fn an_exact_bloom_entry_is_kept_apart_from_the_loose_one() {
+    use untwist_rename::library::collection::{exact_bloom_id, pair_key};
+    let pairs = [(7u32, 99u64), (8, 100)];
+    let bloom = Bloom::with_pairs(&pairs);
+    assert!(pairs
+        .iter()
+        .all(|&(loose, exact)| bloom.contains_pair(loose, exact)));
+    assert_ne!(pair_key(7, 99), pair_key(99, 7));
+    assert_eq!(exact_bloom_id("three#1"), "three#1!");
+    let file = bloom_file(&[(exact_bloom_id("three#1"), bloom.clone())]);
+    assert_eq!(
+        parse_bloom_file(&file).expect("the file parses"),
+        [(exact_bloom_id("three#1"), bloom)]
+    );
 }
