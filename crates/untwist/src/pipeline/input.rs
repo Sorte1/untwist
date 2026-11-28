@@ -68,6 +68,8 @@ pub(super) struct InputResult {
     pub(super) refusal_sites: Vec<super::RefusalSite>,
     pub(super) mapped: Option<Mapped>,
     pub(super) source_map: Option<OwnedSourceMap>,
+    pub(super) untidied: Option<(Printed, Respelling)>,
+    pub(super) restore_code: Option<String>,
 }
 
 impl InputResult {
@@ -223,6 +225,10 @@ impl Pipeline {
         result.module_goal |= reservation.module_named;
         if !result.refused {
             result.code = kept_module_goal(std::mem::take(&mut result.code), result.module_goal);
+            result.restore_code = result
+                .restore_code
+                .take()
+                .map(|code| kept_module_goal(code, result.module_goal));
         }
         result.note_budget(peak, hit);
         let taken = crate::stats::RunStats::taken();
@@ -317,6 +323,7 @@ impl Pipeline {
             }
             result.notes.extend(guard_notes(guards.tally()));
             result.guards = guards;
+            result.restore_code = self.untidied_code(&mut result);
             Some(Ok(code))
         }));
         let outcome = match outcome {
@@ -358,6 +365,13 @@ impl Pipeline {
             *unbundled = !held;
         }
         (code, record)
+    }
+
+    fn untidied_code(&self, result: &mut InputResult) -> Option<String> {
+        let (printed, how) = result.untidied.take()?;
+        let mut unbundled = result.unbundled;
+        let (code, _) = self.reflow(printed, &mut unbundled);
+        Some(respelled_as(code, how))
     }
 
     fn printed<'a>(&self, alloc: &'a Allocator, program: &mut Program<'a>, clean: bool) -> Printed {
@@ -533,8 +547,9 @@ impl Pipeline {
             )
         });
         let mut trail = Trail::default();
+        let mut untidied = None;
         let staged = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let tree = (&alloc, &mut parsed.program, &mut trail);
+            let tree = (&alloc, &mut parsed.program, &mut trail, &mut untidied);
             let checked = first && errors == 0;
             let layer = (reservation, room, checked, scoped);
             self.stage_layer(tree, (layer, undo), layering, result)
@@ -576,6 +591,11 @@ impl Pipeline {
                         });
                 }
                 result.respelling = respelling(&parsed.program, printed.text());
+                result.untidied = untidied.map(|mut program| {
+                    let printed = self.printed(&alloc, &mut program, errors == 0);
+                    let how = respelling(&program, printed.text());
+                    (printed, how)
+                });
                 Step::Done(Some(printed))
             }
             Err(_) => {
@@ -590,7 +610,12 @@ impl Pipeline {
 
     fn stage_layer<'a>(
         &self,
-        (alloc, program, trail): (&'a Allocator, &mut Program<'a>, &mut Trail<'a>),
+        (alloc, program, trail, untidied): (
+            &'a Allocator,
+            &mut Program<'a>,
+            &mut Trail<'a>,
+            &mut Option<Program<'a>>,
+        ),
         ((reservation, room, checked, scoped), undo): (
             (Reservation<'_>, Option<InputRoom>, bool, bool),
             RoundCapUndo,
@@ -617,6 +642,7 @@ impl Pipeline {
             heap_peak: &mut result.heap_peak,
             snapshots: &mut result.snapshots,
             trail,
+            untidied,
         };
         let own_globals = !nested_root && !site.program.source_type.is_module();
         let shared = reservation.shared.cloned().map(|shared| match own_globals {
@@ -631,6 +657,9 @@ impl Pipeline {
         let staged = self.run_layer_stages(&mut site, sem, reservation, layering);
         if (stripped || scoped) && matches!(staged, Staged::Done) {
             scope_shell_body((alloc, program), scoped, &mut result.notes);
+            if let Some(untidied) = untidied.as_mut() {
+                scope_shell_body((alloc, untidied), scoped, &mut Vec::new());
+            }
         }
         staged
     }

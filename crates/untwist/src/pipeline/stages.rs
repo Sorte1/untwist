@@ -1,4 +1,4 @@
-use oxc_allocator::Allocator;
+use oxc_allocator::{Allocator, CloneIn};
 use oxc_ast::ast::Program;
 use untwist_core::clock::StageInstant as Instant;
 use untwist_core::pass::{
@@ -59,6 +59,7 @@ pub(super) struct StageCx<'a, 'r> {
     pub(super) heap_peak: &'r mut u64,
     pub(super) snapshots: &'r mut Snapshots,
     pub(super) trail: &'r mut Trail<'a>,
+    pub(super) untidied: &'r mut Option<Program<'a>>,
 }
 
 impl StageCx<'_, '_> {
@@ -286,18 +287,22 @@ impl Pipeline {
         let bundled = self.options.unpack
             && (self.options.split_assume_modules
                 || untwist_unpack::holds_a_bundle_with(site.program, self.unpack_options()));
-        let restores = self.options.svelte || self.options.solid;
         let libraries = untwist_rename::library::pass::summaries(
             site.notes
                 .iter()
                 .filter(|note| note.pass == untwist_rename::library::pass::NAME)
                 .map(|note| note.message.as_str()),
         );
-        if !self.options.unminify || bundled || restores || !libraries.is_empty() {
+        if !self.options.unminify || bundled || !libraries.is_empty() {
             return;
         }
+        let restores = self.options.svelte || self.options.solid;
+        let untidied = restores.then(|| site.program.clone_in(site.alloc));
         let mut group = PassGroup::from_ctors(&tidy_ctors(), site.pass_opts.clone());
         let (_, report) = run_last_traversal(site.alloc, site.program, sem, &mut group, false);
+        if report.total_changes > 0 {
+            *site.untidied = untidied;
+        }
         site.notes.extend(report.notes);
     }
 

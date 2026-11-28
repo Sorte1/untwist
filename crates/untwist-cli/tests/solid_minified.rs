@@ -33,7 +33,7 @@ fn restore_solid_reads_minified_terser_and_vite_bundles_without_changing_the_cod
         );
         let code =
             |dir: &std::path::Path| std::fs::read_to_string(dir.join("deobfuscated.js")).unwrap();
-        assert!(!code(&restored).contains("_2__"), "{}", code(&plain));
+        assert_eq!(code(&plain), code(&restored), "{name}");
         let written = std::fs::read_dir(&restored)
             .unwrap()
             .filter(|entry| {

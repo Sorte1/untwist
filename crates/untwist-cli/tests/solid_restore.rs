@@ -72,7 +72,7 @@ fn restore_svelte_and_solid_together_leave_the_code_alone() {
         "{}",
         String::from_utf8_lossy(&out.stderr)
     );
-    assert!(!code(&restored).contains("_2__"), "{}", code(&plain));
+    assert_eq!(code(&plain), code(&restored));
     for name in [
         "Parent.jsx",
         "Badge.jsx",

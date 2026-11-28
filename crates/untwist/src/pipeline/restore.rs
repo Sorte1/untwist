@@ -130,16 +130,21 @@ const SOLID: Framework = Framework {
 };
 
 impl Pipeline {
-    pub(super) fn restore_stage(&self, output: &mut Output) {
+    pub(super) fn restore_stage(&self, output: &mut Output, untidied: &[Option<String>]) {
         if self.options.svelte {
-            output.svelte = self.framework_stage(&SVELTE, output);
+            output.svelte = self.framework_stage(&SVELTE, output, untidied);
         }
         if self.options.solid {
-            output.solid = self.framework_stage(&SOLID, output);
+            output.solid = self.framework_stage(&SOLID, output, untidied);
         }
     }
 
-    fn framework_stage(&self, framework: &Framework, output: &mut Output) -> Vec<RestoredFile> {
+    fn framework_stage(
+        &self,
+        framework: &Framework,
+        output: &mut Output,
+        untidied: &[Option<String>],
+    ) -> Vec<RestoredFile> {
         if !framework.built {
             note(
                 &mut output.notes,
@@ -166,9 +171,10 @@ impl Pipeline {
             }
             None => {
                 for (index, code) in output.codes.iter().enumerate() {
+                    let untidied = untidied.get(index).and_then(Option::as_deref);
                     restore(
                         framework,
-                        code,
+                        untidied.unwrap_or(code),
                         "",
                         RestoreHolder::Input(index),
                         &mut files,
