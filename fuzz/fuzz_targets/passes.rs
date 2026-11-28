@@ -15,6 +15,7 @@ fuzz_target!(|data: &str| {
         extended: true,
         max_iterations: Some(4),
         fuel: None,
+        ..untwist_core::pass::PassOptions::default()
     };
     let ctors = untwist::all_pass_ctors();
     let mut group = PassGroup::from_ctors(&ctors, opts);

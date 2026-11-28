@@ -58,6 +58,7 @@ untwist = { path = ".", features = ["test-hooks"] }
 criterion.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
+miniz_oxide = "0.9.1"
 untwist-testing = { path = "../untwist-testing" }
 untwist-types = { path = "../untwist-types" }
 untwist-unpack = { path = "../untwist-unpack" }
