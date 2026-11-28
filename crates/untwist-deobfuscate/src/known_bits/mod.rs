@@ -108,10 +108,6 @@ impl KnownBits {
         cx.walk_whole_round();
     }
 
-    pub fn identities_ready(&self) -> bool {
-        self.plain_ready
-    }
-
     pub fn identity(&mut self, expr: &Expression<'_>, cx: &Cx<'_, '_>) -> Option<bool> {
         if self.plain_ready {
             if let Some(value) = self.plain.flag(expr, cx.scoping()) {

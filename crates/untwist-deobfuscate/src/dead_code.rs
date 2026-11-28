@@ -1027,7 +1027,7 @@ impl<'a> DeadCode<'a> {
             let step = if neutral || crate::mutants::settled_rights_dropped_anywhere() {
                 self.drop_right(stmt, cx)
             } else {
-                self.absorb_right(stmt, absorbing, cx)
+                !absorbing && self.absorb_right(stmt, cx)
             };
             if !step {
                 return changed;
@@ -1051,21 +1051,13 @@ impl<'a> DeadCode<'a> {
         true
     }
 
-    fn absorb_right(
-        &mut self,
-        stmt: &mut Statement<'a>,
-        absorbing: bool,
-        cx: &mut Cx<'a, '_>,
-    ) -> bool {
-        let removable = match &*stmt {
-            Statement::WhileStatement(node) if !absorbing => Some(hoists_nothing(&node.body)),
-            Statement::IfStatement(node) if !absorbing && node.alternate.is_none() => {
-                Some(hoists_nothing(&node.consequent))
-            }
-            Statement::IfStatement(_) => None,
+    fn absorb_right(&mut self, stmt: &mut Statement<'a>, cx: &mut Cx<'a, '_>) -> bool {
+        let dropped = match &*stmt {
+            Statement::WhileStatement(node) => &node.body,
+            Statement::IfStatement(node) if node.alternate.is_none() => &node.consequent,
             _ => return false,
         };
-        if removable == Some(false) {
+        if !hoists_nothing(dropped) {
             return false;
         }
         let span = stmt.span();
@@ -1077,16 +1069,8 @@ impl<'a> DeadCode<'a> {
         let Expression::LogicalExpression(logical) = test else {
             return false;
         };
-        let sequence = logical.span;
         let left = logical.left.take_in(cx);
-        if removable == Some(true) {
-            *stmt = Statement::new_expression_statement(span, left, cx);
-            return true;
-        }
-        let mut expressions = AVec::with_capacity_in(2, cx);
-        expressions.push(left);
-        expressions.push(Expression::new_boolean_literal(SPAN, absorbing, cx));
-        *test = Expression::new_sequence_expression(sequence, expressions, cx);
+        *stmt = Statement::new_expression_statement(span, left, cx);
         true
     }
 
@@ -1206,9 +1190,7 @@ impl<'a> Pass<'a> for DeadCode<'a> {
     }
 
     fn exit_statements(&mut self, stmts: &mut AVec<'a, Statement<'a>>, cx: &mut Cx<'a, '_>) {
-        if self.known_bits.identities_ready() {
-            self.settle_identity_inits(stmts, cx);
-        }
+        self.settle_identity_inits(stmts, cx);
         if !self.kept_vars.is_empty() {
             let pruned = self.prune_kept_vars(stmts, cx);
             cx.changed_by(pruned);
