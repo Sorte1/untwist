@@ -12,6 +12,7 @@ use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::resolved;
+use super::value::Val;
 
 const MAX_DEPTH: u32 = 32;
 
@@ -131,12 +132,22 @@ fn pure_leaves(
 pub(super) struct PlainSymbols {
     pub(super) symbols: FxHashSet<SymbolId>,
     pub(super) flags: FxHashMap<SymbolId, bool>,
+    pub(super) frames: FxHashMap<SymbolId, Val>,
 }
 
-pub(super) fn plain_symbols(program: &Program<'_>, scoping: &Scoping, local: bool) -> PlainSymbols {
+pub(super) type Frame<'f> = &'f dyn Fn(&Expression<'_>) -> Option<Val>;
+
+pub(super) fn plain_symbols(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    local: bool,
+    frame: Option<Frame<'_>>,
+) -> PlainSymbols {
     let mut scan = Plain {
         scoping,
         local,
+        frame,
+        frames: FxHashMap::default(),
         found: FxHashSet::default(),
         consts: FxHashMap::default(),
         flags: FxHashMap::default(),
@@ -152,6 +163,7 @@ pub(super) fn plain_symbols(program: &Program<'_>, scoping: &Scoping, local: boo
         mut flags,
         relations,
         looped,
+        mut frames,
         ..
     } = scan;
     found.retain(|symbol| !looped.contains(symbol));
@@ -167,9 +179,11 @@ pub(super) fn plain_symbols(program: &Program<'_>, scoping: &Scoping, local: boo
             flags.insert(symbol, holds);
         }
     }
+    frames.retain(|symbol, _| found.contains(symbol));
     PlainSymbols {
         symbols: found,
         flags,
+        frames,
     }
 }
 
@@ -177,6 +191,7 @@ impl PlainSymbols {
     pub(super) fn clear(&mut self) {
         self.symbols.clear();
         self.flags.clear();
+        self.frames.clear();
     }
 
     pub(super) fn flag(&self, expr: &Expression<'_>, scoping: &Scoping) -> Option<bool> {
@@ -190,9 +205,11 @@ impl PlainSymbols {
     }
 }
 
-struct Plain<'s> {
+struct Plain<'s, 'f> {
     scoping: &'s Scoping,
     local: bool,
+    frame: Option<Frame<'f>>,
+    frames: FxHashMap<SymbolId, Val>,
     found: FxHashSet<SymbolId>,
     consts: FxHashMap<SymbolId, (u32, usize)>,
     flags: FxHashMap<SymbolId, bool>,
@@ -201,7 +218,7 @@ struct Plain<'s> {
     looped: FxHashSet<SymbolId>,
 }
 
-impl Plain<'_> {
+impl Plain<'_, '_> {
     fn statements(&mut self, statements: &[Statement<'_>]) {
         for statement in statements {
             let Statement::VariableDeclaration(declaration) = statement else {
@@ -231,6 +248,9 @@ impl Plain<'_> {
                         if let Some(leaves) = relation.leaves(self.scoping) {
                             self.relations.push((symbol, relation.holds, leaves));
                         }
+                    }
+                    if let Some(value) = self.frame.and_then(|frame| frame(init)) {
+                        self.frames.insert(symbol, value);
                     }
                 }
             }
@@ -296,7 +316,7 @@ impl Plain<'_> {
     }
 }
 
-impl<'a> VisitJs<'a> for Plain<'_> {
+impl<'a> VisitJs<'a> for Plain<'_, '_> {
     fn visit_function(&mut self, it: &Function<'a>, flags: ScopeFlags) {
         if it.is_declaration() {
             if let Some(scope) = it.scope_id.get() {

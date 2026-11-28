@@ -251,13 +251,6 @@ impl<'a> Visit<'a> for Hoisted<'a> {
     fn visit_class(&mut self, _it: &Class<'a>) {}
 }
 
-fn completes_abruptly(statement: &Statement<'_>) -> bool {
-    matches!(
-        statement,
-        Statement::ReturnStatement(_) | Statement::ThrowStatement(_)
-    )
-}
-
 fn runs_nothing_hoisted(statement: &Statement<'_>) -> bool {
     if matches!(
         statement,
@@ -952,8 +945,8 @@ impl<'a> DeadCode<'a> {
                 };
                 if folded {
                     changes += 1;
-                    unreachable |=
-                        stmts.len() > before && stmts.last().is_some_and(completes_abruptly);
+                    unreachable |= stmts.len() > before
+                        && stmts.last().is_some_and(crate::exits::always_exits);
                     next = (stmts.len() > before)
                         .then(|| self.next_link(stmts, cx))
                         .flatten();

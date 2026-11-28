@@ -5,17 +5,23 @@ mod guards;
 mod identity;
 mod inert;
 mod length_reads;
+mod registers;
+mod sealed;
 mod value;
 
 #[cfg(test)]
 mod tests;
 
-use oxc_ast::ast::{Expression, IdentifierReference, Program, Statement, VariableDeclarationKind};
+use oxc_ast::ast::{
+    Expression, IdentifierReference, Program, Statement, VariableDeclaration,
+    VariableDeclarationKind,
+};
+use oxc_ast_visit::VisitJs;
 use oxc_semantic::Scoping;
 use oxc_span::Span;
 use oxc_syntax::operator::{BinaryOperator, UnaryOperator};
 use oxc_syntax::symbol::SymbolId;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use untwist_core::pass::Cx;
 use untwist_core::semantic::builtins::{patched_by_another_input, scan, scan_outside, Reliance};
 use untwist_core::semantic::{
@@ -39,6 +45,7 @@ static MATH_IMUL: Reliance = Reliance {
 #[derive(Default)]
 pub struct KnownBits {
     approved: FxHashMap<SymbolId, Val>,
+    maybe: FxHashMap<SymbolId, Val>,
     imul: bool,
     wanted: bool,
     barren: bool,
@@ -57,6 +64,7 @@ impl KnownBits {
         has_with: impl FnOnce() -> bool,
     ) {
         self.approved.clear();
+        self.maybe.clear();
         self.imul = false;
         self.plain.clear();
         self.plain_ready = false;
@@ -69,26 +77,104 @@ impl KnownBits {
             self.barren = true;
             return;
         }
-        let scoping = cx.scoping();
-        if self.identities {
-            self.plain = identity::plain_symbols(program, scoping, top_level_is_local(program));
-            self.plain_ready = true;
+        if seeking {
+            self.learn_seeds(program, cx);
+        }
+        if self.identities || !self.approved.is_empty() {
+            self.learn_plain(program, cx);
+        }
+        let known = !self.approved.is_empty() || !self.maybe.is_empty();
+        self.imul = known && imul_holds(program, cx, &self.approved, &self.maybe, &self.plain);
+        if self.plain_ready || known {
             cx.walk_whole_round();
         }
-        if !seeking {
-            return;
+    }
+
+    fn learn_seeds(&mut self, program: &Program<'_>, cx: &Cx<'_, '_>) {
+        let scoping = cx.scoping();
+        let lane = cx.opts.unsafe_transforms;
+        let found = seeds(program, scoping, lane, false);
+        let none = FxHashSet::default();
+        let mut approved = self.approve(program, scoping, &found.computed, &none);
+        let partial = approved.len() < found.computed.len();
+        if self.local && (found.refused || partial) {
+            let hypothesis = if found.refused {
+                seeds(program, scoping, lane, true)
+            } else {
+                found.clone()
+            };
+            let settled = self.settle(program, cx, &hypothesis.computed, &hypothesis.assumed);
+            if let Some(wider) = settled.filter(|wider| wider.len() > approved.len()) {
+                approved = wider;
+            }
         }
-        let computed = seeds(program, scoping, cx.opts.unsafe_transforms);
-        if computed.is_empty() {
+        if approved.is_empty() && found.empty {
             self.seedless = true;
-            return;
+        }
+        self.maybe = maybe_of(&found.computed, &approved);
+        self.approved = approved;
+    }
+
+    fn settle(
+        &self,
+        program: &Program<'_>,
+        cx: &Cx<'_, '_>,
+        computed: &FxHashMap<SymbolId, Seed>,
+        assumed: &[&'static Reliance],
+    ) -> Option<FxHashMap<SymbolId, Val>> {
+        let scoping = cx.scoping();
+        let none = FxHashSet::default();
+        let base = self.approve(program, scoping, computed, &none);
+        if base.is_empty() {
+            return None;
+        }
+        let maybe = maybe_of(computed, &base);
+        let (plain, known) = self.with_frames(program, scoping, base);
+        let dead = dead_with(program, scoping, (&known, &maybe), &plain, self.local);
+        let silent = guards::references_inside(program, &dead);
+        let widened = self.approve(program, scoping, computed, &silent);
+        let maybe = maybe_of(computed, &widened);
+        let (plain, known) = self.with_frames(program, scoping, widened.clone());
+        let dead = dead_with(program, scoping, (&known, &maybe), &plain, self.local);
+        let mut relied: Vec<&'static Reliance> = assumed.to_vec();
+        relied.push(&MATH_IMUL);
+        relied_hold(program, cx, &relied, &dead).then_some(widened)
+    }
+
+    fn with_frames(
+        &self,
+        program: &Program<'_>,
+        scoping: &Scoping,
+        approved: FxHashMap<SymbolId, Val>,
+    ) -> (identity::PlainSymbols, FxHashMap<SymbolId, Val>) {
+        let frames = Frames {
+            approved: &approved,
+            scoping,
+        };
+        let evaluate = |init: &Expression<'_>| frames.value(init);
+        let mut plain = identity::plain_symbols(program, scoping, self.local, Some(&evaluate));
+        let mut known = approved.clone();
+        known.extend(std::mem::take(&mut plain.frames));
+        (plain, known)
+    }
+
+    fn approve(
+        &self,
+        program: &Program<'_>,
+        scoping: &Scoping,
+        computed: &FxHashMap<SymbolId, Seed>,
+        silent: &FxHashSet<Span>,
+    ) -> FxHashMap<SymbolId, Val> {
+        if computed.is_empty() {
+            return FxHashMap::default();
         }
         let bound: Vec<(Span, SymbolId)> = computed
             .iter()
             .map(|(symbol, seed)| (seed.statement, *symbol))
             .collect();
-        let early = if top_level_is_local(program) {
-            let harmless = length_reads::function_length_reads(program, scoping);
+        let early = if self.local {
+            let mut harmless = length_reads::function_length_reads(program, scoping);
+            harmless.extend(silent.iter().copied());
             read_before_local_declaration(program, scoping, &bound, &harmless)
         } else {
             read_before_declaration(program, scoping, &bound)
@@ -99,13 +185,26 @@ impl KnownBits {
             .map(|(symbol, seed)| (seed.statement, *symbol, seed.inert))
             .collect();
         let during = read_during_initialiser(program, scoping, &during);
-        self.approved = computed
-            .into_iter()
+        computed
+            .iter()
             .filter(|(symbol, _)| !early.contains(symbol) && !during.contains(symbol))
-            .map(|(symbol, seed)| (symbol, seed.value))
-            .collect();
-        self.imul = !self.approved.is_empty() && imul_holds(program, cx, &self.approved);
-        cx.walk_whole_round();
+            .map(|(symbol, seed)| (*symbol, seed.value))
+            .collect()
+    }
+
+    fn learn_plain(&mut self, program: &Program<'_>, cx: &Cx<'_, '_>) {
+        let scoping = cx.scoping();
+        let frames = Frames {
+            approved: &self.approved,
+            scoping,
+        };
+        let evaluate = |init: &Expression<'_>| frames.value(init);
+        let frame: Option<identity::Frame<'_>> =
+            (!self.approved.is_empty()).then_some(&evaluate as identity::Frame<'_>);
+        self.plain = identity::plain_symbols(program, scoping, self.local, frame);
+        let found = std::mem::take(&mut self.plain.frames);
+        self.approved.extend(found);
+        self.plain_ready = true;
     }
 
     pub fn identity(&mut self, expr: &Expression<'_>, cx: &Cx<'_, '_>) -> Option<bool> {
@@ -129,7 +228,7 @@ impl KnownBits {
         if let Some(value) = self.identity(expr, cx) {
             return Some(value);
         }
-        if self.approved.is_empty() {
+        if self.approved.is_empty() && self.maybe.is_empty() {
             if !self.wanted
                 && !self.seedless
                 && !self.barren
@@ -140,16 +239,17 @@ impl KnownBits {
             }
             return None;
         }
-        let leaves = Strict {
-            approved: &self.approved,
-            scoping: cx.scoping(),
-            imul: self.imul,
-        };
-        decide_with(expr, &leaves)
+        decide_strict(expr, &self.approved, &self.maybe, cx.scoping(), self.imul)
     }
 }
 
-fn imul_holds(program: &Program<'_>, cx: &Cx<'_, '_>, approved: &FxHashMap<SymbolId, Val>) -> bool {
+fn imul_holds(
+    program: &Program<'_>,
+    cx: &Cx<'_, '_>,
+    approved: &FxHashMap<SymbolId, Val>,
+    maybe: &FxHashMap<SymbolId, Val>,
+    plain: &identity::PlainSymbols,
+) -> bool {
     if patched_by_another_input(&MATH_IMUL) {
         return false;
     }
@@ -162,16 +262,21 @@ fn imul_holds(program: &Program<'_>, cx: &Cx<'_, '_>, approved: &FxHashMap<Symbo
     {
         return true;
     }
-    let assumed = Strict {
-        approved,
+    let decide = |expr: &Expression<'_>| decide_strict(expr, approved, maybe, scoping, true);
+    let dead = guards::dead_regions(
+        program,
         scoping,
-        imul: true,
-    };
-    let dead = guards::dead_regions(program, scoping, &assumed, top_level_is_local(program));
+        &decide,
+        plain,
+        top_level_is_local(program),
+    );
     !dead.is_empty() && scan_outside(program, scoping, module, &MATH_IMUL, &dead).allows_safe(lane)
 }
 
 fn decide_with(expr: &Expression<'_>, leaves: &dyn Leaves) -> Option<bool> {
+    if let Some(known) = leaves.kind_of(expr) {
+        return Some(known);
+    }
     match expr.without_parentheses() {
         Expression::UnaryExpression(unary) if unary.operator == UnaryOperator::LogicalNot => {
             decide_with(&unary.argument, leaves).map(|value| !value)
@@ -279,14 +384,52 @@ fn is_global_math_imul(callee: &Expression<'_>, scoping: &Scoping) -> bool {
 
 struct Strict<'k, 's> {
     approved: &'k FxHashMap<SymbolId, Val>,
+    maybe: &'k FxHashMap<SymbolId, Val>,
+    absent: bool,
     scoping: &'s Scoping,
     imul: bool,
+}
+
+fn decide_strict(
+    expr: &Expression<'_>,
+    approved: &FxHashMap<SymbolId, Val>,
+    maybe: &FxHashMap<SymbolId, Val>,
+    scoping: &Scoping,
+    imul: bool,
+) -> Option<bool> {
+    let present = Strict {
+        approved,
+        maybe,
+        absent: false,
+        scoping,
+        imul,
+    };
+    let decided = decide_with(expr, &present)?;
+    if maybe.is_empty() {
+        return Some(decided);
+    }
+    let missing = Strict {
+        absent: true,
+        ..present
+    };
+    (decide_with(expr, &missing)? == decided).then_some(decided)
 }
 
 impl Leaves for Strict<'_, '_> {
     fn leaf(&self, id: &IdentifierReference<'_>) -> Option<(SymbolId, Val)> {
         let symbol = resolved(id, self.scoping)?;
-        self.approved.get(&symbol).map(|value| (symbol, *value))
+        if let Some(value) = self.approved.get(&symbol) {
+            return Some((symbol, *value));
+        }
+        let value = self.maybe.get(&symbol)?;
+        Some((
+            symbol,
+            if self.absent {
+                Val::undefined()
+            } else {
+                *value
+            },
+        ))
     }
 
     fn is_imul(&self, callee: &Expression<'_>) -> bool {
@@ -296,13 +439,107 @@ impl Leaves for Strict<'_, '_> {
     fn lax(&self) -> bool {
         false
     }
+
+    fn kind_of(&self, test: &Expression<'_>) -> Option<bool> {
+        typeof_number(test, self.approved, self.scoping)
+    }
 }
 
+struct Frames<'k, 's> {
+    approved: &'k FxHashMap<SymbolId, Val>,
+    scoping: &'s Scoping,
+}
+
+impl Frames<'_, '_> {
+    fn value(&self, init: &Expression<'_>) -> Option<Val> {
+        if !reads_any(init, self.approved, self.scoping) {
+            return None;
+        }
+        abstract_value(init, self).filter(|value| value.bits.known() != 0)
+    }
+}
+
+impl Leaves for Frames<'_, '_> {
+    fn leaf(&self, id: &IdentifierReference<'_>) -> Option<(SymbolId, Val)> {
+        let symbol = resolved(id, self.scoping)?;
+        self.approved.get(&symbol).map(|value| (symbol, *value))
+    }
+
+    fn is_imul(&self, _callee: &Expression<'_>) -> bool {
+        false
+    }
+
+    fn lax(&self) -> bool {
+        true
+    }
+
+    fn decided(&self, test: &Expression<'_>) -> Option<bool> {
+        typeof_number(test, self.approved, self.scoping)
+    }
+}
+
+fn typeof_number(
+    test: &Expression<'_>,
+    approved: &FxHashMap<SymbolId, Val>,
+    scoping: &Scoping,
+) -> Option<bool> {
+    let Expression::BinaryExpression(binary) = test.without_parentheses() else {
+        return None;
+    };
+    let negate = match binary.operator {
+        BinaryOperator::StrictEquality | BinaryOperator::Equality => false,
+        BinaryOperator::StrictInequality | BinaryOperator::Inequality => true,
+        _ => return None,
+    };
+    let (Expression::UnaryExpression(unary), Expression::StringLiteral(kind)) = (
+        binary.left.without_parentheses(),
+        binary.right.without_parentheses(),
+    ) else {
+        return None;
+    };
+    let Expression::Identifier(id) = unary.argument.without_parentheses() else {
+        return None;
+    };
+    if unary.operator != UnaryOperator::Typeof || !approved.contains_key(&resolved(id, scoping)?) {
+        return None;
+    }
+    Some((kind.value == "number") != negate)
+}
+
+fn reads_any(
+    expr: &Expression<'_>,
+    approved: &FxHashMap<SymbolId, Val>,
+    scoping: &Scoping,
+) -> bool {
+    let mut scan = ReadsAny {
+        approved,
+        scoping,
+        found: false,
+    };
+    scan.visit_expression(expr);
+    scan.found
+}
+
+struct ReadsAny<'k, 's> {
+    approved: &'k FxHashMap<SymbolId, Val>,
+    scoping: &'s Scoping,
+    found: bool,
+}
+
+impl<'a> VisitJs<'a> for ReadsAny<'_, '_> {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        self.found |=
+            resolved(it, self.scoping).is_some_and(|symbol| self.approved.contains_key(&symbol));
+    }
+}
+
+#[derive(Clone)]
 struct Seed {
     statement: Span,
     value: Val,
     inert: bool,
     closed: bool,
+    var: bool,
 }
 
 struct Lax<'k, 's, 'r, 'p> {
@@ -310,6 +547,29 @@ struct Lax<'k, 's, 'r, 'p> {
     scoping: &'s Scoping,
     roots: &'r checksum::Roots<'p>,
     seed: Span,
+    latches: &'k sealed::Latches,
+    sealed: bool,
+}
+
+impl Lax<'_, '_, '_, '_> {
+    fn is_function(&self, symbol: SymbolId) -> bool {
+        self.roots.is_top_function(symbol)
+    }
+
+    fn sealed_part(&self, part: &Expression<'_>) -> Option<bool> {
+        if sealed::length_guard(part, &|symbol| self.is_function(symbol), self.scoping) {
+            return Some(true);
+        }
+        let Expression::BinaryExpression(binary) = part.without_parentheses() else {
+            return None;
+        };
+        let negate = match binary.operator {
+            BinaryOperator::StrictEquality | BinaryOperator::Equality => false,
+            BinaryOperator::StrictInequality | BinaryOperator::Inequality => true,
+            _ => return None,
+        };
+        equality(&binary.left, &binary.right, self).map(|equal| equal != negate)
+    }
 }
 
 impl Leaves for Lax<'_, '_, '_, '_> {
@@ -327,30 +587,122 @@ impl Leaves for Lax<'_, '_, '_, '_> {
     }
 
     fn decided(&self, test: &Expression<'_>) -> Option<bool> {
-        self.roots.decide(test, self.seed, self.scoping)
+        if let Some(known) = self.roots.decide(test, self.seed, self.scoping) {
+            return Some(known);
+        }
+        if !self.sealed {
+            return None;
+        }
+        sealed::all_of(test, &|part| self.sealed_part(part))
     }
+
+    fn member(&self, expr: &Expression<'_>) -> Option<Val> {
+        if !self.sealed || !self.roots.typed_hold(self.scoping) {
+            return None;
+        }
+        let word = sealed::latch_read(expr, self.latches, self.scoping)?;
+        Some(Val::uint32(Bits::exact(word)))
+    }
+}
+
+#[derive(Clone)]
+struct Found {
+    computed: FxHashMap<SymbolId, Seed>,
+    assumed: Vec<&'static Reliance>,
+    refused: bool,
+    empty: bool,
 }
 
 fn seeds<'p>(
     program: &'p Program<'p>,
     scoping: &Scoping,
     unsafe_lane: bool,
-) -> FxHashMap<SymbolId, Seed> {
-    let roots = checksum::Roots::of(program, unsafe_lane);
-    let alone = !other_inputs_given();
+    assume: bool,
+) -> Found {
     let local = top_level_is_local(program);
-    let mut computed = FxHashMap::default();
+    let mut scan = SeedScan {
+        roots: checksum::Roots::of(program, unsafe_lane, assume),
+        scoping,
+        alone: !other_inputs_given(),
+        local,
+        sealing: local && !has_module_syntax(program),
+        computed: FxHashMap::default(),
+        latches: sealed::Latches::default(),
+        digests: FxHashSet::default(),
+    };
+    let mut sealed = scan.sealing;
     for statement in &program.body {
-        let Statement::VariableDeclaration(declaration) = statement else {
-            continue;
-        };
+        if let Statement::VariableDeclaration(declaration) = statement {
+            scan.declaration(declaration, sealed);
+        }
+        sealed = sealed && sealed::statement_is_sealed(statement, &scan.digests, scoping);
+    }
+    Found {
+        empty: scan.computed.is_empty(),
+        assumed: scan.roots.assumed(),
+        refused: scan.roots.refused(),
+        computed: scan.computed,
+    }
+}
+
+fn dead_with(
+    program: &Program<'_>,
+    scoping: &Scoping,
+    known: (&FxHashMap<SymbolId, Val>, &FxHashMap<SymbolId, Val>),
+    plain: &identity::PlainSymbols,
+    local: bool,
+) -> FxHashSet<Span> {
+    let (approved, maybe) = known;
+    let decide = |expr: &Expression<'_>| decide_strict(expr, approved, maybe, scoping, true);
+    guards::dead_regions(program, scoping, &decide, plain, local)
+}
+
+fn maybe_of(
+    computed: &FxHashMap<SymbolId, Seed>,
+    approved: &FxHashMap<SymbolId, Val>,
+) -> FxHashMap<SymbolId, Val> {
+    computed
+        .iter()
+        .filter(|(symbol, seed)| seed.var && seed.closed && !approved.contains_key(symbol))
+        .map(|(symbol, seed)| (*symbol, seed.value))
+        .collect()
+}
+
+fn relied_hold(
+    program: &Program<'_>,
+    cx: &Cx<'_, '_>,
+    relied: &[&'static Reliance],
+    dead: &FxHashSet<Span>,
+) -> bool {
+    let scoping = cx.scoping();
+    let lane = cx.opts.unsafe_transforms;
+    let module = has_module_syntax(program);
+    relied.iter().all(|reliance| {
+        !patched_by_another_input(reliance)
+            && scan_outside(program, scoping, module, reliance, dead).allows_safe(lane)
+    })
+}
+
+struct SeedScan<'p, 's> {
+    roots: checksum::Roots<'p>,
+    scoping: &'s Scoping,
+    alone: bool,
+    local: bool,
+    sealing: bool,
+    computed: FxHashMap<SymbolId, Seed>,
+    latches: sealed::Latches,
+    digests: FxHashSet<SymbolId>,
+}
+
+impl SeedScan<'_, '_> {
+    fn declaration(&mut self, declaration: &VariableDeclaration<'_>, sealed: bool) {
         let kind_allowed = match declaration.kind {
             VariableDeclarationKind::Const => true,
-            VariableDeclarationKind::Var => local,
+            VariableDeclarationKind::Var => self.local,
             _ => false,
         };
         if !kind_allowed {
-            continue;
+            return;
         }
         for declarator in &declaration.declarations {
             let (Some(id), Some(init)) = (declarator.id.get_binding_identifier(), &declarator.init)
@@ -360,43 +712,83 @@ fn seeds<'p>(
             let Some(symbol) = id.symbol_id.get() else {
                 continue;
             };
-            if !is_seed_shape(init, local) || written(symbol, scoping) {
+            if written(symbol, self.scoping) || self.digest(symbol, init, declaration.span) {
                 continue;
             }
-            let lax = Lax {
-                computed: &computed,
-                scoping,
-                roots: &roots,
-                seed: declaration.span,
-            };
-            if let Some(value) = abstract_value(init, &lax).filter(|value| value.bits.known() != 0)
-            {
-                let inert = alone
-                    && declaration.declarations.iter().all(|declarator| {
-                        declarator
-                            .init
-                            .as_ref()
-                            .is_some_and(|init| inert::runs_no_code(init, &lax))
-                    });
-                let closed = declaration.declarations.iter().all(|declarator| {
-                    declarator
-                        .init
-                        .as_ref()
-                        .is_some_and(|init| is_closed_number(init, 0))
-                });
-                computed.insert(
-                    symbol,
-                    Seed {
-                        statement: declaration.span,
-                        value,
-                        inert,
-                        closed,
-                    },
-                );
+            if is_seed_shape(init, self.local) {
+                self.seed(symbol, init, declaration, sealed);
             }
         }
+        if self.sealing {
+            sealed::record_latches(declaration, self.scoping, &mut self.latches);
+        }
     }
-    computed
+
+    fn digest(&mut self, symbol: SymbolId, init: &Expression<'_>, statement: Span) -> bool {
+        if !self.sealing {
+            return false;
+        }
+        let Some(value) = self
+            .roots
+            .digest(init, statement, self.scoping)
+            .and_then(Val::from_number)
+        else {
+            return false;
+        };
+        let seed = Seed {
+            statement,
+            value,
+            inert: false,
+            closed: false,
+            var: false,
+        };
+        self.computed.insert(symbol, seed);
+        self.digests.insert(symbol);
+        true
+    }
+
+    fn seed(
+        &mut self,
+        symbol: SymbolId,
+        init: &Expression<'_>,
+        declaration: &VariableDeclaration<'_>,
+        sealed: bool,
+    ) {
+        let lax = Lax {
+            computed: &self.computed,
+            scoping: self.scoping,
+            roots: &self.roots,
+            seed: declaration.span,
+            latches: &self.latches,
+            sealed,
+        };
+        let Some(value) = abstract_value(init, &lax).filter(|value| value.bits.known() != 0) else {
+            return;
+        };
+        let inits = || {
+            declaration
+                .declarations
+                .iter()
+                .map(|declarator| declarator.init.as_ref())
+        };
+        let inert = self.alone
+            && inits().all(|init| init.is_some_and(|init| inert::runs_no_code(init, &lax)));
+        let functions = |symbol: SymbolId| self.roots.is_top_function(symbol);
+        let closed = inits().all(|init| {
+            init.is_some_and(|init| {
+                is_closed_number(init, 0)
+                    || (sealed && sealed::quiet(init, &self.latches, &functions, self.scoping))
+            })
+        });
+        let seed = Seed {
+            statement: declaration.span,
+            value,
+            inert,
+            closed,
+            var: declaration.kind == VariableDeclarationKind::Var,
+        };
+        self.computed.insert(symbol, seed);
+    }
 }
 
 fn written(symbol: SymbolId, scoping: &Scoping) -> bool {

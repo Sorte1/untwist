@@ -47,9 +47,12 @@ impl InitOrder {
         symbol: SymbolId,
         harmless: &FxHashSet<Span>,
     ) -> bool {
-        self.sites
-            .of_symbol(symbol)
-            .all(|site| self.local_site_is_set(declaration, site, harmless))
+        self.sites.of_symbol(symbol).all(|site| {
+            self.sites
+                .get(site)
+                .is_some_and(|record| harmless.contains(&record.span()))
+                || self.local_site_is_set(declaration, site, harmless)
+        })
     }
 
     fn local_site_is_set(

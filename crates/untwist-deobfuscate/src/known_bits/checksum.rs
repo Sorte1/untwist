@@ -1,4 +1,4 @@
-use std::cell::{OnceCell, RefCell};
+use std::cell::{Cell, OnceCell, RefCell};
 
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
@@ -20,6 +20,7 @@ use untwist_core::semantic::{
 use untwist_eval::closed_script_value;
 use untwist_eval::fold::Const;
 
+use super::registers::{as_plain_arrays, typed_registers, TYPED_ARRAY};
 use super::resolved;
 use crate::bindings::reaches_a_script_global;
 use crate::calls::agnostic::names_reachable_from;
@@ -34,6 +35,11 @@ const USE_STRICT: &str = "\"use strict\";\n";
 
 const IS_ARRAY: &str = "var Array = { isArray: function (value) { return Object.prototype.toString.call(value) === \"[object Array]\"; } };\n";
 
+static TYPED: Reliance = Reliance {
+    roots: &[TYPED_ARRAY],
+    members: &[],
+};
+
 static CLOSED_GLOBALS: Reliance = Reliance {
     roots: &GLOBALS,
     members: &[],
@@ -41,19 +47,29 @@ static CLOSED_GLOBALS: Reliance = Reliance {
 
 pub struct Roots<'p> {
     program: &'p Program<'p>,
+    local: bool,
     functions: FxHashMap<SymbolId, &'p Function<'p>>,
     data: FxHashMap<SymbolId, (usize, &'p Expression<'p>)>,
     order: FxHashMap<Span, usize>,
     builtins: OnceCell<bool>,
+    typed: OnceCell<bool>,
+    assume: bool,
+    assumed: RefCell<Vec<&'static Reliance>>,
+    refused: Cell<bool>,
     annex_b: OnceCell<AnnexBWrites>,
     decided: RefCell<FxHashMap<(Span, Span), Option<bool>>>,
     unsafe_lane: bool,
 }
 
 impl<'p> Roots<'p> {
-    pub fn of(program: &'p Program<'p>, unsafe_lane: bool) -> Self {
+    pub fn of(program: &'p Program<'p>, unsafe_lane: bool, assume: bool) -> Self {
         let mut roots = Self {
             program,
+            assume,
+            assumed: RefCell::default(),
+            refused: Cell::new(false),
+            local: untwist_core::semantic::top_level_is_local(program),
+            typed: OnceCell::new(),
             functions: FxHashMap::default(),
             data: FxHashMap::default(),
             order: FxHashMap::default(),
@@ -77,7 +93,9 @@ impl<'p> Roots<'p> {
             }
             Statement::VariableDeclaration(declaration) => {
                 self.order.insert(declaration.span, index);
-                if declaration.kind != VariableDeclarationKind::Const {
+                let data_kind = declaration.kind == VariableDeclarationKind::Const
+                    || (self.local && declaration.kind == VariableDeclarationKind::Var);
+                if !data_kind {
                     return;
                 }
                 for declarator in &declaration.declarations {
@@ -108,37 +126,104 @@ impl<'p> Roots<'p> {
     }
 
     fn decide_afresh(&self, test: &Expression<'_>, seed: Span, scoping: &Scoping) -> Option<bool> {
-        let index = *self.order.get(&seed)?;
         let shape = Shape::of(test, scoping)?;
-        let function = *self.functions.get(&shape.symbol)?;
-        if !self.fixed(shape.symbol, scoping) {
+        let value = self.value_of(shape.symbol, shape.call, shape.reads, seed, scoping)?;
+        Some(value == shape.expected)
+    }
+
+    pub fn digest(&self, init: &Expression<'_>, statement: Span, scoping: &Scoping) -> Option<f64> {
+        let Expression::CallExpression(call) = init.without_parentheses() else {
+            return None;
+        };
+        let symbol = literal_call(call, scoping)?;
+        self.value_of(symbol, init, 1, statement, scoping)
+    }
+
+    pub fn is_top_function(&self, symbol: SymbolId) -> bool {
+        self.functions.contains_key(&symbol)
+    }
+
+    pub fn typed_hold(&self, scoping: &Scoping) -> bool {
+        self.holds(&self.typed, &TYPED, scoping)
+    }
+
+    pub fn assumed(&self) -> Vec<&'static Reliance> {
+        self.assumed.borrow().clone()
+    }
+
+    pub fn refused(&self) -> bool {
+        self.refused.get()
+    }
+
+    fn holds(&self, cell: &OnceCell<bool>, reliance: &'static Reliance, scoping: &Scoping) -> bool {
+        if patched_by_another_input(reliance) {
+            return false;
+        }
+        let module = has_module_syntax(self.program);
+        let intact = *cell.get_or_init(|| {
+            scan(self.program, scoping, module, false, reliance)
+                .verdict
+                .allows_safe(self.unsafe_lane)
+        });
+        if intact {
+            return true;
+        }
+        self.refused.set(true);
+        if !self.assume {
+            return false;
+        }
+        let mut assumed = self.assumed.borrow_mut();
+        if !assumed.iter().any(|known| std::ptr::eq(*known, reliance)) {
+            assumed.push(reliance);
+        }
+        true
+    }
+
+    fn value_of(
+        &self,
+        symbol: SymbolId,
+        call: &Expression<'_>,
+        reads: usize,
+        statement: Span,
+        scoping: &Scoping,
+    ) -> Option<f64> {
+        let index = *self.order.get(&statement)?;
+        let function = *self.functions.get(&symbol)?;
+        if !self.fixed(symbol, scoping) {
             return None;
         }
-        let references = scoping.get_resolved_references(shape.symbol);
         let mut count = 0;
-        for reference in references {
+        for reference in scoping.get_resolved_references(symbol) {
             if reference.is_write() {
                 return None;
             }
             count += 1;
         }
-        if count != shape.reads || function.r#async || function.generator {
+        if count != reads || function.r#async || function.generator {
             return None;
         }
-        let text = function_text(function, false);
-        let free = closed_reads(function, scoping, &self.data, &text)?;
+        let registers = typed_registers(function, scoping)?;
+        let printed = function_text(function, false);
+        let text = if registers.is_empty() {
+            printed
+        } else if self.typed_hold(scoping) {
+            as_plain_arrays(&printed, &registers)?
+        } else {
+            return None;
+        };
+        let free = closed_reads(function, scoping, &self.data, &text, !registers.is_empty())?;
         let mut inits = Vec::new();
         let mut named: FxHashSet<SymbolId> = FxHashSet::default();
-        named.insert(shape.symbol);
-        for (symbol, reads) in free.reads {
-            named.insert(symbol);
-            let (declared, init) = self.data.get(&symbol)?;
-            let total = scoping.get_resolved_references(symbol).count();
+        named.insert(symbol);
+        for (data, reads) in free.reads {
+            named.insert(data);
+            let (declared, init) = self.data.get(&data)?;
+            let total = scoping.get_resolved_references(data).count();
             if *declared >= index || total != reads {
                 return None;
             }
-            let name = scoping.symbol_name(symbol);
-            if GLOBALS.contains(&name) || !self.fixed(symbol, scoping) {
+            let name = scoping.symbol_name(data);
+            if GLOBALS.contains(&name) || !self.fixed(data, scoping) {
                 return None;
             }
             inits.push((name.to_string(), *init));
@@ -154,8 +239,7 @@ impl<'p> Roots<'p> {
             arrays: free.arrays,
             function: &text,
         };
-        let value = evaluate(&inits, &script, shape.call)?;
-        Some(value == shape.expected)
+        evaluate(&inits, &script, call)
     }
 
     fn fixed(&self, symbol: SymbolId, scoping: &Scoping) -> bool {
@@ -195,18 +279,7 @@ impl<'p> Roots<'p> {
     }
 
     fn builtins_hold(&self, scoping: &Scoping) -> bool {
-        *self.builtins.get_or_init(|| {
-            !patched_by_another_input(&CLOSED_GLOBALS)
-                && scan(
-                    self.program,
-                    scoping,
-                    has_module_syntax(self.program),
-                    false,
-                    &CLOSED_GLOBALS,
-                )
-                .verdict
-                .allows_safe(self.unsafe_lane)
-        })
+        self.holds(&self.builtins, &CLOSED_GLOBALS, scoping)
     }
 }
 
@@ -320,6 +393,7 @@ fn closed_reads(
     scoping: &Scoping,
     data: &FxHashMap<SymbolId, (usize, &Expression<'_>)>,
     text: &str,
+    typed: bool,
 ) -> Option<Closed> {
     let inside = function.scope_id.get()?;
     let within = |scope| {
@@ -344,7 +418,8 @@ fn closed_reads(
             Some(symbol) if data.contains_key(&symbol) => *reads.entry(symbol).or_default() += 1,
             Some(_) => return None,
             None => {
-                if !GLOBALS.contains(unresolved.get(&id)?) {
+                let name = *unresolved.get(&id)?;
+                if !GLOBALS.contains(&name) && !(typed && name == TYPED_ARRAY) {
                     return None;
                 }
             }

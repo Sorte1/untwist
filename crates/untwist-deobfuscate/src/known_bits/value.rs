@@ -7,6 +7,7 @@ pub enum Kind {
     Int32,
     Uint32,
     Wrapped(u8),
+    Undefined,
 }
 
 impl Kind {
@@ -15,6 +16,7 @@ impl Kind {
             Kind::Int32 => 31,
             Kind::Uint32 => 32,
             Kind::Wrapped(magnitude) => magnitude,
+            Kind::Undefined => SAFE_MAGNITUDE,
         }
     }
 
@@ -34,6 +36,13 @@ impl Val {
         Self {
             bits,
             kind: Kind::Int32,
+        }
+    }
+
+    pub const fn undefined() -> Self {
+        Self {
+            bits: Bits::exact(0),
+            kind: Kind::Undefined,
         }
     }
 
@@ -69,11 +78,14 @@ impl Val {
         match self.kind {
             Kind::Int32 => Some(f64::from(exact as i32)),
             Kind::Uint32 => Some(f64::from(exact)),
-            Kind::Wrapped(_) => None,
+            Kind::Wrapped(_) | Kind::Undefined => None,
         }
     }
 
     pub fn arithmetic(self, other: Val, bits: Bits) -> Option<Self> {
+        if self.kind == Kind::Undefined || other.kind == Kind::Undefined {
+            return None;
+        }
         let magnitude = self.kind.magnitude().max(other.kind.magnitude()) + 1;
         (magnitude <= SAFE_MAGNITUDE).then_some(Self {
             bits,
@@ -82,6 +94,9 @@ impl Val {
     }
 
     pub fn negated(self) -> Option<Self> {
+        if self.kind == Kind::Undefined {
+            return None;
+        }
         if let Some(value) = self.number() {
             return Self::from_number(-value);
         }

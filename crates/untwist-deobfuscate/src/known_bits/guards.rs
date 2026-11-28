@@ -1,6 +1,7 @@
 use oxc_ast::ast::{
-    ArrayExpressionElement, BindingPattern, Expression, IdentifierReference, IfStatement,
-    ObjectPropertyKind, Program, Statement, VariableDeclarationKind, WhileStatement,
+    ArrayExpressionElement, BindingPattern, BlockStatement, Expression, FunctionBody,
+    IdentifierReference, IfStatement, ObjectPropertyKind, Program, Statement,
+    VariableDeclarationKind, WhileStatement,
 };
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
@@ -9,20 +10,24 @@ use oxc_syntax::operator::LogicalOperator;
 use oxc_syntax::symbol::SymbolId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::decide_with;
-use super::eval::Leaves;
+use super::identity::{relation, PlainSymbols};
 use super::resolved;
+use crate::exits::always_exits;
 
 const MAX_DEPTH: u32 = 16;
+
+pub(super) type Decide<'d> = &'d dyn Fn(&Expression<'_>) -> Option<bool>;
 
 pub(super) fn dead_regions(
     program: &Program<'_>,
     scoping: &Scoping,
-    leaves: &dyn Leaves,
+    decide: Decide<'_>,
+    plain: &PlainSymbols,
     local: bool,
 ) -> FxHashSet<Span> {
     let mut scan = DeadBranches {
-        leaves,
+        decide,
+        plain,
         scoping,
         local,
         found: Vec::new(),
@@ -37,13 +42,52 @@ pub(super) fn dead_regions(
     scan.found.into_iter().collect()
 }
 
+pub(super) fn references_inside(program: &Program<'_>, dead: &FxHashSet<Span>) -> FxHashSet<Span> {
+    let mut spans: Vec<Span> = dead.iter().copied().collect();
+    spans.sort_unstable_by_key(|span| (span.start, std::cmp::Reverse(span.end)));
+    let mut merged: Vec<Span> = Vec::with_capacity(spans.len());
+    for span in spans {
+        match merged.last_mut() {
+            Some(last) if span.start <= last.end => last.end = last.end.max(span.end),
+            _ => merged.push(span),
+        }
+    }
+    let mut scan = Inside {
+        merged,
+        found: FxHashSet::default(),
+    };
+    scan.visit_program(program);
+    scan.found
+}
+
+struct Inside {
+    merged: Vec<Span>,
+    found: FxHashSet<Span>,
+}
+
+impl<'a> VisitJs<'a> for Inside {
+    fn visit_identifier_reference(&mut self, it: &IdentifierReference<'a>) {
+        let at = self
+            .merged
+            .partition_point(|span| span.start <= it.span.start);
+        let inside = at
+            .checked_sub(1)
+            .and_then(|index| self.merged.get(index))
+            .is_some_and(|span| it.span.end <= span.end);
+        if inside {
+            self.found.insert(it.span);
+        }
+    }
+}
+
 struct Holder {
     span: Span,
     symbols: Vec<SymbolId>,
 }
 
 struct DeadBranches<'l, 's> {
-    leaves: &'l dyn Leaves,
+    decide: Decide<'l>,
+    plain: &'l PlainSymbols,
     scoping: &'s Scoping,
     local: bool,
     found: Vec<Span>,
@@ -62,7 +106,33 @@ impl DeadBranches<'_, '_> {
                 _ => None,
             };
         }
-        decide_with(expr, self.leaves)
+        if let Some(flag) = self.plain.flag(expr, self.scoping) {
+            return Some(flag);
+        }
+        if let Some(holds) = relation(expr).and_then(|found| found.decide(self.plain, self.scoping))
+        {
+            return Some(holds);
+        }
+        (self.decide)(expr)
+    }
+
+    fn dead_tail(&mut self, statements: &[Statement<'_>]) {
+        let mut exited = false;
+        for statement in statements {
+            if exited && !is_declaration(statement) {
+                self.found.push(statement.span());
+                continue;
+            }
+            let Statement::IfStatement(branch) = statement else {
+                continue;
+            };
+            let taken = match self.test(&branch.test) {
+                Some(true) => Some(&branch.consequent),
+                Some(false) => branch.alternate.as_ref(),
+                None => None,
+            };
+            exited |= taken.is_some_and(always_exits);
+        }
     }
 
     fn movable(&self, symbol: SymbolId) -> bool {
@@ -134,6 +204,15 @@ impl DeadBranches<'_, '_> {
     }
 }
 
+fn is_declaration(statement: &Statement<'_>) -> bool {
+    matches!(
+        statement,
+        Statement::VariableDeclaration(_)
+            | Statement::FunctionDeclaration(_)
+            | Statement::ClassDeclaration(_)
+    )
+}
+
 fn inert(expr: &Expression<'_>, depth: u32) -> bool {
     if depth > MAX_DEPTH {
         return false;
@@ -169,6 +248,16 @@ fn inert(expr: &Expression<'_>, depth: u32) -> bool {
 }
 
 impl<'a> VisitJs<'a> for DeadBranches<'_, '_> {
+    fn visit_function_body(&mut self, it: &FunctionBody<'a>) {
+        self.dead_tail(&it.statements);
+        walk_js::walk_function_body(self, it);
+    }
+
+    fn visit_block_statement(&mut self, it: &BlockStatement<'a>) {
+        self.dead_tail(&it.body);
+        walk_js::walk_block_statement(self, it);
+    }
+
     fn visit_statement(&mut self, it: &Statement<'a>) {
         if let Some(holder) = self.holder(it) {
             self.holders.push(holder);
