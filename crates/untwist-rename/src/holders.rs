@@ -1,7 +1,27 @@
 use oxc_semantic::Scoping;
-use oxc_syntax::scope::ScopeId;
-use oxc_syntax::symbol::SymbolId;
+use oxc_syntax::scope::{ScopeFlags, ScopeId};
+use oxc_syntax::symbol::{SymbolFlags, SymbolId};
 use rustc_hash::FxHashMap;
+
+pub fn binding_scope(scoping: &Scoping, symbol: SymbolId) -> ScopeId {
+    let scope = scoping.symbol_scope_id(symbol);
+    if !scoping
+        .symbol_flags(symbol)
+        .contains(SymbolFlags::CatchVariable)
+    {
+        return scope;
+    }
+    match scoping.scope_parent_id(scope) {
+        Some(parent)
+            if scoping
+                .scope_flags(parent)
+                .contains(ScopeFlags::CatchClause) =>
+        {
+            parent
+        }
+        _ => scope,
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Holder {

@@ -7,7 +7,7 @@ use super::super::interest::Interest;
 use super::super::Cx;
 use super::nested::Cascading;
 use super::scope::{Edit, Steer};
-use super::{above, park, unpark, Dispatched, Mode, PassGroup};
+use super::{above, has_unscoped, park, unpark, Dispatched, Mode, PassGroup};
 
 macro_rules! listed {
     ($self:ident, $record:ident, $hook:ident, $bit:ident, $node:ident, $ctx:ident) => {{
@@ -175,6 +175,7 @@ impl<'a> PassGroup<'a> {
         node: &mut Program<'a>,
         ctx: &mut TraverseCtx<'a, ()>,
     ) {
+        let before = self.total_changes();
         self.run_program_hook(
             Interest::ENTER_PROGRAM,
             |pass, node, cx| pass.enter_program(node, cx),
@@ -183,7 +184,7 @@ impl<'a> PassGroup<'a> {
         );
         self.apply_retirement();
         self.begin_scope(ctx.scoping().scopes_len());
-        if !self.walks {
+        if !self.walks || (self.total_changes() != before && has_unscoped(node)) {
             self.parked = park(node, ctx);
         }
     }

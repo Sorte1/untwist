@@ -17,6 +17,8 @@ untwist-deobfuscate = { path = "../crates/untwist-deobfuscate" }
 untwist-unminify = { path = "../crates/untwist-unminify" }
 untwist-jsx = { path = "../crates/untwist-jsx" }
 oxc_allocator = "=0.157.0"
+miniz_oxide = "0.9.1"
+serde_json = "1"
 
 [[bin]]
 name = "pipeline"
@@ -33,5 +35,17 @@ doc = false
 [[bin]]
 name = "evaluator"
 path = "fuzz_targets/evaluator.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "options"
+path = "fuzz_targets/options.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "libraries"
+path = "fuzz_targets/libraries.rs"
 test = false
 doc = false

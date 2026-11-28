@@ -58,11 +58,15 @@ fn artifact_paths() -> Vec<PathBuf> {
     files
 }
 
-fn read_prefix(path: &Path) -> String {
+fn read_bytes(path: &Path) -> Vec<u8> {
     let Ok(bytes) = std::fs::read(path) else {
         panic!("{} could not be read", path.display());
     };
-    let valid_len = match std::str::from_utf8(&bytes) {
+    bytes
+}
+
+fn utf8_prefix(path: &Path, bytes: &[u8]) -> String {
+    let valid_len = match std::str::from_utf8(bytes) {
         Ok(_) => bytes.len(),
         Err(err) => err.valid_up_to(),
     };
@@ -72,7 +76,22 @@ fn read_prefix(path: &Path) -> String {
     text.to_string()
 }
 
-fn replay_pipeline(path: &Path, source: &str) {
+#[path = "../../../fuzz/harness/options.rs"]
+mod options_harness;
+
+#[path = "../../../fuzz/harness/libraries.rs"]
+mod libraries_harness;
+
+fn replay_options(_path: &Path, bytes: &[u8]) {
+    options_harness::run(bytes);
+}
+
+fn replay_libraries(_path: &Path, bytes: &[u8]) {
+    libraries_harness::run(bytes);
+}
+
+fn replay_pipeline(path: &Path, bytes: &[u8]) {
+    let source = &utf8_prefix(path, bytes);
     for unsafe_transforms in [false, true] {
         for extended in [false, true] {
             let options = untwist::Options {
@@ -91,7 +110,8 @@ fn replay_pipeline(path: &Path, source: &str) {
     }
 }
 
-fn replay_passes(_path: &Path, source: &str) {
+fn replay_passes(path: &Path, bytes: &[u8]) {
+    let source = &utf8_prefix(path, bytes);
     let alloc = oxc_allocator::Allocator::default();
     let mut parsed = untwist_core::parse::parse_program(&alloc, source);
     let sem = untwist_core::semantic::build_scoping(&parsed.program);
@@ -107,7 +127,8 @@ fn replay_passes(_path: &Path, source: &str) {
     let _ = untwist_core::pass::run_to_fixpoint(&alloc, &mut parsed.program, sem, &mut group);
 }
 
-fn replay_evaluator(path: &Path, source: &str) {
+fn replay_evaluator(path: &Path, bytes: &[u8]) {
+    let source = &utf8_prefix(path, bytes);
     let alloc = oxc_allocator::Allocator::default();
     let mut parsed = untwist_core::parse::parse_program(&alloc, source);
     let sem = untwist_core::semantic::build_scoping(&parsed.program);
@@ -127,12 +148,14 @@ fn replay_evaluator(path: &Path, source: &str) {
     );
 }
 
-type Replayer = fn(&Path, &str);
+type Replayer = fn(&Path, &[u8]);
 
-const TARGETS: [(&str, Replayer); 3] = [
+const TARGETS: [(&str, Replayer); 5] = [
     ("pipeline", replay_pipeline),
     ("passes", replay_passes),
     ("evaluator", replay_evaluator),
+    ("options", replay_options),
+    ("libraries", replay_libraries),
 ];
 
 fn target_of(path: &Path) -> Option<&str> {
@@ -149,14 +172,14 @@ fn replayer_of(target: &str) -> Option<Replayer> {
 }
 
 fn replay(path: &Path) {
-    let source = read_prefix(path);
+    let bytes = read_bytes(path);
     let Some(replayer) = target_of(path).and_then(replayer_of) else {
         panic!(
             "{} is not under a known fuzz target directory",
             path.display()
         );
     };
-    replayer(path, &source);
+    replayer(path, &bytes);
 }
 
 #[test]

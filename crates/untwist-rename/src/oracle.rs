@@ -8,7 +8,7 @@ use untwist_core::semantic::named_by_another_input;
 use crate::collect::Collected;
 use crate::collisions::{Reason, Tally};
 use crate::generate::{uid_candidate, uid_candidates, UID_CANDIDATES};
-use crate::holders::{within, Holder, HolderIndex, ScopeTree};
+use crate::holders::{binding_scope, within, Holder, HolderIndex, ScopeTree};
 use crate::plan::RenamePlan;
 use crate::reserved::{is_reserved, Excluded};
 
@@ -192,7 +192,7 @@ impl<'s> NameOracle<'s> {
     }
 
     fn captures_a_free_symbol(&self, name: &str, symbol: SymbolId) -> bool {
-        let scope = self.scoping.symbol_scope_id(symbol);
+        let scope = binding_scope(self.scoping, symbol);
         self.collected.free.get(&scope).is_some_and(|free| {
             free.iter().any(|&other| {
                 other != symbol && !self.is_pending(other) && self.current_name(other) == name
@@ -205,7 +205,7 @@ impl<'s> NameOracle<'s> {
     }
 
     fn holder_conflicts(&self, name: &str, symbol: SymbolId) -> bool {
-        let scope = self.scoping.symbol_scope_id(symbol);
+        let scope = binding_scope(self.scoping, symbol);
         let (Some(first), Some(last)) = (self.tree.order(scope), self.tree.last(scope)) else {
             return self.holder_conflicts_by_climb(name, symbol);
         };
@@ -255,7 +255,7 @@ impl<'s> NameOracle<'s> {
     }
 
     fn holder_conflicts_by_climb(&self, name: &str, symbol: SymbolId) -> bool {
-        let scope = self.scoping.symbol_scope_id(symbol);
+        let scope = binding_scope(self.scoping, symbol);
         self.holders.all(name).iter().any(|held| {
             if held.symbol == symbol || self.is_pending(held.symbol) {
                 return false;
@@ -369,7 +369,7 @@ impl<'s> NameOracle<'s> {
 
     fn assign(&mut self, symbol: SymbolId, name: String) {
         self.pending.remove(&symbol);
-        let scope = self.scoping.symbol_scope_id(symbol);
+        let scope = binding_scope(self.scoping, symbol);
         let previous = self.current_name(symbol).to_string();
         self.holders.remove(&previous, scope, symbol);
         self.holders.insert(&name, Holder { scope, symbol });
@@ -440,6 +440,10 @@ fn index_holders(scoping: &Scoping) -> HolderIndex {
     let mut holders = HolderIndex::default();
     for (scope, bindings) in scoping.iter_bindings() {
         for (name, symbol) in bindings.iter() {
+            let scope = match scoping.symbol_scope_id(*symbol) == scope {
+                true => binding_scope(scoping, *symbol),
+                false => scope,
+            };
             holders.insert(
                 name.as_str(),
                 Holder {

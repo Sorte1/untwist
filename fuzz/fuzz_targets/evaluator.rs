@@ -14,6 +14,7 @@ fuzz_target!(|data: &str| {
         extended: true,
         max_iterations: Some(4),
         fuel: None,
+        ..untwist_core::pass::PassOptions::default()
     };
     let (_sem, report) =
         untwist_deobfuscate::run_deobfuscate(&alloc, &mut parsed.program, sem, &opts);

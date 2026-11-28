@@ -1997,6 +1997,7 @@ dependencies = [
  "anyhow",
  "criterion",
  "insta",
+ "miniz_oxide",
  "oxc_allocator",
  "oxc_ast",
  "oxc_ast_visit",

@@ -390,23 +390,44 @@ fn arrow_as_function<'a>(callee: &mut Expression<'a>, cx: &Cx<'a, '_>) -> bool {
         return false;
     };
     let arrow = arrow.unbox();
+    let scope_id = arrow.scope_id.get();
+    let (pure, pife) = (arrow.pure, arrow.pife);
     let ArrowFunctionBody::FunctionBody(body) = arrow.body else {
         return false;
     };
-    *target = Expression::new_function_expression(
-        arrow.span,
-        FunctionType::FunctionExpression,
-        None,
-        false,
-        false,
-        false,
-        None,
-        None,
-        arrow.params,
-        None,
-        Some(body),
-        cx,
-    );
+    *target = match scope_id {
+        Some(scope_id) => Expression::new_function_expression_with_scope_id_and_pure_and_pife(
+            arrow.span,
+            FunctionType::FunctionExpression,
+            None,
+            false,
+            false,
+            false,
+            None,
+            None,
+            arrow.params,
+            None,
+            Some(body),
+            scope_id,
+            pure,
+            pife,
+            cx,
+        ),
+        None => Expression::new_function_expression(
+            arrow.span,
+            FunctionType::FunctionExpression,
+            None,
+            false,
+            false,
+            false,
+            None,
+            None,
+            arrow.params,
+            None,
+            Some(body),
+            cx,
+        ),
+    };
     true
 }
 
