@@ -14,6 +14,9 @@ pub const BLOOM_HASHES: u8 = 11;
 const BLOOM_SEED: u64 = 0x5bd1_e995_9e37_79b9;
 const BLOOM_MIN_BITS: u64 = 64;
 pub const SHARD_BLOOM: char = '#';
+pub const EXACT_BLOOM: char = '!';
+pub const EXACT_BITS_PER_KEY: u64 = 20;
+pub const EXACT_HASHES: u8 = 14;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FileRef {
@@ -98,36 +101,64 @@ pub struct Bloom {
     hashes: u8,
 }
 
-fn positions(key: u32, count: u64, hashes: u8) -> impl Iterator<Item = u64> {
-    let hash = mix(u64::from(key) ^ BLOOM_SEED);
+fn positions(key: u64, count: u64, hashes: u8) -> impl Iterator<Item = u64> {
+    let hash = mix(key ^ BLOOM_SEED);
     let first = hash & 0xffff_ffff;
     let step = (hash >> 32) | 1;
     (0..u64::from(hashes)).map(move |index| first.wrapping_add(index.wrapping_mul(step)) % count)
 }
 
+pub fn pair_key(loose: u32, exact: u64) -> u64 {
+    mix(exact ^ u64::from(loose).rotate_left(29))
+}
+
 impl Bloom {
-    pub fn with_keys(keys: &[u32]) -> Self {
-        let mut unique: Vec<u32> = keys.to_vec();
+    fn build(keys: impl Iterator<Item = u64>, bits_per_key: u64, hashes: u8) -> Self {
+        let mut unique: Vec<u64> = keys.collect();
         unique.sort_unstable();
         unique.dedup();
-        let count = (unique.len() as u64 * BLOOM_BITS_PER_KEY).max(BLOOM_MIN_BITS);
+        let count = (unique.len() as u64 * bits_per_key).max(BLOOM_MIN_BITS);
         let count = count.div_ceil(8) * 8;
         let mut bits = vec![0u8; (count / 8) as usize];
         for key in unique {
-            for position in positions(key, count, BLOOM_HASHES) {
+            for position in positions(key, count, hashes) {
                 bits[(position / 8) as usize] |= 1 << (position % 8);
             }
         }
         Self {
             bits,
             count,
-            hashes: BLOOM_HASHES,
+            hashes,
         }
     }
 
-    pub fn contains(&self, key: u32) -> bool {
+    pub fn with_keys(keys: &[u32]) -> Self {
+        Self::build(
+            keys.iter().map(|&key| u64::from(key)),
+            BLOOM_BITS_PER_KEY,
+            BLOOM_HASHES,
+        )
+    }
+
+    pub fn with_pairs(pairs: &[(u32, u64)]) -> Self {
+        Self::build(
+            pairs.iter().map(|&(loose, exact)| pair_key(loose, exact)),
+            EXACT_BITS_PER_KEY,
+            EXACT_HASHES,
+        )
+    }
+
+    fn holds(&self, key: u64) -> bool {
         positions(key, self.count, self.hashes)
             .all(|position| self.bits[(position / 8) as usize] & (1 << (position % 8)) != 0)
+    }
+
+    pub fn contains(&self, key: u32) -> bool {
+        self.holds(u64::from(key))
+    }
+
+    pub fn contains_pair(&self, loose: u32, exact: u64) -> bool {
+        self.holds(pair_key(loose, exact))
     }
 }
 
@@ -206,6 +237,7 @@ pub struct ProgramKeys {
     pub loose: FxHashSet<u32>,
     pub strong: FxHashSet<u32>,
     pub program: Option<u32>,
+    pub pairs: Vec<(u32, u64)>,
 }
 
 pub fn sha256_hex(bytes: &[u8]) -> String {
@@ -220,10 +252,15 @@ pub struct Collection {
     pub index: Index,
     blooms: Vec<Option<Bloom>>,
     shard_blooms: Vec<Vec<Option<Bloom>>>,
+    exact_blooms: Vec<Vec<Option<Bloom>>>,
 }
 
 pub fn shard_bloom_id(package: &str, shard: usize) -> String {
     format!("{package}{SHARD_BLOOM}{shard}")
+}
+
+pub fn exact_bloom_id(bloom_id: &str) -> String {
+    format!("{bloom_id}{EXACT_BLOOM}")
 }
 
 fn safe_file(file: &str) -> bool {
@@ -269,7 +306,7 @@ impl Collection {
             check_file(&filters.file, &filters.sha256)?;
         }
         let blooms = vec![None; index.packages.len()];
-        let shard_blooms = index
+        let shard_blooms: Vec<Vec<Option<Bloom>>> = index
             .packages
             .iter()
             .map(|package| vec![None; package.shards.len()])
@@ -277,6 +314,7 @@ impl Collection {
         Ok(Self {
             index,
             blooms,
+            exact_blooms: shard_blooms.clone(),
             shard_blooms,
         })
     }
@@ -299,6 +337,10 @@ impl Collection {
         let entries = parse_bloom_file(bytes)
             .ok_or_else(|| CollectionError::Filters("the file does not parse".to_string()))?;
         for (id, bloom) in entries {
+            let (id, exact) = match id.strip_suffix(EXACT_BLOOM) {
+                Some(base) => (base.to_string(), true),
+                None => (id, false),
+            };
             let (package_id, shard) = match id.rsplit_once(SHARD_BLOOM) {
                 Some((package, shard)) => match shard.parse::<usize>() {
                     Ok(shard) => (package.to_string(), Some(shard)),
@@ -314,13 +356,23 @@ impl Collection {
             else {
                 continue;
             };
-            match shard {
-                Some(shard) => {
+            match (shard, exact) {
+                (Some(shard), false) => {
                     if let Some(slot) = self.shard_blooms[index].get_mut(shard) {
                         *slot = Some(bloom);
                     }
                 }
-                None => self.blooms[index] = Some(bloom),
+                (Some(shard), true) => {
+                    if let Some(slot) = self.exact_blooms[index].get_mut(shard) {
+                        *slot = Some(bloom);
+                    }
+                }
+                (None, false) => self.blooms[index] = Some(bloom),
+                (None, true) => {
+                    if let [slot] = self.exact_blooms[index].as_mut_slice() {
+                        *slot = Some(bloom);
+                    }
+                }
             }
         }
         Ok(())
@@ -330,6 +382,10 @@ impl Collection {
         self.shard_blooms[package][shard]
             .as_ref()
             .or(self.blooms[package].as_ref())
+    }
+
+    pub fn has_exact_filters(&self) -> bool {
+        self.exact_blooms.iter().flatten().any(Option::is_some)
     }
 
     pub fn shard_count(&self) -> usize {
@@ -353,6 +409,18 @@ impl Collection {
             .collect()
     }
 
+    fn exact_hit(&self, package: usize, shard: usize, keys: &ProgramKeys) -> bool {
+        let (Some(bloom), Some(pairs)) = (
+            self.bloom_of(package, shard),
+            self.exact_blooms[package][shard].as_ref(),
+        ) else {
+            return true;
+        };
+        keys.pairs
+            .iter()
+            .any(|&(loose, exact)| bloom.contains(loose) && pairs.contains_pair(loose, exact))
+    }
+
     fn shard_hits(&self, package: usize, shard: usize, keys: &ProgramKeys) -> Hits {
         let Some(bloom) = self.bloom_of(package, shard) else {
             let any = usize::from(!keys.loose.is_empty());
@@ -362,10 +430,15 @@ impl Collection {
                 program: false,
             };
         };
-        let count = |set: &FxHashSet<u32>| set.iter().filter(|&&key| bloom.contains(key)).count();
+        let count = |set: &FxHashSet<u32>, cap: usize| {
+            set.iter()
+                .filter(|&&key| bloom.contains(key))
+                .take(cap)
+                .count()
+        };
         Hits {
-            all: count(&keys.loose),
-            strong: count(&keys.strong),
+            all: count(&keys.loose, CLUSTER_HITS),
+            strong: count(&keys.strong, 1),
             program: keys.program.is_some_and(|key| bloom.contains(key)),
         }
     }
@@ -386,7 +459,9 @@ impl Collection {
             wanted.extend(
                 hits.iter()
                     .enumerate()
-                    .filter(|(_, hit)| hit.all > 0 || hit.program)
+                    .filter(|(shard, hit)| {
+                        (hit.all > 0 || hit.program) && self.exact_hit(package, *shard, keys)
+                    })
                     .map(|(shard, _)| (package, shard)),
             );
         }
