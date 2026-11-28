@@ -49,6 +49,18 @@ const PARAMETER_LEAF: &str = r#"function judged(value) {
 module.exports = judged;
 "#;
 
+const LOOP_VAR: &str = r#"function judged(items) {
+  const out = [];
+  for (var v of items) {
+    out.push((v | 0) >>> 0 < (v ^ 0) >>> 0);
+  }
+  return out;
+}
+let calls = 0;
+const shifty = { valueOf() { calls += 1; return calls === 1 ? 0 : 7; } };
+console.log(judged([shifty, 3]).join(","));
+"#;
+
 const HOISTED_READ: &str = r#"function outer() {
   const r = early();
   const u = 9 >>> 0;
@@ -116,6 +128,7 @@ fn programs() -> Vec<(String, String)> {
         ("never-guard", NEVER_GUARD),
         ("parameter-leaf", PARAMETER_LEAF),
         ("hoisted-read", HOISTED_READ),
+        ("loop-var", LOOP_VAR),
         ("counter", COUNTER),
         ("counter-read-early", COUNTER_READ_EARLY),
         ("guarded-patch", GUARDED_PATCH),
@@ -151,6 +164,7 @@ fn an_or_never_below_xor_on_plain_numbers_folds() {
 fn an_identity_over_a_value_that_may_not_be_a_plain_number_stays() {
     assert!(commonjs(PARAMETER_LEAF).contains(">>> 0 <"));
     assert!(commonjs(HOISTED_READ).contains(">>> 0 <"));
+    assert!(commonjs(LOOP_VAR).contains(">>> 0 <"));
 }
 
 #[test]

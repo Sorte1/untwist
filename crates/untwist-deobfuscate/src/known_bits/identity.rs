@@ -1,6 +1,7 @@
 use oxc_ast::ast::{
-    BindingPattern, BlockStatement, Expression, Function, FunctionBody, IdentifierReference,
-    Program, Statement, StaticBlock, VariableDeclaration, VariableDeclarationKind,
+    BindingPattern, BlockStatement, Expression, ForInStatement, ForOfStatement, ForStatementLeft,
+    Function, FunctionBody, IdentifierReference, Program, Statement, StaticBlock,
+    VariableDeclaration, VariableDeclarationKind,
 };
 use oxc_ast_visit::{walk_js, VisitJs};
 use oxc_semantic::Scoping;
@@ -141,6 +142,7 @@ pub(super) fn plain_symbols(program: &Program<'_>, scoping: &Scoping, local: boo
         flags: FxHashMap::default(),
         hoisted: FxHashSet::default(),
         relations: Vec::new(),
+        looped: FxHashSet::default(),
     };
     scan.statements(&program.body);
     scan.visit_program(program);
@@ -149,8 +151,10 @@ pub(super) fn plain_symbols(program: &Program<'_>, scoping: &Scoping, local: boo
         consts,
         mut flags,
         relations,
+        looped,
         ..
     } = scan;
+    found.retain(|symbol| !looped.contains(symbol));
     for (symbol, (_, checked)) in consts {
         if checked != usize::MAX && scoping.get_resolved_references(symbol).count() == checked {
             found.insert(symbol);
@@ -194,6 +198,7 @@ struct Plain<'s> {
     flags: FxHashMap<SymbolId, bool>,
     hoisted: FxHashSet<ScopeId>,
     relations: Vec<(SymbolId, bool, Vec<SymbolId>)>,
+    looped: FxHashSet<SymbolId>,
 }
 
 impl Plain<'_> {
@@ -258,6 +263,18 @@ impl Plain<'_> {
         plain
     }
 
+    fn loop_head(&mut self, left: &ForStatementLeft<'_>) {
+        if let ForStatementLeft::VariableDeclaration(declaration) = left {
+            for declarator in &declaration.declarations {
+                for id in declarator.id.get_binding_identifiers() {
+                    if let Some(symbol) = id.symbol_id.get() {
+                        self.looped.insert(symbol);
+                    }
+                }
+            }
+        }
+    }
+
     fn read_follows(&self, id: &IdentifierReference<'_>, symbol: SymbolId, end: u32) -> bool {
         let Some(reference) = id.reference_id.get() else {
             return false;
@@ -302,6 +319,16 @@ impl<'a> VisitJs<'a> for Plain<'_> {
     fn visit_static_block(&mut self, it: &StaticBlock<'a>) {
         self.statements(&it.body);
         walk_js::walk_static_block(self, it);
+    }
+
+    fn visit_for_in_statement(&mut self, it: &ForInStatement<'a>) {
+        self.loop_head(&it.left);
+        walk_js::walk_for_in_statement(self, it);
+    }
+
+    fn visit_for_of_statement(&mut self, it: &ForOfStatement<'a>) {
+        self.loop_head(&it.left);
+        walk_js::walk_for_of_statement(self, it);
     }
 
     fn visit_variable_declaration(&mut self, it: &VariableDeclaration<'a>) {
