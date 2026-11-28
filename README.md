@@ -173,6 +173,8 @@ The library collection lives in a cache (`$XDG_CACHE_HOME/untwist/libraries`, or
 | `untwist libraries status` | Print the cached collection's version, shape epoch, source URL, and how many of its files are present. |
 | `untwist libraries clear` | Remove the cached collection. |
 
+Each release builds the collection from the pinned package list in `tools/library-collection/selection.json` (npm resolved as of the day after the list was taken, pinned bundlers, the release's own untwist), serves it under `https://untwist.dev/libraries/` and attaches it to the GitHub release as `untwist-libraries-<version>.tar.gz` with its SHA-256; unpack it and pass the folder to `--libraries` for offline use.
+
 ### WebAssembly
 
 untwist never runs or rewrites a wasm module; it reads only its import and export names (and its

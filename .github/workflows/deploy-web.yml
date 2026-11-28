@@ -22,6 +22,10 @@ on:
         description: Deploy to production instead of a branch preview
         type: boolean
         default: false
+      libraries-artifact:
+        description: Name of a workflow artifact with the library collection tarball to serve under /libraries/
+        type: string
+        default: ""
     secrets:
       CLOUDFLARE_API_TOKEN:
         required: false
@@ -64,6 +68,16 @@ jobs:
       - name: Check the byte budgets
         working-directory: web
         run: npm run size
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: inputs.libraries-artifact != ''
+        with:
+          name: ${{ inputs.libraries-artifact }}
+          path: ${{ runner.temp }}/library-release
+
+      - name: Put the library collection under /libraries/
+        if: inputs.libraries-artifact != ''
+        run: tools/library-collection/unpack.sh "$RUNNER_TEMP/library-release" web/dist/libraries
 
       - name: Check the branch name and that the deploy secrets exist
         id: gate

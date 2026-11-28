@@ -698,6 +698,7 @@ pub(crate) fn process_build(
         let out = work.join("out").join(format!("{}.{lane}", build.file));
         let status = Command::new(untwist)
             .args(flags)
+            .args(crate::library_collection::PINNED_LIBRARIES)
             .arg("-o")
             .arg(&out)
             .arg("-f")
